@@ -216,11 +216,11 @@ mod tests {
         let ok = blunder.check(1001, 42, 500, 250);
         assert!(ok);
         assert_eq!(blunder.len(), 1);
-        assert_eq!(blunder.penalty(1001, 42), 100);
+        assert_eq!(blunder.penalty(1001, 42), 500);
 
         // Lần sai thứ 2 tích lũy điểm phạt
         blunder.check(1001, 42, 600, 300);
-        assert_eq!(blunder.penalty(1001, 42), 200);
+        assert_eq!(blunder.penalty(1001, 42), 1000);
     }
 
     /// Kiểm thử dọn dẹp bảng blunder

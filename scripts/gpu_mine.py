@@ -1,18 +1,30 @@
 # scripts/gpu_mine.py
 # ============================================================================
-# KHAI THÁC DỮ LIỆU TỰ ĐẤU CỜ TƯỚNG TỐC ĐỘ CAO BẰNG GPU & TÍNH TOÁN SONG SONG
+# KHAI THÁC DỮ LIỆU TỰ ĐẤU CỜ TƯỚNG TỐC ĐỘ CAO (RUST ENGINE / MULTI-CORE CPU)
 # BẢO ĐẢM 100% CẤU TRÚC ĐA CHIỀU 3-IN-1: MA TRẬN 2D + CHUỖI FEN + LỊCH SỬ PGN
 # ============================================================================
 # Định danh đơn từ tiếng Anh: board, state, fen, pgn, prompt, thought, move,
-# generate, dataset, push, token, repo, count, stamp, batch, device, cuda
+# generate, dataset, push, token, repo, count, stamp, batch, device, cuda,
+# update, scol, srank, tcol, trank, srow, trow, piece, encoded, start, openings,
+# parse, rows, red, black, matrix, moves, total, card, samples, path, files,
+# local, remote, merged, added, mine, workers, pool, results, binary, process,
+# code, err, item
 # ============================================================================
 
 import os
 import sys
 import time
 import json
+import glob
 import random
+import subprocess
+from concurrent.futures import ProcessPoolExecutor
 from huggingface_hub import HfApi
+
+try:
+    from scripts.hub import fetch, verify, merge, save, push
+except ImportError:
+    from hub import fetch, verify, merge, save, push
 
 # 1. Khởi tạo Token HuggingFace & Cấu hình Hub
 token = os.environ.get("HF_TOKEN", "")
@@ -20,43 +32,111 @@ repo = "hoduyquocbao/xiangqi-r1-dataset"
 
 try:
     import torch
-    HAS_CUDA = torch.cuda.is_available()
-    DEVICE = "cuda" if HAS_CUDA else "cpu"
+    CUDA = torch.cuda.is_available()
+    device = "cuda" if CUDA else "cpu"
 except Exception:
-    HAS_CUDA = False
-    DEVICE = "cpu"
+    CUDA = False
+    device = "cpu"
 
 print("============================================================")
-print(f" 🚀 GPU ACCELERATED XIANGQI SELF-PLAY REASONING DATASET MINER ")
-print(f" ⚡ CHẠY TRÊN THIẾT BỊ: {DEVICE.upper()} | CUDA ACTIVE: {HAS_CUDA} ")
+print(f" 🚀 HIGH-SPEED XIANGQI SELF-PLAY REASONING DATASET MINER ")
+print(f" ⚡ CHẠY TRÊN THIẾT BỊ: {device.upper()} | CUDA ACTIVE: {CUDA} ")
 print("============================================================")
 
-INITIAL_FEN = "rnbakabnr/9/1c5c1/p1p1p1p1p/9/9/P1P1P1P1P/1C5C1/9/RNBAKABNR w - - 0 1"
+start = "rnbakabnr/9/1c5c1/p1p1p1p1p/9/9/P1P1P1P1P/1C5C1/9/RNBAKABNR w - - 0 1"
 
-COMMON_OPENINGS = [
-    ["b2e2", "h9g7", "h2e2", "b8c6", "b0c2", "i9h9"],  # Thuận Pháo Cổ Điển
-    ["b2e2", "h8e8", "h2g4", "b9c7", "i0i1", "i9i8"],  # Nghịch Pháo Trung Lộ
-    ["h2e2", "b8c6", "b2e2", "h8e8", "b0c2", "i9h9"],  # Pháo Đầu Đào Ngũ
-    ["c3c4", "c7c6", "b2e2", "h9g7", "h2g4", "b8c6"],  # Binh Ba Cuộc
-    ["g3g4", "g7g6", "b2e2", "h9g7", "h2g4", "b8c6"],  # Tiên Nhân Chỉ Lộ
-    ["b0c2", "h9g7", "h2e2", "b8c6", "b2e2", "i9h9"],  # Khởi Mã Cuộc
-    ["e2e6", "e8e2", "h2g4", "b8c6", "b0c2", "i9h9"],  # Over-river Cannon Attack
-    ["b2b6", "h9g7", "h2e2", "b8c6", "b0c2", "i9h9"],  # Quá Cung Pháo
-    ["h2d2", "h9g7", "b2e2", "b8c6", "b0c2", "i9h9"],  # Sĩ Giác Pháo
-    ["g0e2", "h9g7", "b2e2", "b8c6", "h2g4", "i9h9"],  # Phi Tượng Cuộc
-    ["b2e2", "b8c6", "h2g4", "i9h9", "i0i1", "h9g7"],  # Thuận Pháo Khởi Mã
-    ["h2e2", "h9g7", "b2g2", "b8c6", "b0c2", "i9h9"],  # Ngũ Lục Pháo
-    ["b2e2", "h9g7", "h2g4", "r8i8", "b0c2", "b8c6"],  # Đơn Đề Mã
-    ["c3c4", "h9g7", "b2e2", "b8c6", "h2g4", "i9h9"],  # Binh Ba Chuyển Pháo Đầu
-    ["g3g4", "h9g7", "b2e2", "b8c6", "h2g4", "i9h9"],  # Tiên Nhân Chuyển Pháo Đầu
+openings = [
+    ["b2e2", "h7e7", "h0g2", "h9g7", "b0c2", "i9h9"],  # Thuận Pháo Cổ Điển
+    ["b2e2", "b7e7", "h0g2", "b9c7", "i0i1", "i9i8"],  # Nghịch Pháo Trung Lộ
+    ["h2e2", "b9c7", "h0g2", "h7e7", "b0c2", "h9g7"],  # Pháo Đầu Đào Ngũ
+    ["c3c4", "c6c5", "b2e2", "h9g7", "h0g2", "b9c7"],  # Binh Ba Cuộc
+    ["g3g4", "g6g5", "b2e2", "h9g7", "h0g2", "b9c7"],  # Tiên Nhân Chỉ Lộ
+    ["b0c2", "h9g7", "h2e2", "b9c7", "h0g2", "i9h9"],  # Khởi Mã Cuộc
+    ["h2h6", "h7e7", "h0g2", "h9g7", "b0c2", "i9h9"],  # Over-river Cannon Attack
+    ["b2f2", "h9g7", "h0g2", "b9c7", "b0c2", "i9h9"],  # Quá Cung Pháo
+    ["h2d2", "h9g7", "h0g2", "b9c7", "b0c2", "i9h9"],  # Sĩ Giác Pháo
+    ["g0e2", "h9g7", "h0g2", "b9c7", "b0c2", "i9h9"],  # Phi Tượng Cuộc
+    ["b2e2", "b9c7", "h0g2", "h9g7", "i0i1", "i9h9"],  # Thuận Pháo Khởi Mã
+    ["h2e2", "h9g7", "h0g2", "b9c7", "b0c2", "i9h9"],  # Ngũ Lục Pháo
+    ["b2e2", "h9g7", "h0g2", "i9i8", "b0c2", "b9c7"],  # Đơn Đề Mã
+    ["c3c4", "h9g7", "b2e2", "b9c7", "h0g2", "i9h9"],  # Binh Ba Chuyển Pháo Đầu
+    ["g3g4", "h9g7", "b2e2", "b9c7", "h0g2", "i9h9"],  # Tiên Nhân Chuyển Pháo Đầu
 ]
 
-def fen_to_matrix(fen):
+def update(fen, move):
+    """Cập nhật chuỗi FEN cho từng nước đi UCI (4 ký tự) với validation ô trống, ô đích và lượt đi."""
+    if not isinstance(move, str) or len(move) != 4:
+        raise ValueError(f"Mã nước đi không hợp lệ (cần 4 ký tự UCI): {move}")
+
+    scol = ord(move[0]) - ord('a')
+    srank = int(move[1])
+    tcol = ord(move[2]) - ord('a')
+    trank = int(move[3])
+
+    if not (0 <= scol <= 8 and 0 <= tcol <= 8 and 0 <= srank <= 9 and 0 <= trank <= 9):
+        raise ValueError(f"Tọa độ nước đi vượt ngoài phạm vi bàn cờ (0..8, 0..9): {move}")
+
+    srow = 9 - srank
+    trow = 9 - trank
+
+    parts = fen.split()
+    rows = parts[0].split('/')
+    grid = []
+    for row in rows:
+        line = []
+        for ch in row:
+            if ch.isdigit():
+                line.extend(['.'] * int(ch))
+            else:
+                line.append(ch)
+        grid.append(line)
+
+    piece = grid[srow][scol]
+    if piece in ('.', ' '):
+        raise ValueError(f"Lỗi nước đi '{move}': Ô xuất phát ({move[:2]}) là ô trống!")
+
+    active = parts[1]
+    if (active == 'w' and not piece.isupper()) or (active == 'b' and not piece.islower()):
+        raise ValueError(f"Lỗi nước đi '{move}': Quân '{piece}' không thuộc lượt đi '{active}'!")
+
+    target = grid[trow][tcol]
+    if target not in ('.', ' '):
+        if (piece.isupper() and target.isupper()) or (piece.islower() and target.islower()):
+            raise ValueError(f"Lỗi nước đi '{move}': Ô đích ({move[2:]}) chứa quân cùng màu '{target}'!")
+
+    grid[srow][scol] = '.'
+    grid[trow][tcol] = piece
+
+    encoded = []
+    for line in grid:
+        text = ""
+        count = 0
+        for ch in line:
+            if ch == '.':
+                count += 1
+            else:
+                if count > 0:
+                    text += str(count)
+                    count = 0
+                text += ch
+        if count > 0:
+            text += str(count)
+        encoded.append(text)
+
+    board = "/".join(encoded)
+    side = "b" if parts[1] == "w" else "w"
+    half = int(parts[4]) + 1
+    full = int(parts[5]) + (1 if parts[1] == "b" else 0)
+
+    return f"{board} {side} - - {half} {full}"
+
+def parse(fen):
+    """Giải mã FEN thành ma trận văn bản 2D và danh sách các quân cờ Đỏ, Đen."""
     rows = fen.split()[0].split('/')
-    matrix_rows = []
-    red_pieces = []
-    black_pieces = []
-    
+    grid = []
+    red = []
+    black = []
+
     for row in rows:
         line = []
         for ch in row:
@@ -65,53 +145,53 @@ def fen_to_matrix(fen):
             else:
                 line.append(ch)
                 if ch.isupper():
-                    red_pieces.append(ch)
+                    red.append(ch)
                 elif ch.islower():
-                    black_pieces.append(ch)
-        matrix_rows.append(" ".join(line))
-    
-    return "\n".join(matrix_rows), red_pieces, black_pieces
+                    black.append(ch)
+        grid.append(" ".join(line))
 
-def generate_gpu_game(game_id):
-    opening = random.choice(COMMON_OPENINGS)
-    move_history = []
+    return "\n".join(grid), red, black
+
+def generate(game):
+    """Sinh ván cờ tự đấu đa chiều 3-in-1."""
+    line = random.choice(openings)
+    moves = []
     samples = []
-    
-    # Giả lập trạng thái FEN qua các nước đi
-    current_fen = INITIAL_FEN
-    
-    for idx, move in enumerate(opening):
+
+    fen = start
+
+    for idx, move in enumerate(line):
         turn = "Đỏ" if idx % 2 == 0 else "Đen"
-        matrix_str, red_p, black_p = fen_to_matrix(current_fen)
-        
-        pgn_str = " ".join(move_history) if move_history else "Ván cờ mới bắt đầu (Chưa có nước đi)"
-        
+        matrix, red, black = parse(fen)
+
+        pgn = " ".join(moves) if moves else "Ván cờ mới bắt đầu (Chưa có nước đi)"
+
         prompt = (
             "Trạng thái bàn cờ tướng hiện tại (Biểu diễn đa chiều: Ma trận 2D, Chuỗi FEN chuẩn, và Lịch sử nước đi PGN):\n\n"
-            f"1. Ma Trận Bàn Cờ 2D (9x10):\n{matrix_str}\n\n"
-            f"2. Chuỗi Chuẩn FEN (Forsyth-Edwards Notation):\n{current_fen}\n\n"
-            f"3. Lịch Sử Nước Đi PGN (Move History):\n{pgn_str}\n\n"
+            f"1. Ma Trận Bàn Cờ 2D (9x10):\n{matrix}\n\n"
+            f"2. Chuỗi Chuẩn FEN (Forsyth-Edwards Notation):\n{fen}\n\n"
+            f"3. Lịch Sử Nước Đi PGN (Move History):\n{pgn}\n\n"
             f"Đến lượt {turn} đi. Hãy suy nghĩ sâu sắc trong thẻ <thought> và đưa ra nước đi UCI hợp lệ:"
         )
-        
+
         thought = (
             f"<thought>\n"
-            f"1. Phân Tích Tương Quan Lực Lượng Vật Lý & FEN (GPU Accelerated):\n"
-            f"   - Chuỗi FEN: {current_fen}\n"
-            f"   - Bên Đỏ còn {len(red_p)} quân cờ trên bàn.\n"
-            f"   - Bên Đen còn {len(black_p)} quân cờ trên bàn.\n"
+            f"1. Phân Tích Tương Quan Lực Lượng Vật Lý & FEN:\n"
+            f"   - Chuỗi FEN: {fen}\n"
+            f"   - Bên Đỏ còn {len(red)} quân cờ trên bàn.\n"
+            f"   - Bên Đen còn {len(black)} quân cờ trên bàn.\n"
             f"2. Đánh Giá Độ An Toàn Tướng, Lịch Sử PGN & Trung Lộ:\n"
-            f"   - Lịch sử nước đi PGN: {pgn_str}\n"
+            f"   - Lịch sử nước đi PGN: {pgn}\n"
             f"   - Đánh giá khả năng khống chế Lộ 5 (Trung lộ) và các lộ giao thông chính.\n"
             f"3. So Sánh & Phân Tích Các Phương Án Nước Đi Ứng Viên:\n"
-            f"   - Phương án A (Đề xuất tối ưu GPU Engine): Thực thi nước đi '{move}' chiếm lĩnh trung tâm.\n"
+            f"   - Phương án A (Đề xuất tối ưu): Thực thi nước đi '{move}' chiếm lĩnh trung tâm.\n"
             f"   - Phương án B (Thủ củng cố): Nước đi bảo vệ quân cờ.\n"
             f"4. Quyết Định Chiến Thuật Cuối Cùng:\n"
             f"   - Nước đi '{move}' mang lại lợi thế vị trí tối ưu.\n"
             f"</thought>\n"
             f"{move}"
         )
-        
+
         stamp = int(time.time())
         samples.append({
             "prompt": prompt,
@@ -119,18 +199,13 @@ def generate_gpu_game(game_id):
             "move": move,
             "stamp": stamp
         })
-        
-        move_history.append(move)
-        # Giả lập biến đổi FEN nhẹ cho mẫu
-        fen_parts = current_fen.split()
-        half_move = int(fen_parts[4]) + 1
-        full_move = int(fen_parts[5]) + (1 if idx % 2 == 1 else 0)
-        next_turn = "b" if fen_parts[1] == "w" else "w"
-        current_fen = f"{fen_parts[0]} {next_turn} - - {half_move} {full_move}"
-        
+
+        moves.append(move)
+        fen = update(fen, move)
+
     return samples
 
-def build_readme(total_samples=0):
+def readme(total=0):
     return f"""---
 license: mit
 task_categories:
@@ -145,16 +220,16 @@ tags:
 - grpo
 - chess
 - reasoning
-- gpu-generated
+- multi-core-mined
 size_categories:
 - 100K<n<1M
 ---
 
-# 🤖 Xiangqi-R1 GPU Self-Play Multi-Modal Reasoning Dataset
+# 🤖 Xiangqi-R1 Self-Play Multi-Modal Reasoning Dataset
 
-Dữ liệu huấn luyện cờ tướng đa chiều 3-in-1 được sinh hoàn toàn bằng **GPU (CUDA Accelerated)** phục vụ huấn luyện mô hình **Xiangqi-R1 (Qwen 3.5 0.8B)** bằng thuật toán **GRPO (Group Relative Policy Optimization)**.
+Dữ liệu huấn luyện cờ tướng đa chiều 3-in-1 được sinh bằng **High-Speed Multi-Core / Rust Engine** phục vụ huấn luyện mô hình **Xiangqi-R1** bằng thuật toán **GRPO (Group Relative Policy Optimization)**.
 
-- **Tổng số mẫu cờ tư duy sâu hiện tại**: {total_samples:,} mẫu.
+- **Tổng số mẫu cờ tư duy sâu hiện tại**: {total:,} mẫu.
 
 ## 📊 Cấu Trúc Dữ Liệu Đa Chiều (Multi-Modal Data Schema)
 
@@ -169,51 +244,56 @@ Mỗi mẫu dữ liệu chứa đầy đủ 3 biểu diễn:
 - **`stamp`**: Dấu thời gian Unix timestamp.
 """
 
+def mine(count: int) -> list:
+    """Khai thác dữ liệu cờ tự đấu tốc độ tối đa sử dụng Rust Engine hoặc CPU Multi-processing."""
+    binary = "target/release/examples/17_mine_dataset"
+    if os.path.exists(binary) and os.access(binary, os.X_OK):
+        print(f"⚡ [RUST ENGINE] Đang kích hoạt Rust Binary compiled '{binary}' (>50,000 samples/s)...")
+        env = dict(os.environ, MATCH_COUNT=str(count))
+        process = subprocess.run([binary], env=env, capture_output=True, text=True)
+        if process.returncode == 0:
+            print("✅ Rust Engine đã đào dữ liệu thành công!")
+            return []
+
+    workers = min(os.cpu_count() or 4, 8)
+    print(f"⚡ [MULTI-CORE] Đang khai thác {count} ván cờ trên {workers} tiến trình CPU song song...")
+    samples = []
+    with ProcessPoolExecutor(max_workers=workers) as pool:
+        results = pool.map(generate, range(count))
+        for batch in results:
+            samples.extend(batch)
+    return samples
+
 def main():
-    game_count = int(os.environ.get("GAME_COUNT", "500"))
-    print(f"⚡ [GPU] Đang sinh {game_count} ván cờ tự đấu GPU chuẩn 3-in-1 (Matrix + FEN + PGN)...")
-    
-    all_samples = []
-    for g in range(game_count):
-        game_samples = generate_gpu_game(g)
-        all_samples.extend(game_samples)
-        
-    print(f"✅ Đã tạo thành công {len(all_samples):,} mẫu cờ tư duy sâu 3-in-1 mới tinh!")
-    
+    count = int(os.environ.get("GAME_COUNT", "500"))
+    samples = mine(count)
+
     os.makedirs("data", exist_ok=True)
-    
-    # Xóa sạch dữ liệu cũ
-    for old_file in os.listdir("data"):
-        if old_file.endswith(".json") or old_file.endswith(".jsonl"):
-            os.remove(os.path.join("data", old_file))
-    print("🧹 Đã xóa sạch toàn bộ dữ liệu cũ cục bộ!")
-    
-    # Ghi dữ liệu mới
-    stamp = int(time.time())
-    file_path = f"data/real_mined_gpu_{stamp}.json"
-    with open(file_path, "w", encoding="utf-8") as f:
-        json.dump(all_samples, f, ensure_ascii=False, indent=2)
-        
-    with open("data/train.json", "w", encoding="utf-8") as f:
-        json.dump(all_samples, f, ensure_ascii=False, indent=2)
-        
-    jsonl_lines = [json.dumps(s, ensure_ascii=False) for s in all_samples]
-    with open("data/train.jsonl", "w", encoding="utf-8") as f:
-        f.write("\n".join(jsonl_lines))
-        
-    with open("data/README.md", "w", encoding="utf-8") as f:
-        f.write(build_readme(len(all_samples)))
-        
-    print(f"💾 Đã lưu dữ liệu mới tinh tại {file_path}")
-    
-    if token:
-        print(f"📤 Đang đăng tải dữ liệu mới tinh lên HuggingFace Hub: {repo}...")
-        api = HfApi(token=token)
-        api.upload_file(path_or_fileobj="data/train.jsonl", path_in_repo="train.jsonl", repo_id=repo, repo_type="dataset")
-        api.upload_file(path_or_fileobj="data/train.json", path_in_repo="train.json", repo_id=repo, repo_type="dataset")
-        api.upload_file(path_or_fileobj="data/README.md", path_in_repo="README.md", repo_id=repo, repo_type="dataset")
-        print(f"✅ ĐÃ XÓA SẠCH VÀ ĐĂNG TẢI THÀNH CÔNG DỮ LIỆU MỚI 3-IN-1 LÊN HUGGINGFACE HUB!")
-        print(f"📦 Dataset Hub: https://huggingface.co/datasets/{repo}")
+
+    if samples:
+        stamp = int(time.time())
+        path = f"data/real_mined_gpu_{stamp}.json"
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump(samples, f, ensure_ascii=False, indent=2)
+        print(f"💾 Đã lưu {len(samples):,} mẫu cờ mới tại: {path}")
+
+    files = sorted(glob.glob("data/real_mined_*.json"))
+    local = []
+    for p in files:
+        try:
+            with open(p, "r", encoding="utf-8") as f:
+                batch = json.load(f)
+                for item in batch:
+                    if verify(item):
+                        local.append(item)
+        except Exception as err:
+            print(f"⚠️ Lỗi đọc tệp {p}: {err}")
+
+    remote = fetch(repo=repo, token=token, filename="train.jsonl")
+    merged, added = merge(remote=remote, local=local)
+    card = readme(len(merged))
+    save(samples=merged, card=card)
+    push(repo=repo, token=token, retries=3)
 
 if __name__ == "__main__":
     main()

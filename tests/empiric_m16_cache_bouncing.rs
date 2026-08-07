@@ -21,7 +21,7 @@ fn test_cache_bouncing_scaling() {
         for tid in 0..thread_count {
             let tt = table.clone();
             let handle = thread::spawn(move || {
-                let mut state = (tid as u64).wrapping_add(1) * 0x9E3779B97F4A7C15;
+                let mut state = (tid as u64).wrapping_add(1).wrapping_mul(0x9E3779B97F4A7C15);
                 for _ in 0..ops_per_thread {
                     state = state.wrapping_mul(6364136223846793005).wrapping_add(1);
                     let key = if state == 0 { 1 } else { state };

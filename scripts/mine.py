@@ -3,7 +3,8 @@
 # TỰ ĐỘNG KHAI THÁC DỮ LIỆU CỜ TƯỚNG TỪ NATIVE RUST ENGINE VÀ ĐẨY HUGGINGFACE
 # ============================================================================
 # Định danh đơn từ tiếng Anh: token, repo, cmd, proc, path, file, data,
-# content, payload, req, res, err, mine, loop, count, push, delay, api
+# content, payload, req, res, err, mine, loop, count, push, delay, api, miner,
+# deploy, readme, files, local, remote, merged, added, batch, card, limit
 # ============================================================================
 
 import subprocess
@@ -12,11 +13,15 @@ import glob
 import os
 import time
 from huggingface_hub import HfApi
+try:
+    from scripts.hub import fetch, verify, merge, save, push
+except ImportError:
+    from hub import fetch, verify, merge, save, push
 
 token = os.environ.get("HF_TOKEN", "")
 repo = "hoduyquocbao/xiangqi-r1-dataset"
 
-def build_readme(total_samples=0):
+def readme(total=0):
     return f"""---
 license: mit
 task_categories:
@@ -39,7 +44,7 @@ size_categories:
 
 Dữ liệu huấn luyện cờ tướng tư duy sâu (Xiangqi Deep Reasoning Dataset) được sinh ra từ **Native Rust Engine (XiangRust)** phục vụ huấn luyện mô hình **Xiangqi-R1 (Qwen 0.5B / 7B)** bằng thuật toán **GRPO (Group Relative Policy Optimization)**.
 
-- **Tổng số mẫu cờ tư duy sâu hiện tại**: {total_samples:,} mẫu.
+- **Tổng số mẫu cờ tư duy sâu hiện tại**: {total:,} mẫu.
 
 ## 📊 Cấu Trúc Dữ Liệu Đa Chiều (Multi-Modal Data Schema)
 
@@ -64,7 +69,7 @@ print(dataset[0])
 ```
 """
 
-def run_rust_miner():
+def miner():
     print("🚀 Đang chạy Native Rust Engine Self-Play Miner...")
     cmd = ["cargo", "run", "--release", "--example", "17_mine_dataset"]
     try:
@@ -75,57 +80,37 @@ def run_rust_miner():
         print(f"❌ Lỗi chạy Rust Engine: {err}")
         return False
 
-def push_all_mined_files():
+def deploy():
     files = sorted(glob.glob("data/real_mined_*.json"))
     if not files:
         print("⚠️ Không tìm thấy tệp real_mined_*.json nào trong data/")
         return False
 
-    all_samples = []
-    seen_prompts = set()
-
-    for file_path in files:
+    local = []
+    for path in files:
         try:
-            with open(file_path, "r", encoding="utf-8") as f:
+            with open(path, "r", encoding="utf-8") as f:
                 batch = json.load(f)
                 for item in batch:
-                    key = (item.get("prompt"), item.get("move"))
-                    if key not in seen_prompts:
-                        seen_prompts.add(key)
-                        all_samples.append(item)
+                    if verify(item):
+                        local.append(item)
         except Exception as e:
-            print(f"⚠️ Lỗi đọc tệp {file_path}: {e}")
+            print(f"⚠️ Lỗi đọc tệp {path}: {e}")
 
-    print(f"📊 Tổng hợp thành công {len(all_samples):,} mẫu cờ độc bản từ {len(files)} tệp mined!")
+    print(f"📊 Đã đọc được {len(local):,} mẫu cờ mới từ local!")
 
-    jsonl_lines = [json.dumps(s, ensure_ascii=False) for s in all_samples]
-    with open("data/train.jsonl", "w", encoding="utf-8") as f:
-        f.write("\n".join(jsonl_lines))
+    # 1. Pull remote dataset hiện tại từ Hub (Nếu có)
+    remote = fetch(repo=repo, token=token, filename="train.jsonl")
 
-    with open("data/train.json", "w", encoding="utf-8") as f:
-        json.dump(all_samples, f, ensure_ascii=False, indent=2)
+    # 2. Merge & Deduplicate
+    merged, added = merge(remote=remote, local=local)
 
-    with open("data/README.md", "w", encoding="utf-8") as f:
-        f.write(build_readme(total_samples=len(all_samples)))
+    # 3. Ghi dữ liệu nguyên tử ra đĩa cục bộ
+    card = readme(total=len(merged))
+    save(samples=merged, card=card)
 
-    if not token:
-        print("⚠️ Thiếu HF_TOKEN. Bỏ qua bước đẩy Hugging Face Hub.")
-        return True
-
-    api = HfApi(token=token)
-    print(f"📤 Đang đẩy dataset {len(all_samples):,} mẫu cờ lên HuggingFace Hub ({repo})...")
-    api.upload_file(path_or_fileobj="data/train.jsonl", path_in_repo="train.jsonl", repo_id=repo, repo_type="dataset")
-    api.upload_file(path_or_fileobj="data/train.json", path_in_repo="train.json", repo_id=repo, repo_type="dataset")
-    api.upload_file(path_or_fileobj="data/README.md", path_in_repo="README.md", repo_id=repo, repo_type="dataset")
-
-    verified_files = api.list_repo_files(repo_id=repo, repo_type="dataset")
-    print(f"============================================================")
-    print(f"✅ ĐÃ ĐẨY THÀNH CÔNG {len(all_samples):,} MẪU CỜ LÊN HUGGINGFACE HUB!")
-    print(f"🔗 URL: https://huggingface.co/datasets/{repo}")
-    print(f"📂 Tree: https://huggingface.co/datasets/{repo}/tree/main")
-    print("Các tệp trên Hub:", verified_files)
-    print(f"============================================================")
-    return True
+    # 4. Push không phá hủy lên Hub
+    return push(repo=repo, token=token, retries=3)
 
 def mine(limit=10):
     print("============================================================")
@@ -133,8 +118,8 @@ def mine(limit=10):
     print("============================================================")
     for loop in range(1, limit + 1):
         print(f"\n🔄 Đợt khai thác #{loop}/{limit}...")
-        if run_rust_miner():
-            push_all_mined_files()
+        if miner():
+            deploy()
         time.sleep(1)
 
 if __name__ == "__main__":
