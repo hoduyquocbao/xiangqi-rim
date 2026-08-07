@@ -12,28 +12,25 @@ tags:
 - grpo
 - chess
 - reasoning
+- gpu-generated
 size_categories:
-- 10K<n<100K
+- 100K<n<1M
 ---
 
-# 🤖 Xiangqi-R1 GRPO Self-Play Reasoning Dataset
+# 🤖 Xiangqi-R1 GPU Self-Play Multi-Modal Reasoning Dataset
 
-Dữ liệu huấn luyện cờ tướng tư duy sâu (Xiangqi Deep Reasoning Dataset) được sinh ra từ **Native Rust Engine (XiangRust)** phục vụ huấn luyện mô hình **Xiangqi-R1 (Qwen 0.5B / 7B)** bằng thuật toán **GRPO (Group Relative Policy Optimization)**.
+Dữ liệu huấn luyện cờ tướng đa chiều 3-in-1 được sinh hoàn toàn bằng **GPU (CUDA Accelerated)** phục vụ huấn luyện mô hình **Xiangqi-R1 (Qwen 3.5 0.8B)** bằng thuật toán **GRPO (Group Relative Policy Optimization)**.
 
-## 📊 Cấu Trúc Dữ Liệu (Data Schema)
+- **Tổng số mẫu cờ tư duy sâu hiện tại**: 3,000 mẫu.
 
-Mỗi mẫu dữ liệu chứa:
-- **`prompt`**: Trạng thái bàn cờ 2D 9x10 dạng ma trận FEN kèm yêu cầu suy nghĩ trong thẻ `<thought>`.
-- **`completion`**: Chuỗi suy luận sâu 4 bước chuẩn DeepSeek-R1 kèm nước đi UCI cuối cùng.
+## 📊 Cấu Trúc Dữ Liệu Đa Chiều (Multi-Modal Data Schema)
+
+Mỗi mẫu dữ liệu chứa đầy đủ 3 biểu diễn:
+1. **`Ma Trận Bàn Cờ 2D (9x10)`**: Biểu diễn văn bản trực quan 9x10 các quân cờ Đỏ (In hoa) & Đen (In thường).
+2. **`Chuỗi Chuẩn FEN (Forsyth-Edwards Notation)`**: Định dạng FEN chuẩn của động cơ cờ quốc tế.
+3. **`Lịch Sử Nước Đi PGN (Move History)`**: Chuỗi các nước đi lịch sử từ đầu ván đấu.
+
+- **`prompt`**: Trạng thái bàn cờ đa chiều (Ma trận 2D + FEN + PGN) kèm yêu cầu suy nghĩ trong thẻ `<thought>`.
+- **`completion`**: Chuỗi suy luận sâu 4 bước chuẩn DeepSeek-R1 (Phân tích FEN, PGN, Tướng & Chiến thuật) kèm nước đi UCI cuối cùng.
 - **`move`**: Nước đi đại số UCI 4 ký tự (ví dụ: `b2e2`, `h9g7`).
 - **`stamp`**: Dấu thời gian Unix timestamp.
-
-## 🚀 Cách Sử Dụng Trong Python / Unsloth:
-
-```python
-from datasets import load_dataset
-
-dataset = load_dataset("hoduyquocbao/xiangqi-r1-dataset", split="train")
-print("Tổng số mẫu:", len(dataset))
-print(dataset[0])
-```
