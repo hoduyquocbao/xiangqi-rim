@@ -19,6 +19,11 @@ outputs/
 *.pem
 *.key
 
+# Internal Development Requests & Diagnostic Reports
+ORIGINAL_REQUEST.md
+PROJECT.md
+reports/
+
 # AI Assistant & Memory Framework
 /.agents
 .agents
