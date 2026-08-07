@@ -1,0 +1,35 @@
+# Rust Build Artifacts
+/target/
+**/*.rs.bk
+
+# Node / Web Artifacts
+/web/node_modules/
+/web/dist/
+/web/.vite/
+
+# Data & Models
+/data/*.json
+/data/*.jsonl
+!/data/.gitkeep
+outputs/
+
+# Secrets & Configuration
+.env
+.env.*
+*.pem
+*.key
+
+# AI Assistant & Memory Framework
+/.agents
+.agents
+.gemini
+.user_uploaded
+
+# System & IDE
+.DS_Store
+.vscode/
+.idea/
+
+# Logs & Temporary Task Outputs
+*.log
+.system_generated/

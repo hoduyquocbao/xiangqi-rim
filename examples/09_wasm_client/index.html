@@ -1,0 +1,661 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>XiangRust WASM Engine - Web Client</title>
+    <style>
+        :root {
+            --bg-color: #1a1a24;
+            --panel-bg: #242436;
+            --accent-color: #4f46e5;
+            --accent-hover: #6366f1;
+            --text-color: #f3f4f6;
+            --text-muted: #9ca3af;
+            --border-color: #374151;
+            --board-bg: #e5b97d;
+            --board-line: #5c3a21;
+            --red-piece: #cc0000;
+            --black-piece: #111111;
+            --piece-bg: #fdf5e6;
+            --highlight: rgba(79, 70, 229, 0.4);
+            --last-move: rgba(234, 179, 8, 0.4);
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        }
+
+        body {
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 20px;
+        }
+
+        header {
+            text-align: center;
+            margin-bottom: 24px;
+        }
+
+        header h1 {
+            font-size: 2rem;
+            font-weight: 700;
+            color: #ffffff;
+            margin-bottom: 6px;
+            letter-spacing: 0.5px;
+        }
+
+        header p {
+            color: var(--text-muted);
+            font-size: 0.95rem;
+        }
+
+        .container {
+            display: flex;
+            flex-direction: row;
+            gap: 24px;
+            max-width: 1100px;
+            width: 100%;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+
+        /* Khung chứa bàn cờ & Cấu hình phong cách Bàn cờ Cờ Tướng */
+        .board-card {
+            background: var(--panel-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.3);
+        }
+
+        .xiangqi-board {
+            width: 450px;
+            height: 500px;
+            background-color: var(--board-bg);
+            border: 3px solid var(--board-line);
+            border-radius: 6px;
+            display: grid;
+            grid-template-columns: repeat(9, 1fr);
+            grid-template-rows: repeat(10, 1fr);
+            position: relative;
+            box-shadow: inset 0 0 10px rgba(0,0,0,0.2);
+            user-select: none;
+        }
+
+        .cell {
+            position: relative;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            z-index: 2;
+        }
+
+        .cell::before {
+            content: '';
+            position: absolute;
+            top: 50%;
+            left: 0;
+            right: 0;
+            height: 1px;
+            background-color: var(--board-line);
+            z-index: 1;
+        }
+
+        .cell::after {
+            content: '';
+            position: absolute;
+            left: 50%;
+            top: 0;
+            bottom: 0;
+            width: 1px;
+            background-color: var(--board-line);
+            z-index: 1;
+        }
+
+        /* Ẩn các đường kẻ dọc đi qua Sở Hà Hán Giới (Hàng 4 tới 5) trừ các cột 0 và 8 */
+        .cell[data-rank="4"]::after,
+        .cell[data-rank="5"]::after {
+            height: 50%;
+        }
+
+        .cell[data-rank="4"]::after {
+            bottom: auto;
+        }
+
+        .cell[data-rank="5"]::after {
+            top: auto;
+        }
+
+        .cell[data-file="0"]::after,
+        .cell[data-file="8"]::after {
+            height: 100% !important;
+            top: 0 !important;
+            bottom: 0 !important;
+        }
+
+        /* Lớp văn bản hiển thị chữ Sở Hà Hán Giới */
+        .river-text {
+            position: absolute;
+            top: 45%;
+            left: 0;
+            right: 0;
+            display: flex;
+            justify-content: space-around;
+            font-size: 1.3rem;
+            font-weight: bold;
+            color: var(--board-line);
+            pointer-events: none;
+            z-index: 1;
+            opacity: 0.8;
+        }
+
+        /* Cấu hình hiển thị quân cờ */
+        .piece {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            background: var(--piece-bg);
+            border: 2px solid var(--board-line);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.4rem;
+            font-weight: bold;
+            z-index: 3;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.3), inset 0 2px 4px rgba(255,255,255,0.8);
+            transition: transform 0.15s ease, box-shadow 0.15s ease;
+        }
+
+        .piece.red {
+            color: var(--red-piece);
+            border-color: var(--red-piece);
+        }
+
+        .piece.black {
+            color: var(--black-piece);
+            border-color: var(--black-piece);
+        }
+
+        .cell.selected .piece {
+            transform: scale(1.15);
+            box-shadow: 0 0 12px #4f46e5;
+        }
+
+        .cell.last-move::before {
+            content: '';
+            position: absolute;
+            width: 14px;
+            height: 14px;
+            background: rgba(234, 179, 8, 0.7);
+            border-radius: 50%;
+            z-index: 4;
+        }
+
+        /* Bảng điều khiển & Nhập liệu */
+        .controls-card {
+            flex: 1;
+            min-width: 340px;
+            max-width: 540px;
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+        }
+
+        .panel-box {
+            background: var(--panel-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 18px;
+        }
+
+        .panel-box h3 {
+            font-size: 1.1rem;
+            font-weight: 600;
+            color: #ffffff;
+            margin-bottom: 12px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .form-group {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            margin-bottom: 12px;
+        }
+
+        .form-group label {
+            font-size: 0.85rem;
+            color: var(--text-muted);
+        }
+
+        .input-row {
+            display: flex;
+            gap: 8px;
+        }
+
+        input[type="text"], input[type="number"] {
+            background: #111827;
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            color: #ffffff;
+            padding: 8px 12px;
+            font-size: 0.9rem;
+            width: 100%;
+        }
+
+        input[type="text"]:focus, input[type="number"]:focus {
+            outline: none;
+            border-color: var(--accent-color);
+        }
+
+        .btn-group {
+            display: flex;
+            gap: 8px;
+        }
+
+        button {
+            background: var(--accent-color);
+            color: #ffffff;
+            border: none;
+            border-radius: 6px;
+            padding: 9px 16px;
+            font-size: 0.9rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background-color 0.2s ease;
+        }
+
+        button:hover {
+            background: var(--accent-hover);
+        }
+
+        button.btn-secondary {
+            background: #374151;
+        }
+
+        button.btn-secondary:hover {
+            background: #4b5563;
+        }
+
+        button.btn-danger {
+            background: #dc2626;
+        }
+
+        button.btn-danger:hover {
+            background: #ef4444;
+        }
+
+        /* Lưới thông số hiệu năng Engine */
+        .metrics-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 12px;
+        }
+
+        .metric-card {
+            background: #111827;
+            border-radius: 8px;
+            padding: 12px;
+            border: 1px solid rgba(255,255,255,0.05);
+        }
+
+        .metric-card .title {
+            font-size: 0.75rem;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .metric-card .value {
+            font-size: 1.2rem;
+            font-weight: 700;
+            color: #ffffff;
+            margin-top: 4px;
+        }
+
+        .metric-card.full-width {
+            grid-column: span 2;
+        }
+
+        .status-badge {
+            display: inline-block;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 0.8rem;
+            font-weight: 600;
+        }
+
+        .status-ready {
+            background: rgba(16, 185, 129, 0.2);
+            color: #10b981;
+        }
+
+        .status-busy {
+            background: rgba(245, 158, 11, 0.2);
+            color: #f59e0b;
+        }
+    </style>
+</head>
+<body>
+
+    <header>
+        <h1>XiangRust WASM Engine</h1>
+        <p>Zero-Crate High-Performance Xiangqi AI Running Clean-Room in WebAssembly</p>
+    </header>
+
+    <div class="container">
+        <!-- Board UI Card -->
+        <div class="board-card">
+            <div class="xiangqi-board" id="board">
+                <div class="river-text">
+                    <span>楚 河</span>
+                    <span>漢 界</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Controls & Metrics Cards -->
+        <div class="controls-card">
+            <!-- Engine Status & FEN Input -->
+            <div class="panel-box">
+                <h3>⚙️ Cấu Hình Trạng Thái Bàn Cờ (FEN)</h3>
+                <div class="form-group">
+                    <label for="fenInput">Chuỗi Forsyth-Edwards Notation (FEN):</label>
+                    <input type="text" id="fenInput" value="rnbakabnr/9/1c5c1/p1p1p1p1p/9/9/P1P1P1P1P/1C5C1/9/RNBAKABNR w - - 0 1">
+                </div>
+                <div class="btn-group">
+                    <button id="btnParse">Phân Tích FEN</button>
+                    <button class="btn-secondary" id="btnReset">Mặc Định</button>
+                    <button class="btn-secondary" id="btnEval">Đánh Giá (Eval)</button>
+                </div>
+            </div>
+
+            <!-- Search Controls -->
+            <div class="panel-box">
+                <h3>🔍 Bộ Tìm Kiếm PVS Engine</h3>
+                <div class="input-row" style="margin-bottom: 12px;">
+                    <div class="form-group" style="flex:1;">
+                        <label for="depthInput">Giới Hạn Độ Sâu (Depth):</label>
+                        <input type="number" id="depthInput" value="6" min="1" max="12">
+                    </div>
+                    <div class="form-group" style="flex:1;">
+                        <label for="timeInput">Thời Gian Tối Đa (ms):</label>
+                        <input type="number" id="timeInput" value="3000" min="100" step="100">
+                    </div>
+                </div>
+                <div class="btn-group">
+                    <button id="btnSearch">Thực Thi Tìm Kiếm</button>
+                    <button class="btn-secondary" id="btnPerft">Kiểm Thử Perft</button>
+                </div>
+            </div>
+
+            <!-- Engine Outputs & Metrics -->
+            <div class="panel-box">
+                <h3>📊 Kết Quả Tính Toán & Hiệu Năng</h3>
+                <div class="metrics-grid">
+                    <div class="metric-card">
+                        <div class="title">Trạng Thái WASM</div>
+                        <div class="value" id="wasmStatus"><span class="status-badge status-busy">Đang nạp...</span></div>
+                    </div>
+                    <div class="metric-card">
+                        <div class="title">Nước Đi Tốt Nhất (Best Move)</div>
+                        <div class="value" id="bestMove" style="color:#6366f1;">-</div>
+                    </div>
+                    <div class="metric-card">
+                        <div class="title">Điểm Thế Cờ (Score)</div>
+                        <div class="value" id="scoreValue">-</div>
+                    </div>
+                    <div class="metric-card">
+                        <div class="title">Tốc Độ Duyệt (NPS)</div>
+                        <div class="value" id="npsValue">-</div>
+                    </div>
+                    <div class="metric-card">
+                        <div class="title">Số Nút Duyệt (Nodes)</div>
+                        <div class="value" id="nodesValue">-</div>
+                    </div>
+                    <div class="metric-card">
+                        <div class="title">Thời Gian (Time)</div>
+                        <div class="value" id="timeValue">-</div>
+                    </div>
+                    <div class="metric-card full-width">
+                        <div class="title">Tuyến Nước Đi Biến Thể (PV Line)</div>
+                        <div class="value" id="pvValue" style="font-size: 0.9rem; font-family: monospace; color: #a7f3d0;">-</div>
+                    </div>
+                    <div class="metric-card full-width">
+                        <div class="title">Kết Quả Kiểm Thử Perft</div>
+                        <div class="value" id="perftResult" style="font-size: 0.85rem; color: #fde047;">-</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Ánh xạ ký tự FEN quân cờ sang văn bản chữ Hán Unicode
+        const PIECE_CHARS = {
+            'K': '帥', 'A': '仕', 'B': '相', 'N': '傌', 'R': '俥', 'C': '砲', 'P': '兵',
+            'k': '將', 'a': '士', 'b': '象', 'n': '馬', 'r': '車', 'c': '砲', 'p': '卒'
+        };
+
+        let wasmInstance = null;
+        let wasmMemory = null;
+        let selectedSquare = null;
+
+        // Khởi tạo các phần tử lưới bàn cờ (90 ô cờ)
+        function initBoardUI() {
+            const boardEl = document.getElementById('board');
+            boardEl.querySelectorAll('.cell').forEach(el => el.remove());
+
+            for (let r = 9; r >= 0; r--) {
+                for (let f = 0; f < 9; f++) {
+                    const cell = document.createElement('div');
+                    cell.className = 'cell';
+                    cell.dataset.rank = r;
+                    cell.dataset.file = f;
+                    cell.dataset.sq = r * 9 + f;
+
+                    cell.addEventListener('click', () => onSquareClick(r * 9 + f));
+                    boardEl.appendChild(cell);
+                }
+            }
+        }
+
+        // Hiển thị vị trí FEN hiện tại lên 90 ô cờ
+        function renderFen(fenStr) {
+            const parts = fenStr.split(' ');
+            const ranks = parts[0].split('/');
+            
+            document.querySelectorAll('.cell').forEach(cell => {
+                cell.innerHTML = '';
+                cell.classList.remove('selected', 'last-move');
+            });
+
+            for (let r = 0; r < 10 && r < ranks.len; r++) {
+                const rankIdx = 9 - r;
+                let fileIdx = 0;
+                for (let char of ranks[r]) {
+                    if (char >= '1' && char <= '9') {
+                        fileIdx += parseInt(char);
+                    } else if (PIECE_CHARS[char]) {
+                        const sq = rankIdx * 9 + fileIdx;
+                        const cell = document.querySelector(`.cell[data-sq="${sq}"]`);
+                        if (cell) {
+                            const pieceEl = document.createElement('div');
+                            const isRed = char === char.toUpperCase();
+                            pieceEl.className = `piece ${isRed ? 'red' : 'black'}`;
+                            pieceEl.innerText = PIECE_CHARS[char];
+                            cell.appendChild(pieceEl);
+                        }
+                        fileIdx++;
+                    }
+                }
+            }
+        }
+
+        // Bắt sự kiện nhấp chuột trên từng ô bàn cờ
+        function onSquareClick(sq) {
+            if (selectedSquare === null) {
+                const cell = document.querySelector(`.cell[data-sq="${sq}"]`);
+                if (cell && cell.querySelector('.piece')) {
+                    selectedSquare = sq;
+                    cell.classList.add('selected');
+                }
+            } else {
+                const fromSq = selectedSquare;
+                const toSq = sq;
+                document.querySelectorAll('.cell').forEach(c => c.classList.remove('selected'));
+                selectedSquare = null;
+
+                if (fromSq !== toSq) {
+                    console.log(`User clicked move: sq ${fromSq} -> sq ${toSq}`);
+                }
+            }
+        }
+
+        // Bộ công cụ tiện ích thao tác bộ nhớ WASM
+        function allocateBuffer(size) {
+            return wasmInstance.exports.allocate(size);
+        }
+
+        function freeBuffer(ptr, size) {
+            wasmInstance.exports.free(ptr, size);
+        }
+
+        function fetchBufferResult() {
+            const limit = 4096;
+            const ptr = allocateBuffer(limit);
+            const size = wasmInstance.exports.fetch(ptr, limit);
+            const bytes = new Uint8Array(wasmMemory.buffer, ptr, size);
+            const text = new TextDecoder('utf-8').decode(bytes);
+            freeBuffer(ptr, limit);
+            try {
+                return JSON.parse(text);
+            } catch (e) {
+                return { text };
+            }
+        }
+
+        // Nạp chuỗi FEN vào WASM Engine
+        function loadFenToEngine(fenStr) {
+            const bytes = new TextEncoder().encode(fenStr);
+            const ptr = allocateBuffer(bytes.length);
+            const memoryBuffer = new Uint8Array(wasmMemory.buffer);
+            memoryBuffer.set(bytes, ptr);
+            
+            const success = wasmInstance.exports.set_position(ptr, bytes.length);
+            freeBuffer(ptr, bytes.length);
+            return success === 1;
+        }
+
+        // Tiến trình khởi tạo WebAssembly chính
+        async function loadWasm() {
+            try {
+                const statusEl = document.getElementById('wasmStatus');
+                statusEl.innerHTML = '<span class="status-badge status-busy">Nạp WASM...</span>';
+
+                let response;
+                try {
+                    response = await fetch('../../target/wasm32-unknown-unknown/release/xiangrust.wasm');
+                } catch (e) {
+                    response = await fetch('./xiangrust.wasm');
+                }
+                
+                const bytes = await response.arrayBuffer();
+                const module = await WebAssembly.instantiate(bytes, {});
+                wasmInstance = module.instance;
+                wasmMemory = wasmInstance.exports.memory;
+
+                wasmInstance.exports.init();
+
+                statusEl.innerHTML = '<span class="status-badge status-ready">Sẵn Sàng</span>';
+                console.log("XiangRust WASM Engine initialized successfully!");
+
+                const defaultFen = document.getElementById('fenInput').value;
+                loadFenToEngine(defaultFen);
+                renderFen(defaultFen);
+            } catch (err) {
+                console.error("WASM Loading Error:", err);
+                document.getElementById('wasmStatus').innerHTML = '<span class="status-badge status-busy" style="color:#ef4444;">Lỗi WASM</span>';
+            }
+        }
+
+        // Đăng ký các bộ lắng nghe sự kiện UI
+        document.getElementById('btnParse').addEventListener('click', () => {
+            const fenStr = document.getElementById('fenInput').value.trim();
+            if (loadFenToEngine(fenStr)) {
+                renderFen(fenStr);
+            } else {
+                alert("Chuỗi FEN không hợp lệ!");
+            }
+        });
+
+        document.getElementById('btnReset').addEventListener('click', () => {
+            const defaultFen = "rnbakabnr/9/1c5c1/p1p1p1p1p/9/9/P1P1P1P1P/1C5C1/9/RNBAKABNR w - - 0 1";
+            document.getElementById('fenInput').value = defaultFen;
+            loadFenToEngine(defaultFen);
+            renderFen(defaultFen);
+        });
+
+        document.getElementById('btnEval').addEventListener('click', () => {
+            if (!wasmInstance) return;
+            const score = wasmInstance.exports.evaluate();
+            document.getElementById('scoreValue').innerText = `${score > 0 ? '+' : ''}${score} cp`;
+        });
+
+        document.getElementById('btnSearch').addEventListener('click', () => {
+            if (!wasmInstance) return;
+            const depth = parseInt(document.getElementById('depthInput').value) || 6;
+            const timeMs = parseInt(document.getElementById('timeInput').value) || 3000;
+
+            document.getElementById('bestMove').innerText = "Đang tính...";
+            
+            setTimeout(() => {
+                const res = wasmInstance.exports.search(depth, timeMs);
+                if (res === 1) {
+                    const data = fetchBufferResult();
+                    document.getElementById('bestMove').innerText = data.best || "-";
+                    document.getElementById('scoreValue').innerText = `${data.score > 0 ? '+' : ''}${data.score} cp`;
+                    document.getElementById('nodesValue').innerText = (data.nodes || 0).toLocaleString();
+                    document.getElementById('timeValue').innerText = `${data.time || 0} ms`;
+                    const nps = data.time > 0 ? Math.round((data.nodes * 1000) / data.time) : 0;
+                    document.getElementById('npsValue').innerText = `${nps.toLocaleString()} nps`;
+                    document.getElementById('pvValue').innerText = data.pv || "-";
+                }
+            }, 10);
+        });
+
+        document.getElementById('btnPerft').addEventListener('click', () => {
+            if (!wasmInstance) return;
+            const depth = parseInt(document.getElementById('depthInput').value) || 3;
+            document.getElementById('perftResult').innerText = "Đang chạy Perft...";
+
+            setTimeout(() => {
+                const start = performance.now();
+                const nodes = wasmInstance.exports.perft(depth);
+                const elapsed = performance.now() - start;
+                const nps = elapsed > 0 ? Math.round((nodes * 1000) / elapsed) : 0;
+                document.getElementById('perftResult').innerText = 
+                    `Depth ${depth}: ${nodes.toLocaleString()} nút trong ${elapsed.toFixed(2)} ms (${nps.toLocaleString()} nps)`;
+            }, 10);
+        });
+
+        // Khởi tạo giao diện UI & WASM khi trang nạp xong
+        initBoardUI();
+        loadWasm();
+    </script>
+</body>
+</html>
