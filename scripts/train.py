@@ -143,23 +143,23 @@ except Exception as err:
     dataset = Dataset.from_list(data)
 
 # 7. Thiết lập Cấu hình GRPOTrainer (Tương thích mô hình 0.5B siêu nhanh)
-config = GRPOConfig(
+cotraining_args = GRPOConfig(
     output_dir=f"outputs/xiangqi-r1-{variant}",
-    learning_rate=1e-5 if variant == "0.5b" else 5e-6,
+    learning_rate=1e-5,
     adam_beta1=0.9,
     adam_beta2=0.99,
     weight_decay=0.1,
-    warmup_ratio=0.1,
+    warmup_steps=5,
     lr_scheduler_type="cosine",
     optim="adamw_8bit",
     logging_steps=1,
-    per_device_train_batch_size=2 if variant == "0.5b" else 1,
-    gradient_accumulation_steps=2 if variant == "0.5b" else 4,
-    num_generations=4,
+    per_device_train_batch_size=2,
+    gradient_accumulation_steps=2,
+    num_generations=2,
     max_prompt_length=512,
-    max_completion_length=256,
-    max_steps=100,
-    save_steps=50,
+    max_completion_length=128,
+    max_steps=50,
+    save_steps=25,
     report_to="none",
 )
 
