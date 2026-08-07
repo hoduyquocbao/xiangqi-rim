@@ -15,8 +15,8 @@ from huggingface_hub import HfApi
 token = os.environ.get("HF_TOKEN", "")
 repo = "hoduyquocbao/xiangqi-r1-dataset"
 
-def build_readme():
-    return """---
+def build_readme(total_samples=0):
+    return f"""---
 license: mit
 task_categories:
 - reinforcement-learning
@@ -31,12 +31,14 @@ tags:
 - chess
 - reasoning
 size_categories:
-- 10K<n<100K
+- 100K<n<1M
 ---
 
 # 🤖 Xiangqi-R1 GRPO Self-Play Reasoning Dataset
 
 Dữ liệu huấn luyện cờ tướng tư duy sâu (Xiangqi Deep Reasoning Dataset) được sinh ra từ **Native Rust Engine (XiangRust)** phục vụ huấn luyện mô hình **Xiangqi-R1 (Qwen 0.5B / 7B)** bằng thuật toán **GRPO (Group Relative Policy Optimization)**.
+
+- **Tổng số mẫu cờ tư duy sâu hiện tại**: {total_samples:,} mẫu.
 
 ## 📊 Cấu Trúc Dữ Liệu (Data Schema)
 
@@ -62,7 +64,6 @@ def deploy():
     print(" CHẠY RUST ENGINE MINER & TRIỂN KHAI HUGGINGFACE DATASET ")
     print("============================================================")
 
-    # 1. Chạy Rust Engine Miner 17 để tạo ván đấu tự động thật 100%
     print("🚀 Đang khởi chạy Native Rust Engine Self-Play...")
     cmd = ["cargo", "run", "--release", "--example", "17_mine_dataset"]
     try:
@@ -72,40 +73,52 @@ def deploy():
         print(f"❌ Lỗi chạy Rust Engine: {err}")
         return False
 
-    files = sorted(glob.glob("data/real_mined_*.json"), key=os.path.getmtime, reverse=True)
+    files = sorted(glob.glob("data/real_mined_*.json"))
     if not files:
         print("⚠️ Không tìm thấy tệp real_mined_*.json nào trong data/")
         return False
 
-    latest_file = files[0]
-    print(f"📄 Đã đọc tệp dữ liệu cờ thật: {latest_file}")
-    with open(latest_file, "r", encoding="utf-8") as f:
-        samples = json.load(f)
+    all_samples = []
+    seen_prompts = set()
 
-    # 2. Ghi ra train.jsonl, train.json và README.md local
-    jsonl_lines = [json.dumps(s, ensure_ascii=False) for s in samples]
+    for file_path in files:
+        try:
+            with open(file_path, "r", encoding="utf-8") as f:
+                batch = json.load(f)
+                for item in batch:
+                    key = (item.get("prompt"), item.get("move"))
+                    if key not in seen_prompts:
+                        seen_prompts.add(key)
+                        all_samples.append(item)
+        except Exception as e:
+            print(f"⚠️ Lỗi đọc tệp {file_path}: {e}")
+
+    print(f"📊 Tổng hợp {len(all_samples):,} mẫu cờ tư duy sâu thực tế!")
+
+    jsonl_lines = [json.dumps(s, ensure_ascii=False) for s in all_samples]
     with open("data/train.jsonl", "w", encoding="utf-8") as f:
         f.write("\n".join(jsonl_lines))
 
     with open("data/train.json", "w", encoding="utf-8") as f:
-        json.dump(samples, f, ensure_ascii=False, indent=2)
+        json.dump(all_samples, f, ensure_ascii=False, indent=2)
 
     with open("data/README.md", "w", encoding="utf-8") as f:
-        f.write(build_readme())
+        f.write(build_readme(total_samples=len(all_samples)))
 
-    # 3. Đẩy chính thức lên HuggingFace Hub bằng HfApi
+    if not token:
+        print("⚠️ Thiếu HF_TOKEN. Bỏ qua bước đẩy HuggingFace Hub.")
+        return True
+
     api = HfApi(token=token)
-
-    print("📤 Đang đẩy train.jsonl...")
+    print(f"📤 Đang đẩy train.jsonl ({len(all_samples):,} mẫu)...")
     api.upload_file(path_or_fileobj="data/train.jsonl", path_in_repo="train.jsonl", repo_id=repo, repo_type="dataset")
 
-    print("📤 Đang đẩy train.json...")
+    print(f"📤 Đang đẩy train.json ({len(all_samples):,} mẫu)...")
     api.upload_file(path_or_fileobj="data/train.json", path_in_repo="train.json", repo_id=repo, repo_type="dataset")
 
     print("📤 Đang đẩy README.md...")
     api.upload_file(path_or_fileobj="data/README.md", path_in_repo="README.md", repo_id=repo, repo_type="dataset")
 
-    # 4. Xác nhận danh sách tệp trực tiếp từ HuggingFace Hub
     verified_files = api.list_repo_files(repo_id=repo, repo_type="dataset")
     print("============================================================")
     print(f"✅ ĐÃ TRIỂN KHAI CHÍNH THỨC DỮ LIỆU CỜ TƯỚNG LÊN HUGGINGFACE HUB!")

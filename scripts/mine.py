@@ -16,8 +16,8 @@ from huggingface_hub import HfApi
 token = os.environ.get("HF_TOKEN", "")
 repo = "hoduyquocbao/xiangqi-r1-dataset"
 
-def build_readme():
-    return """---
+def build_readme(total_samples=0):
+    return f"""---
 license: mit
 task_categories:
 - reinforcement-learning
@@ -32,12 +32,14 @@ tags:
 - chess
 - reasoning
 size_categories:
-- 10K<n<100K
+- 100K<n<1M
 ---
 
 # 🤖 Xiangqi-R1 GRPO Self-Play Reasoning Dataset
 
 Dữ liệu huấn luyện cờ tướng tư duy sâu (Xiangqi Deep Reasoning Dataset) được sinh ra từ **Native Rust Engine (XiangRust)** phục vụ huấn luyện mô hình **Xiangqi-R1 (Qwen 0.5B / 7B)** bằng thuật toán **GRPO (Group Relative Policy Optimization)**.
+
+- **Tổng số mẫu cờ tư duy sâu hiện tại**: {total_samples:,} mẫu.
 
 ## 📊 Cấu Trúc Dữ Liệu (Data Schema)
 
@@ -69,48 +71,68 @@ def run_rust_miner():
         print(f"❌ Lỗi chạy Rust Engine: {err}")
         return False
 
-def push_latest_mined_files():
-    files = sorted(glob.glob("data/real_mined_*.json"), key=os.path.getmtime, reverse=True)
+def push_all_mined_files():
+    files = sorted(glob.glob("data/real_mined_*.json"))
     if not files:
         print("⚠️ Không tìm thấy tệp real_mined_*.json nào trong data/")
         return False
 
-    latest_file = files[0]
-    print(f"📄 Đã đọc tệp dữ liệu cờ thật: {latest_file}")
-    with open(latest_file, "r", encoding="utf-8") as f:
-        samples = json.load(f)
+    all_samples = []
+    seen_prompts = set()
 
-    jsonl_lines = [json.dumps(s, ensure_ascii=False) for s in samples]
+    for file_path in files:
+        try:
+            with open(file_path, "r", encoding="utf-8") as f:
+                batch = json.load(f)
+                for item in batch:
+                    key = (item.get("prompt"), item.get("move"))
+                    if key not in seen_prompts:
+                        seen_prompts.add(key)
+                        all_samples.append(item)
+        except Exception as e:
+            print(f"⚠️ Lỗi đọc tệp {file_path}: {e}")
+
+    print(f"📊 Tổng hợp thành công {len(all_samples):,} mẫu cờ độc bản từ {len(files)} tệp mined!")
+
+    jsonl_lines = [json.dumps(s, ensure_ascii=False) for s in all_samples]
     with open("data/train.jsonl", "w", encoding="utf-8") as f:
         f.write("\n".join(jsonl_lines))
 
     with open("data/train.json", "w", encoding="utf-8") as f:
-        json.dump(samples, f, ensure_ascii=False, indent=2)
+        json.dump(all_samples, f, ensure_ascii=False, indent=2)
 
     with open("data/README.md", "w", encoding="utf-8") as f:
-        f.write(build_readme())
+        f.write(build_readme(total_samples=len(all_samples)))
+
+    if not token:
+        print("⚠️ Thiếu HF_TOKEN. Bỏ qua bước đẩy Hugging Face Hub.")
+        return True
 
     api = HfApi(token=token)
+    print(f"📤 Đang đẩy dataset {len(all_samples):,} mẫu cờ lên HuggingFace Hub ({repo})...")
     api.upload_file(path_or_fileobj="data/train.jsonl", path_in_repo="train.jsonl", repo_id=repo, repo_type="dataset")
     api.upload_file(path_or_fileobj="data/train.json", path_in_repo="train.json", repo_id=repo, repo_type="dataset")
     api.upload_file(path_or_fileobj="data/README.md", path_in_repo="README.md", repo_id=repo, repo_type="dataset")
 
     verified_files = api.list_repo_files(repo_id=repo, repo_type="dataset")
-    print(f"✅ ĐÃ ĐẨY THÀNH CÔNG DỮ LIỆU CỜ THỰC TẾ LÊN HUGGINGFACE HUB!")
+    print(f"============================================================")
+    print(f"✅ ĐÃ ĐẨY THÀNH CÔNG {len(all_samples):,} MẪU CỜ LÊN HUGGINGFACE HUB!")
     print(f"🔗 URL: https://huggingface.co/datasets/{repo}")
     print(f"📂 Tree: https://huggingface.co/datasets/{repo}/tree/main")
     print("Các tệp trên Hub:", verified_files)
+    print(f"============================================================")
     return True
 
-def mine(limit=1):
+def mine(limit=10):
     print("============================================================")
-    print(" BẮT ĐẦU KHAI THÁC DỮ LIỆU THỰC TẾ TỪ RUST ENGINE VA ĐẨY HUB ")
+    print(" BẮT ĐẦU KHAI THÁC DỮ LIỆU QUY MÔ LỚN TỪ RUST ENGINE & ĐẨY HUB ")
     print("============================================================")
     for loop in range(1, limit + 1):
         print(f"\n🔄 Đợt khai thác #{loop}/{limit}...")
         if run_rust_miner():
-            push_latest_mined_files()
+            push_all_mined_files()
         time.sleep(1)
 
 if __name__ == "__main__":
-    mine(limit=1)
+    count = int(os.environ.get("MINING_LOOPS", "10"))
+    mine(limit=count)
