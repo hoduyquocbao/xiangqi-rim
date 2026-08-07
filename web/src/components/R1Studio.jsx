@@ -31,7 +31,7 @@ export function R1Studio({ show, close }) {
                 XIANGQI-R1 LLM DISTRIBUTED TRAINER (GRPO)
               </h2>
               <p className="text-xs text-gold/70">
-                Qwen2.5-7B-Instruct + Unsloth 4-bit LoRA + 3 Reward Functions & P2P Mesh
+                Qwen3.5-0.8B + Unsloth 4-bit LoRA + 3 Reward Functions & P2P Mesh
               </p>
             </div>
           </div>

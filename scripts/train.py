@@ -28,9 +28,9 @@ if variant == "7b":
     model_repo = "hoduyquocbao/xiangqi-r1"
     print("🚀 Đang khởi tạo biến thể Xiangqi-R1 7B Reasoner...")
 else:
-    base_name = "Qwen/Qwen2.5-0.5B-Instruct"
-    model_repo = "hoduyquocbao/xiangqi-r1-0.5b"
-    print("⚡ Đang khởi tạo biến thể Siêu nhẹ Siêu nhanh Xiangqi-R1 0.5B (< 3GB VRAM)...")
+    base_name = "Qwen/Qwen3.5-0.8B"
+    model_repo = "hoduyquocbao/xiangqi-r1-0.8b"
+    print("⚡ Đang khởi tạo mô hình hiện đại Xiangqi-R1 Qwen 3.5 0.8B (< 2GB VRAM)...")
 
 login(token=token)
 

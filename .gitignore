@@ -18,6 +18,7 @@ outputs/
 .env.*
 *.pem
 *.key
+example-xiangqi_gradio_mcp_backend.ipynb
 
 # Internal Development Requests & Diagnostic Reports
 ORIGINAL_REQUEST.md
