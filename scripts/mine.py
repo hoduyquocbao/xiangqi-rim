@@ -41,11 +41,15 @@ Dữ liệu huấn luyện cờ tướng tư duy sâu (Xiangqi Deep Reasoning Da
 
 - **Tổng số mẫu cờ tư duy sâu hiện tại**: {total_samples:,} mẫu.
 
-## 📊 Cấu Trúc Dữ Liệu (Data Schema)
+## 📊 Cấu Trúc Dữ Liệu Đa Chiều (Multi-Modal Data Schema)
 
-Mỗi mẫu dữ liệu chứa:
-- **`prompt`**: Trạng thái bàn cờ 2D 9x10 dạng ma trận FEN kèm yêu cầu suy nghĩ trong thẻ `<thought>`.
-- **`completion`**: Chuỗi suy luận sâu 4 bước chuẩn DeepSeek-R1 kèm nước đi UCI cuối cùng.
+Mỗi mẫu dữ liệu chứa biểu diễn 3 chiều đầy đủ:
+1. **`Ma Trận Bàn Cờ 2D (9x10)`**: Biểu diễn văn bản trực quan 9x10 các quân cờ Đỏ (In hoa) & Đen (In thường).
+2. **`Chuỗi Chuẩn FEN (Forsyth-Edwards Notation)`**: Định dạng FEN chuẩn của động cơ cờ quốc tế.
+3. **`Lịch Sử Nước Đi PGN (Move History)`**: Chuỗi các nước đi lịch sử từ đầu ván đấu.
+
+- **`prompt`**: Trạng thái bàn cờ đa chiều (Ma trận 2D + FEN + PGN) kèm yêu cầu suy nghĩ trong thẻ `<thought>`.
+- **`completion`**: Chuỗi suy luận sâu 4 bước chuẩn DeepSeek-R1 (Phân tích FEN, PGN, Tướng & Chiến thuật) kèm nước đi UCI cuối cùng.
 - **`move`**: Nước đi đại số UCI 4 ký tự (ví dụ: `b2e2`, `h9g7`).
 - **`stamp`**: Dấu thời gian Unix timestamp.
 

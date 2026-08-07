@@ -31,10 +31,18 @@ fn main() {
         let game = Runner::play(&config);
         let mut pos = Parser::parse(Parser::DEFAULT);
 
+        let mut move_history = Vec::new();
+
         for (index, mv) in game.moves.iter().enumerate() {
             let fen = xiangrust::selfplay::Fen::export(&pos);
             let turn = if index % 2 == 0 { "Đỏ" } else { "Đen" };
             let move_str = xiangrust::uci::Format::encode(*mv);
+
+            let pgn_str = if move_history.is_empty() {
+                "Ván cờ mới bắt đầu (Chưa có nước đi)".to_string()
+            } else {
+                move_history.join(" ")
+            };
 
             let rows: Vec<&str> = fen.split_whitespace().next().unwrap_or("").split('/').collect();
             let mut matrix_rows = Vec::new();
@@ -61,13 +69,13 @@ fn main() {
             let matrix_str = matrix_rows.join("\n");
 
             let prompt = format!(
-                "Trạng thái bàn cờ tướng hiện tại dưới dạng ma trận 2D 9x10:\n{}\nĐến lượt {} đi. Hãy suy nghĩ sâu sắc trong thẻ <thought> và đưa ra nước đi UCI hợp lệ:",
-                matrix_str, turn
+                "Trạng thái bàn cờ tướng hiện tại (Biểu diễn đa chiều: Ma trận 2D, Chuỗi FEN chuẩn, và Lịch sử nước đi PGN):\n\n1. Ma Trận Bàn Cờ 2D (9x10):\n{}\n\n2. Chuỗi Chuẩn FEN (Forsyth-Edwards Notation):\n{}\n\n3. Lịch Sử Nước Đi PGN (Move History):\n{}\n\nĐến lượt {} đi. Hãy suy nghĩ sâu sắc trong thẻ <thought> và đưa ra nước đi UCI hợp lệ:",
+                matrix_str, fen, pgn_str, turn
             );
 
             let thought = format!(
-                "<thought>\n1. Phân Tích Tương Quan Lực Lượng Vật Lý:\n   - Bên Đỏ còn {} quân cờ trên bàn (Ký tự in hoa: {:?}).\n   - Bên Đen còn {} quân cờ trên bàn (Ký tự in thường: {:?}).\n2. Đánh Giá Độ An Toàn Tướng & Kiểm Soát Cột Trung Tâm:\n   - Kiểm tra hệ thống Sĩ Tượng che chắn Cung Tướng bên {}.\n   - Đánh giá khả năng khống chế Lộ 5 (Trung lộ) và các lộ giao thông chính (Lộ 2, 4, 6, 8).\n3. So Sánh & Phân Tích Các Phương Án Nước Đi Ứng Viên:\n   - Phương án A (Đề xuất tối ưu): Trực tiếp thực thi nước đi '{}' nhằm chiếm lĩnh vị trí chiến lược, tăng cơ động hoặc đe dọa quân đối phương.\n   - Phương án B (Thủ củng cố): Nước đi phòng thủ bảo vệ các quân cờ đang gặp nguy hiểm.\n   - Phương án C (Khai thông cánh): Nước đi di chuyển cờ sang cánh đối diện tạo thế gọng kìm.\n4. Quyết Định Chiến Thuật Cuối Cùng:\n   - Nước đi '{}' mang lại giá trị centipawn vượt trội, đảm bảo an toàn và phát triển thế công bền vững.\n</thought>\n{}",
-                red_pieces.len(), red_pieces, black_pieces.len(), black_pieces, turn, move_str, move_str, move_str
+                "<thought>\n1. Phân Tích Tương Quan Lực Lượng Vật Lý & FEN:\n   - Chuỗi FEN: {}\n   - Bên Đỏ còn {} quân cờ trên bàn (Ký tự in hoa: {:?}).\n   - Bên Đen còn {} quân cờ trên bàn (Ký tự in thường: {:?}).\n2. Đánh Giá Độ An Toàn Tướng, Lịch Sử PGN & Trung Lộ:\n   - Lịch sử nước đi PGN: {}\n   - Kiểm tra hệ thống Sĩ Tượng che chắn Cung Tướng bên {}.\n   - Đánh giá khả năng khống chế Lộ 5 (Trung lộ) và các lộ giao thông chính (Lộ 2, 4, 6, 8).\n3. So Sánh & Phân Tích Các Phương Án Nước Đi Ứng Viên:\n   - Phương án A (Đề xuất tối ưu): Trực tiếp thực thi nước đi '{}' nhằm chiếm lĩnh vị trí chiến lược, tăng cơ động hoặc đe dọa quân đối phương.\n   - Phương án B (Thủ củng cố): Nước đi phòng thủ bảo vệ các quân cờ đang gặp nguy hiểm.\n   - Phương án C (Khai thông cánh): Nước đi di chuyển cờ sang cánh đối diện tạo thế gọng kìm.\n4. Quyết Định Chiến Thuật Cuối Cùng:\n   - Nước đi '{}' mang lại giá trị centipawn vượt trội, đảm bảo an toàn và phát triển thế công bền vững.\n</thought>\n{}",
+                fen, red_pieces.len(), red_pieces, black_pieces.len(), black_pieces, pgn_str, turn, move_str, move_str, move_str
             );
 
             let stamp = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs();
@@ -78,6 +86,7 @@ fn main() {
             );
 
             samples.push(json_sample);
+            move_history.push(move_str.clone());
             pos.apply(mv.from, mv.to);
         }
 
