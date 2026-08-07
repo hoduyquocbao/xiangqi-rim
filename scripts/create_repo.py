@@ -75,26 +75,29 @@ if __name__ == "__main__":
     # 1. Tạo Dataset Repository: hoduyquocbao/xiangqi-r1-dataset
     create("xiangqi-r1-dataset", "dataset")
 
-    # 2. Tạo Model Repository 0.5B: hoduyquocbao/xiangqi-r1-0.5b (Siêu nhẹ, siêu nhanh)
-    if create("xiangqi-r1-0.5b", "model"):
-        model_05b_readme = """---
+    # 2. Tạo Model Repository 0.8B: hoduyquocbao/xiangqi-r1-0.8b (Qwen 3.5 0.8B hiện đại)
+    if create("xiangqi-r1-0.8b", "model"):
+        model_08b_readme = """---
 license: mit
 pipeline_tag: text-generation
 tags:
 - xiangqi
 - r1
 - grpo
-- qwen2.5-0.5b
+- qwen3.5-0.8b
 - unsloth
 library_name: transformers
 ---
 
-# Xiangqi-R1 0.5B: Ultra-Fast Ultra-Lightweight Reasoner LLM for Chinese Chess
+# Xiangqi-R1 0.8B: Qwen 3.5 0.8B Deep Reasoning Model for Chinese Chess
 
-Mô hình AI Cờ Tướng siêu nhẹ 0.5B được huấn luyện bằng thuật toán GRPO dựa trên Qwen2.5-0.5B-Instruct.
-Yêu cầu VRAM < 1.5GB, phản hồi cực nhanh (< 50ms/token), thích hợp chạy suy luận trực tiếp trên trình duyệt WebGPU/WASM hoặc GPU phổ thông.
+Mô hình AI Cờ Tướng hiện đại 0.8B được huấn luyện từ Qwen 3.5 0.8B bằng thuật toán GRPO với tập dữ liệu tự đấu đa chiều 3-in-1 (Ma trận 2D + Chuỗi FEN + Lịch sử PGN).
+Yêu cầu VRAM < 1.8GB, thời gian phản hồi cực nhanh (< 1s), đáp ứng tốt cả thiết bị di động và GPU phổ thông.
 """
-        commit("hoduyquocbao/xiangqi-r1-0.5b", "model", "README.md", model_05b_readme, "Initial 0.5B model README documentation")
+        commit("hoduyquocbao/xiangqi-r1-0.8b", "model", "README.md", model_08b_readme, "Initial 0.8B model README documentation")
 
-    # 3. Tạo Model Repository 7B: hoduyquocbao/xiangqi-r1
+    # 3. Tạo Model Repository 0.5B: hoduyquocbao/xiangqi-r1-0.5b
+    create("xiangqi-r1-0.5b", "model")
+
+    # 4. Tạo Model Repository 7B: hoduyquocbao/xiangqi-r1
     create("xiangqi-r1", "model")
