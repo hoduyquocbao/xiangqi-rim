@@ -1,10 +1,11 @@
 // ============================================================================
-// VÍ DỤ 17: KHAI THÁC DỮ LIỆU HUẤN LUYỆN TỰ ĐẤU QUY MÔ LỚN (HIGH-CAPACITY R1 REASONING MINER)
+// VÍ DỤ 17: KHAI THÁC DỮ LIỆU HUẤN LUYỆN TỰ ĐẤU QUY MÔ HÀNG TRIỆU MẪU (MASSIVE R1 REASONING MINER)
 // ============================================================================
 // Định danh đơn từ tiếng Anh: board, parser, fen, search, limits, result,
 // record, samples, path, file, write, content, main, game, runner, config, matches
 // ============================================================================
 
+use std::env;
 use std::fs::File;
 use std::io::Write;
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -13,17 +14,21 @@ use xiangrust::selfplay::{Config, Runner};
 
 fn main() {
     println!("============================================================");
-    println!(" XIANGRUST R1 DEEP REASONING HIGH-CAPACITY ENGINE MINER     ");
+    println!(" XIANGRUST R1 DEEP REASONING MASSIVE CAPACITY ENGINE MINER  ");
     println!("============================================================");
 
-    let match_count = 50;
-    let config = Config::new(4, 300, 30);
+    let match_count: usize = env::var("MATCH_COUNT")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(1000);
+
+    let config = Config::new(4, 200, 30);
     println!("[1] Đang khởi tạo chuỗi {} ván tự đấu Rust Engine liên tục...", match_count);
 
     let mut samples = Vec::new();
+
     for match_idx in 1..=match_count {
         let game = Runner::play(&config);
-
         let mut pos = Parser::parse(Parser::DEFAULT);
 
         for (index, mv) in game.moves.iter().enumerate() {
@@ -76,7 +81,7 @@ fn main() {
             pos.apply(mv.from, mv.to);
         }
 
-        if match_idx % 10 == 0 || match_idx == match_count {
+        if match_idx % 100 == 0 || match_idx == match_count {
             println!(" -> Tiến độ: Hoàn thành {}/{} ván cờ (Tích lũy {} mẫu)...", match_idx, match_count, samples.len());
         }
     }
@@ -90,7 +95,7 @@ fn main() {
     file.write_all(json_array.as_bytes()).expect("Ghi file thất bại");
 
     println!("============================================================");
-    println!("✅ KHAI THÁC QUY MÔ LỚN THÀNH CÔNG {} MẪU CỜ R1 CHẤT LƯỢNG CAO!", samples.len());
+    println!("✅ KHAI THÁC QUY MÔ HÀNG TRIỆU MẪU THÀNH CÔNG {} MẪU CỜ R1 CHẤT LƯỢNG CAO!", samples.len());
     println!("💾 Đã lưu tệp dữ liệu tại: {}", file_path);
     println!("============================================================");
 }
