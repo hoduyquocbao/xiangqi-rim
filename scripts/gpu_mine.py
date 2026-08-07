@@ -34,11 +34,21 @@ print("============================================================")
 INITIAL_FEN = "rnbakabnr/9/1c5c1/p1p1p1p1p/9/9/P1P1P1P1P/1C5C1/9/RNBAKABNR w - - 0 1"
 
 COMMON_OPENINGS = [
-    ["b2e2", "h9g7", "h2e2", "b8c6", "b0c2", "i9h9"],
-    ["b2e2", "h8e8", "h2g4", "b9c7", "i0i1", "i9i8"],
-    ["h2e2", "b8c6", "b2e2", "h8e8", "b0c2", "i9h9"],
-    ["c3c4", "c7c6", "b2e2", "h9g7", "h2g4", "b8c6"],
-    ["g3g4", "g7g6", "b2e2", "h9g7", "h2g4", "b8c6"],
+    ["b2e2", "h9g7", "h2e2", "b8c6", "b0c2", "i9h9"],  # Thuận Pháo Cổ Điển
+    ["b2e2", "h8e8", "h2g4", "b9c7", "i0i1", "i9i8"],  # Nghịch Pháo Trung Lộ
+    ["h2e2", "b8c6", "b2e2", "h8e8", "b0c2", "i9h9"],  # Pháo Đầu Đào Ngũ
+    ["c3c4", "c7c6", "b2e2", "h9g7", "h2g4", "b8c6"],  # Binh Ba Cuộc
+    ["g3g4", "g7g6", "b2e2", "h9g7", "h2g4", "b8c6"],  # Tiên Nhân Chỉ Lộ
+    ["b0c2", "h9g7", "h2e2", "b8c6", "b2e2", "i9h9"],  # Khởi Mã Cuộc
+    ["e2e6", "e8e2", "h2g4", "b8c6", "b0c2", "i9h9"],  # Over-river Cannon Attack
+    ["b2b6", "h9g7", "h2e2", "b8c6", "b0c2", "i9h9"],  # Quá Cung Pháo
+    ["h2d2", "h9g7", "b2e2", "b8c6", "b0c2", "i9h9"],  # Sĩ Giác Pháo
+    ["g0e2", "h9g7", "b2e2", "b8c6", "h2g4", "i9h9"],  # Phi Tượng Cuộc
+    ["b2e2", "b8c6", "h2g4", "i9h9", "i0i1", "h9g7"],  # Thuận Pháo Khởi Mã
+    ["h2e2", "h9g7", "b2g2", "b8c6", "b0c2", "i9h9"],  # Ngũ Lục Pháo
+    ["b2e2", "h9g7", "h2g4", "r8i8", "b0c2", "b8c6"],  # Đơn Đề Mã
+    ["c3c4", "h9g7", "b2e2", "b8c6", "h2g4", "i9h9"],  # Binh Ba Chuyển Pháo Đầu
+    ["g3g4", "h9g7", "b2e2", "b8c6", "h2g4", "i9h9"],  # Tiên Nhân Chuyển Pháo Đầu
 ]
 
 def fen_to_matrix(fen):

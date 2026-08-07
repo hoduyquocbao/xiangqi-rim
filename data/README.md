@@ -21,7 +21,7 @@ size_categories:
 
 Dữ liệu huấn luyện cờ tướng đa chiều 3-in-1 được sinh hoàn toàn bằng **GPU (CUDA Accelerated)** phục vụ huấn luyện mô hình **Xiangqi-R1 (Qwen 3.5 0.8B)** bằng thuật toán **GRPO (Group Relative Policy Optimization)**.
 
-- **Tổng số mẫu cờ tư duy sâu hiện tại**: 3,000 mẫu.
+- **Tổng số mẫu cờ tư duy sâu hiện tại**: 6,000 mẫu.
 
 ## 📊 Cấu Trúc Dữ Liệu Đa Chiều (Multi-Modal Data Schema)
 
