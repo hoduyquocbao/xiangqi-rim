@@ -78,6 +78,14 @@ impl Eval {
         }
     }
 
+    /// Nạp trọng số NNUE từ tệp nhị phân format XRNN.
+    /// Tự động chuyển sang chế độ Auto (NNUE ưu tiên, HCE dự phòng).
+    pub fn load(&mut self, path: &str) -> Result<(), String> {
+        self.nnue.load(path)?;
+        self.mode = Mode::Auto;
+        Ok(())
+    }
+
     /// Đặt chế độ đánh giá cho Engine.
     #[inline(always)]
     pub fn mode(&mut self, mode: Mode) {

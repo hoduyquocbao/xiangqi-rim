@@ -345,7 +345,7 @@ impl Nnue {
         let mut layer = [0i8; 32];
         Self::clip32(&hidden, &mut layer);
 
-        self.output.evaluate(&layer)
+        self.output.evaluate(&layer) * 4
     }
 
     /// SIMD vectorize ClipReLU cho hidden layer 32 phần tử i32 → i8 kẹp [0, 127].
@@ -426,6 +426,100 @@ impl Nnue {
             };
             i += 1;
         }
+    }
+    /// Nạp trọng số NNUE từ tệp nhị phân format XRNN (output của `learn::nnue::Network::quantize()`).
+    /// Binary layout:
+    ///   Magic "XRNN" (4B) + Version u32 LE (4B)
+    ///   FT Bias:     256 × i16    =     512 bytes
+    ///   FT Weights:  65536×256 × i16 = 33,554,432 bytes
+    ///   Hidden:      32×512 × i8  =     16,384 bytes
+    ///   Hidden Bias: 32 × i32     =       128 bytes
+    ///   Output:      32 × i8      =        32 bytes
+    ///   Output Bias: i32          =         4 bytes
+    ///   Output Scale: i32         =         4 bytes
+    pub fn load(&mut self, path: &str) -> Result<(), String> {
+        use std::io::Read;
+
+        let handle = std::fs::File::open(path)
+            .map_err(|e| format!("Không thể mở tệp NNUE: {}", e))?;
+        let mut file = std::io::BufReader::with_capacity(33 * 1024 * 1024, handle);
+
+        // Đọc và xác minh magic header
+        let mut magic = [0u8; 4];
+        file.read_exact(&mut magic)
+            .map_err(|e| format!("Lỗi đọc magic: {}", e))?;
+        if &magic != b"XRNN" {
+            return Err(format!("Magic header không hợp lệ: {:?} (kỳ vọng XRNN)", magic));
+        }
+
+        // Đọc version
+        let mut version = [0u8; 4];
+        file.read_exact(&mut version)
+            .map_err(|e| format!("Lỗi đọc version: {}", e))?;
+        let ver = u32::from_le_bytes(version);
+        if ver != 1 {
+            return Err(format!("Version không hỗ trợ: {} (kỳ vọng 1)", ver));
+        }
+
+        // Đọc Feature Transformer bias: 256 × i16
+        let mut buf2 = [0u8; 2];
+        for j in 0..HALF {
+            file.read_exact(&mut buf2)
+                .map_err(|e| format!("Lỗi đọc FT bias[{}]: {}", j, e))?;
+            self.weight.bias[j] = i16::from_le_bytes(buf2);
+        }
+
+        // Đọc Feature Transformer weights: 65536 × 256 × i16 (~32MB)
+        let total = super::weight::TOTAL;
+        let mut matrix: Vec<[i16; HALF]> = Vec::with_capacity(total);
+        for i in 0..total {
+            let mut row = [0i16; HALF];
+            for j in 0..HALF {
+                file.read_exact(&mut buf2)
+                    .map_err(|e| format!("Lỗi đọc FT weight[{}][{}]: {}", i, j, e))?;
+                row[j] = i16::from_le_bytes(buf2);
+            }
+            matrix.push(row);
+        }
+        self.weight.matrix = Some(Box::new(matrix));
+
+        // Đọc Hidden Layer weights: 32 × 512 × i8
+        let mut buf1 = [0u8; 1];
+        for i in 0..32 {
+            for j in 0..BOTH {
+                file.read_exact(&mut buf1)
+                    .map_err(|e| format!("Lỗi đọc hidden[{}][{}]: {}", i, j, e))?;
+                self.affine.weight[i][j] = buf1[0] as i8;
+            }
+        }
+
+        // Đọc Hidden Layer bias: 32 × i32
+        let mut buf4 = [0u8; 4];
+        for i in 0..32 {
+            file.read_exact(&mut buf4)
+                .map_err(|e| format!("Lỗi đọc hidden bias[{}]: {}", i, e))?;
+            self.affine.bias[i] = i32::from_le_bytes(buf4);
+        }
+
+        // Đọc Output Layer weights: 32 × i8
+        for i in 0..32 {
+            file.read_exact(&mut buf1)
+                .map_err(|e| format!("Lỗi đọc output weight[{}]: {}", i, e))?;
+            self.output.weight[i] = buf1[0] as i8;
+        }
+
+        // Đọc Output Layer bias: i32
+        file.read_exact(&mut buf4)
+            .map_err(|e| format!("Lỗi đọc output bias: {}", e))?;
+        self.output.bias = i32::from_le_bytes(buf4);
+
+        // Đọc Output Scale: i32
+        file.read_exact(&mut buf4)
+            .map_err(|e| format!("Lỗi đọc output scale: {}", e))?;
+        self.output.scale = i32::from_le_bytes(buf4);
+
+        self.loaded = true;
+        Ok(())
     }
 }
 

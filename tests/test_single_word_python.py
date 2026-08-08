@@ -18,7 +18,8 @@ class TestSingleWordPython(unittest.TestCase):
             "scripts/hub.py",
             "scripts/deploy_dataset.py",
             "scripts/mine.py",
-            "scripts/train.py"
+            "scripts/train.py",
+            "scripts/llm_server.py"
         ]
         
         allowed_exceptions = {
@@ -27,7 +28,8 @@ class TestSingleWordPython(unittest.TestCase):
             "learning_rate", "output_dir", "repo_id", "repo_type", "force_download",
             "path_or_fileobj", "path_in_repo", "is_available", "cuda_is_available",
             "__name__", "__main__", "__file__", "__doc__", "__cause__",
-            "__init__", "__str__", "__repr__"
+            "__init__", "__str__", "__repr__",
+            "do_GET", "do_POST", "do_OPTIONS"
         }
 
         violations_found = {}

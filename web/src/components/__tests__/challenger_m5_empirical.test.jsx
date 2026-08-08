@@ -180,7 +180,9 @@ describe('Milestone 5 Challenger 2 Empirical Test Suite', () => {
       'keys', 'values', 'entries', 'Number', 'toFixed', 'String', 'Set',
       'add', 'delete', 'has', 'Promise', 'resolve', 'reject', 'console',
       'log', 'error', 'warn', 'info', 'window', 'document', 'self', 'fetch',
-      'set_position'
+      'set_position', 'matrix_analysis', 'risk_assessment', 'centipawn_eval',
+      'red_pieces_count', 'black_pieces_count', 'king_safety_score',
+      'center_file_control', 'RED_PHAO_DAU_INTENT', 'tactical_intent'
     ]);
 
     const nonSingleWordViolations = [];

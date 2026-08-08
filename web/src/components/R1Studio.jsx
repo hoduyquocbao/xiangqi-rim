@@ -133,10 +133,13 @@ export function R1Studio({ show, close }) {
               <p className="text-[11px] text-gold/80 font-mono">https://huggingface.co/datasets/hoduyquocbao/xiangqi-r1-dataset</p>
               <p className="text-[10px] text-gold/60">Máy yếu (512MB VRAM/CPU) đẩy dữ liệu cờ tự đấu về đây.</p>
             </div>
-            <div className="bg-amber-950/30 border border-amber-500/30 p-3 rounded-lg space-y-1">
-              <span className="font-bold text-amber-400">0.5B MODEL (SIÊU NHẸ / &lt; 1.5GB VRAM):</span>
-              <p className="text-[11px] text-gold/80 font-mono">https://huggingface.co/hoduyquocbao/xiangqi-r1-0.5b</p>
-              <p className="text-[10px] text-gold/60">Qwen2.5-0.5B siêu nhanh (&lt;50ms), chạy vừa trên trình duyệt WebGPU/GPU yếu.</p>
+            <div className="bg-amber-950/40 border border-amber-500/50 p-3 rounded-lg space-y-1">
+              <div className="flex items-center justify-between">
+                <span className="font-bold text-amber-400">0.5B MODEL (BATCH 3 — 300 STEPS GRPO):</span>
+                <span className="text-[9px] px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300 font-bold border border-emerald-500/40">● HF HUB LIVE</span>
+              </div>
+              <p className="text-[11px] text-gold/90 font-mono font-bold">https://huggingface.co/hoduyquocbao/xiangqi-r1-0.5b</p>
+              <p className="text-[10px] text-gold/70">Qwen2.5-0.5B (300 Steps GRPO 16-Bit Merged Weights) siêu nhanh (&lt;50ms), sinh nước đi UCI &lt;thought&gt; chuẩn xác.</p>
             </div>
             <div className="bg-purple-950/30 border border-purple-500/30 p-3 rounded-lg space-y-1">
               <span className="font-bold text-purple-400">7B MODEL (REASONER / &lt; 14GB VRAM):</span>

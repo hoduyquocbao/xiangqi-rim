@@ -28,7 +28,7 @@ export function parse(text) {
   }
 
   // Làm sạch phần thân ghi nước đi và tách thành các từ đơn/nước đi
-  const clean = body.replace(/\{[^}]*\}/g, '').replace(/(?:^|\s)\d+\.\s*/g, ' ').trim();
+  const clean = body.replace(/\{[^}]*\}/g, '').replace(/(?:^|\s)\d+\.+\s*/g, ' ').trim();
   const parts = clean.split(/\s+/);
 
   for (let i = 0; i < parts.length; i++) {

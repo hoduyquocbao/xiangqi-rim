@@ -35,11 +35,15 @@ pub mod gym;
 /// Module `audit`: Phân hệ chẩn đoán rủi ro, mặt tối và ngây thơ tiềm ẩn
 pub mod audit;
 
+/// Module `nnue`: Huấn luyện mạng nơ-ron NNUE từ dữ liệu tự đấu (NNUE Training Engine)
+pub mod nnue;
+
 // Re-export các cấu trúc dữ liệu cốt lõi để các module bên ngoài và ví dụ dễ dàng truy cập
 pub use adapt::Adapt;
 pub use audit::{Audit, Report as AuditReport};
 pub use blunder::{Blunder, Fault};
 pub use gym::{Gym, Match, Status};
+pub use nnue::{Datum, Forward, Network};
 pub use replay::{Replay, Sample};
 pub use store::{Header, Record, Store};
 pub use trace::{Entry, Trace};

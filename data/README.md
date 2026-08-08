@@ -1,36 +1,58 @@
 ---
 license: mit
-task_categories:
-- reinforcement-learning
-- text-generation
 language:
 - vi
-- en
 tags:
 - xiangqi
-- r1
-- grpo
-- chess
+- chinese-chess
 - reasoning
-- gpu-generated
+- jrcp-2.0
 size_categories:
 - 100K<n<1M
 ---
 
-# 🤖 Xiangqi-R1 GPU Self-Play Multi-Modal Reasoning Dataset
+# Xiangqi-R1 JRCP 2.0 Training Dataset
 
-Dữ liệu huấn luyện cờ tướng đa chiều 3-in-1 được sinh hoàn toàn bằng **GPU (CUDA Accelerated)** phục vụ huấn luyện mô hình **Xiangqi-R1 (Qwen 3.5 0.8B)** bằng thuật toán **GRPO (Group Relative Policy Optimization)**.
+Bộ dữ liệu huấn luyện đẳng cấp cho mô hình LLM Xiangqi-R1 — AI Cờ Tướng suy luận 14 chiều kích.
 
-- **Tổng số mẫu cờ tư duy sâu hiện tại**: 6,000 mẫu.
+## Thống Kê
 
-## 📊 Cấu Trúc Dữ Liệu Đa Chiều (Multi-Modal Data Schema)
+| Chỉ số | Giá trị |
+|---|---|
+| Tổng mẫu | **29,774** |
+| Opening | 251 |
+| Midgame | 2,902 |
+| Endgame | 18,687 |
+| Win | 317 |
+| Loss | 304 |
+| Draw | 21,219 |
 
-Mỗi mẫu dữ liệu chứa đầy đủ 3 biểu diễn:
-1. **`Ma Trận Bàn Cờ 2D (9x10)`**: Biểu diễn văn bản trực quan 9x10 các quân cờ Đỏ (In hoa) & Đen (In thường).
-2. **`Chuỗi Chuẩn FEN (Forsyth-Edwards Notation)`**: Định dạng FEN chuẩn của động cơ cờ quốc tế.
-3. **`Lịch Sử Nước Đi PGN (Move History)`**: Chuỗi các nước đi lịch sử từ đầu ván đấu.
+## Định Dạng
 
-- **`prompt`**: Trạng thái bàn cờ đa chiều (Ma trận 2D + FEN + PGN) kèm yêu cầu suy nghĩ trong thẻ `<thought>`.
-- **`completion`**: Chuỗi suy luận sâu 4 bước chuẩn DeepSeek-R1 (Phân tích FEN, PGN, Tướng & Chiến thuật) kèm nước đi UCI cuối cùng.
-- **`move`**: Nước đi đại số UCI 4 ký tự (ví dụ: `b2e2`, `h9g7`).
-- **`stamp`**: Dấu thời gian Unix timestamp.
+Mỗi mẫu là 1 dòng JSON (JSONL) theo chuẩn JRCP 2.0 Conversation:
+
+```json
+{
+  "messages": [
+    {"role": "system", "content": "...JRCP 2.0 System Prompt..."},
+    {"role": "user", "content": "...Ma trận 2D + FEN + PGN..."},
+    {"role": "assistant", "content": "...JRCP 2.0 Structured Output JSON..."}
+  ],
+  "move": "b2e2",
+  "eval": 0,
+  "outcome": "draw",
+  "phase": "opening",
+  "depth": 4,
+  "nodes": 12345,
+  "stamp": 1786172603
+}
+```
+
+## Nguồn Gốc
+
+Dữ liệu được khai thác từ Native Rust Engine (xiangrust) depth=4 tự đấu,
+với phân tích 14 chiều kích JRCP 2.0 cho mỗi vị trí bàn cờ.
+
+## Giấy Phép
+
+MIT License — Tự do sử dụng cho nghiên cứu và thương mại.

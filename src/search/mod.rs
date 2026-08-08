@@ -95,6 +95,27 @@ impl Search {
         }
     }
 
+    /// Nạp trọng số NNUE từ tệp nhị phân XRNN.
+    pub fn load_nnue(&mut self, path: &str) -> std::result::Result<(), String> {
+        self.eval.load(path)
+    }
+
+    /// Tự động kiểm tra và nạp trọng số NNUE nếu có tệp nhị phân trong thư mục data/.
+    pub fn auto_load(&mut self) -> bool {
+        let candidates = [
+            "data/nnue_weights_gpu.bin",
+            "data/nnue_weights.bin",
+        ];
+        for path in &candidates {
+            if std::path::Path::new(path).exists() {
+                if self.eval.load(path).is_ok() {
+                    return true;
+                }
+            }
+        }
+        false
+    }
+
     /// Đặt lại toàn bộ dữ liệu bàn cờ, lịch sử, killer table và bảng băm.
     pub fn clear(&mut self) {
         self.pos.clear();

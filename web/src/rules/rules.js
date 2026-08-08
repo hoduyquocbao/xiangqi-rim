@@ -3,8 +3,10 @@
 
 // Giải mã chuỗi FEN thành mảng 90 ô cờ và lượt đi ('w' hoặc 'b')
 export function parse(fen) {
+  if (!fen || typeof fen !== 'string') return { board: new Array(90).fill('.'), turn: 'w' };
   const parts = fen.trim().split(' ');
   const rows = parts[0].split('/');
+  if (rows.length !== 10) return { board: new Array(90).fill('.'), turn: 'w' };
   const board = new Array(90).fill('.');
   
   for (let r = 0; r < 10; r++) {
@@ -338,6 +340,7 @@ export function uciToMove(uci) {
   const f2 = uci.charCodeAt(2) - 97;
   const r2 = parseInt(uci[3], 10);
   if (isNaN(f1) || isNaN(r1) || isNaN(f2) || isNaN(r2)) return null;
+  if (f1 < 0 || f1 > 8 || f2 < 0 || f2 > 8 || r1 < 0 || r1 > 9 || r2 < 0 || r2 > 9) return null;
   const from = r1 * 9 + f1;
   const to = r2 * 9 + f2;
   if (from < 0 || from >= 90 || to < 0 || to >= 90) return null;

@@ -48,7 +48,8 @@ export default function App() {
     hint: null,
     over: false,
     winner: null,
-    reason: null
+    reason: null,
+    thought: null
   });
 
   const parsed = parse(game.fen);
@@ -108,7 +109,8 @@ export default function App() {
               score,
               line: pvLine,
               hint: best,
-              status: 'ready'
+              status: 'ready',
+              thought: data.thought || prev.thought
             };
 
             // Nếu đang trong chế độ AI Bot và AI vừa tính toán nước đi tốt nhất cho lượt Đen
@@ -534,6 +536,19 @@ export default function App() {
 
           <button
             onClick={() => {
+              update((prev) => ({ ...prev, mode: 'llm' }));
+              engine.mode('llm');
+            }}
+            className={`px-3 py-2 rounded border text-xs font-semibold transition-all ${
+              game.mode === 'llm'
+                ? 'bg-amber-400 text-obsidian border-amber-400 shadow-glow font-bold animate-pulse'
+                : 'bg-amber-950/30 text-amber-300 border-amber-500/40 hover:border-amber-400'
+            }`}
+          >
+            🤖 R1 LLM 0.5B (Batch 3)
+          </button>
+          <button
+            onClick={() => {
               update((prev) => ({ ...prev, mode: 'wasm' }));
               engine.mode('wasm');
             }}
@@ -575,19 +590,24 @@ export default function App() {
       </header>
 
       {/* P2P Network Mesh & High-Capacity Storage Global Status Sub-Bar */}
-      <div className="bg-obsidian/90 border-b border-gold/20 px-6 py-1.5 flex items-center justify-between text-[11px] font-mono text-gold/80">
-        <div className="flex items-center gap-3">
+      <div className="bg-obsidian/90 border-b border-gold/20 px-6 py-1.5 flex items-center justify-between text-[11px] font-mono text-gold/80 flex-wrap gap-2">
+        <div className="flex items-center gap-3 flex-wrap">
+          <span className="flex items-center gap-1.5 text-amber-300 font-bold bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/30">
+            <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse"></span>
+            🤖 MODEL: hoduyquocbao/xiangqi-r1-0.5b (Batch 3 — 300 Steps GRPO Merged)
+          </span>
+          <span className="text-gold/40">|</span>
           <span className="flex items-center gap-1.5 text-emerald-400 font-bold">
             <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
-            P2P MESH TOPIC: sha256(mesh2026) [LIVE 24/7]
+            P2P MESH: sha256(mesh2026) [24/7]
           </span>
           <span className="text-gold/40">|</span>
           <span className="text-purple-300 font-bold">
-            💾 STORAGE: IndexedDB High-Capacity (Unlimited Persistence)
+            💾 STORAGE: IndexedDB High-Capacity
           </span>
         </div>
         <div className="flex items-center gap-2">
-          <span className="text-gold/60 uppercase">ACTIVE MODE:</span>
+          <span className="text-gold/60 uppercase">ACTIVE ENGINE:</span>
           <span className="px-2 py-0.5 rounded bg-gold/20 text-gold border border-gold/40 font-bold uppercase">
             {game.mode}
           </span>
@@ -662,8 +682,49 @@ export default function App() {
             <Board fen={game.fen} move={move} flip={game.flip} check={checked} rulers={game.rulers} />
           </section>
 
-          {/* Cột 3: PV Line Explorer & Move History */}
+          {/* Cột 3: R1 LLM Reasoning & PV Line Explorer & Move History */}
           <section className="lg:col-span-3 flex flex-col gap-4">
+            {/* R1 LLM Model Live Thought Chain */}
+            <div className="glass rounded-xl p-3 border border-amber-500/40 bg-amber-950/20 flex flex-col gap-2 shadow-glow">
+              <div className="flex items-center justify-between border-b border-amber-500/30 pb-1.5 flex-wrap gap-1">
+                <span className="text-xs font-bold text-amber-300 flex items-center gap-1.5">
+                  <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse"></span>
+                  🤖 R1 LLM BATCH 3 REASONING
+                </span>
+                <div className="flex items-center gap-1.5">
+                  <button
+                    onClick={() => {
+                      if (!game.thought) return;
+                      navigator.clipboard.writeText(game.thought);
+                      update((prev) => ({ ...prev, copied: true }));
+                      setTimeout(() => update((prev) => ({ ...prev, copied: false })), 2000);
+                    }}
+                    disabled={!game.thought}
+                    title="Copy R1 LLM Thought Content"
+                    className={`px-2 py-0.5 rounded text-[10px] font-mono font-bold transition-all flex items-center gap-1 border ${
+                      game.copied
+                        ? 'bg-emerald-500/30 text-emerald-300 border-emerald-500/50'
+                        : game.thought
+                        ? 'bg-amber-500/20 text-amber-300 border-amber-500/40 hover:bg-amber-500/40 shadow-glow'
+                        : 'bg-gray-800/40 text-gray-500 border-gray-700/40 cursor-not-allowed'
+                    }`}
+                  >
+                    <span>{game.copied ? '✓ COPIED!' : '📋 COPY CONTENT'}</span>
+                  </button>
+                  <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 font-bold border border-amber-500/40">
+                    {game.mode === 'llm' ? 'ACTIVE MODEL' : 'GRPO 0.5B'}
+                  </span>
+                </div>
+              </div>
+              <div className="max-h-40 overflow-y-auto text-[11px] text-amber-100/90 font-mono whitespace-pre-wrap leading-relaxed pr-1 bg-obsidian/60 p-2.5 rounded border border-amber-500/20">
+                {game.thought ? game.thought : (
+                  <span className="text-amber-400/60 italic">
+                    Chuyển sang chế độ "🤖 R1 LLM 0.5B (Batch 3)" ở trên header để đánh trực tiếp với mô hình AI và xem chuỗi suy luận &lt;thought&gt; thời gian thực...
+                  </span>
+                )}
+              </div>
+            </div>
+
             <Explorer line={game.line} pick={pick} active={game.active} />
 
             <div className="glass rounded-xl p-4 border border-gold/20 flex flex-col gap-3 shadow-glow">
