@@ -45,12 +45,17 @@ fn main() {
         .ok()
         .and_then(|v| v.parse().ok())
         .unwrap_or(4);
+    // Mặc định = số physical cores (logical / 2) cho compute-bound workload
+    // Trên i5-8259U: 8 logical → 4 physical — tránh HT contention
     let num_threads: usize = std::env::var("THREADS")
         .ok()
         .and_then(|v| v.parse().ok())
-        .unwrap_or_else(|| thread::available_parallelism().map(|n| n.get()).unwrap_or(8));
+        .unwrap_or_else(|| {
+            let logical = thread::available_parallelism().map(|n| n.get()).unwrap_or(4);
+            std::cmp::max(1, logical / 2)
+        });
 
-    let out_file = "data/selfplay_samples_gen5.jsonl";
+    let out_file = "data/selfplay_samples_gen6.jsonl";
     println!("Cấu hình Mining Đa Luồng:");
     println!("  • Tổng số ván cờ: {}", total_games);
     println!("  • Độ sâu Search: Depth {}", depth);
@@ -81,7 +86,9 @@ fn main() {
         let file_mutex = Arc::clone(&file_mutex);
 
         let handle = thread::spawn(move || {
-            let mut search = Search::new(8);
+            // TT Hash Table 4MB — fit gần L3 cache (6MB shared trên i5-8259U)
+            // NGHIÊM CẤM dùng >= 8MB cho mining workload (gây DRAM thrashing)
+            let mut search = Search::new(4);
             search.auto_load(); // Tự động nạp GPU NNUE weights nếu có
 
             let mut limits = Limits::new();
