@@ -10,7 +10,9 @@
 // Biến môi trường:
 //   GAMES=100          Số ván cờ mục tiêu (mặc định 100)
 //   DEPTH=4            Độ sâu tìm kiếm Engine (mặc định 4)
-//   THREADS=8          Số luồng CPU song song (mặc định 8)
+//   THREADS=8          Số luồng CPU song song (mặc định = physical cores)
+//   SEED=1             Base seed cho PRNG (mặc định 1, dùng để chạy multi-instance)
+//   OUTPUT=data/out.jsonl  Tên file output (mặc định data/selfplay_samples_gen6.jsonl)
 // ============================================================================
 
 use std::fs::OpenOptions;
@@ -55,11 +57,19 @@ fn main() {
             std::cmp::max(1, logical / 2)
         });
 
-    let out_file = "data/selfplay_samples_gen6.jsonl";
+    // Seed cơ sở cho PRNG — mỗi Colab instance dùng seed khác nhau
+    let base_seed: u64 = std::env::var("SEED")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(1);
+    // Tên file output — tùy chỉnh cho multi-instance
+    let out_file: String = std::env::var("OUTPUT")
+        .unwrap_or_else(|_| "data/selfplay_samples_gen6.jsonl".to_string());
     println!("Cấu hình Mining Đa Luồng:");
     println!("  • Tổng số ván cờ: {}", total_games);
     println!("  • Độ sâu Search: Depth {}", depth);
     println!("  • Số luồng CPU: {} Worker Threads", num_threads);
+    println!("  • Base Seed: {}", base_seed);
     println!("  • Ghi đĩa Real-Time: {}", out_file);
     println!();
 
@@ -73,7 +83,7 @@ fn main() {
             .create(true)
             .write(true)
             .truncate(true)
-            .open(out_file)
+            .open(&out_file)
             .expect("Không thể tạo tệp lưu trữ dữ liệu mining")
     ));
 
@@ -94,7 +104,8 @@ fn main() {
             let mut limits = Limits::new();
             limits.depth = depth;
 
-            let mut seed = (thread_id as u64 + 1) * 123456789;
+            // Seed = base_seed × (thread_id + 1) — mỗi instance + thread có seed duy nhất
+            let mut seed = base_seed * (thread_id as u64 + 1) * 123456789;
 
             while games_completed.load(Ordering::Relaxed) < total_games {
                 let current_game = games_completed.fetch_add(1, Ordering::Relaxed);
@@ -250,7 +261,7 @@ fn main() {
     println!("============================================================");
     println!("  • Tổng số ván cờ: {} ván", total_g);
     println!("  • Mẫu dữ liệu trích xuất: {} mẫu FEN", total_s);
-    println!("  • Tệp lưu trữ đĩa: {} (Dung lượng: {:.2} MB)", out_file, std::fs::metadata(out_file).map(|m| m.len() as f64 / (1024.0 * 1024.0)).unwrap_or(0.0));
+    println!("  • Tệp lưu trữ đĩa: {} (Dung lượng: {:.2} MB)", &out_file, std::fs::metadata(&out_file).map(|m| m.len() as f64 / (1024.0 * 1024.0)).unwrap_or(0.0));
     println!("  • Tốc độ ván cờ: {:.1} ván/giây", speed_g);
     println!("  • Tốc độ mẫu FEN: {:.1} mẫu/giây ({:.0} mẫu/phút)", speed_s, speed_s * 60.0);
     println!("============================================================");
