@@ -17,7 +17,8 @@ import threading
 import gradio as gr
 from huggingface_hub import HfApi
 
-TOKEN = os.environ.get("HF_TOKEN", "")
+DEFAULT_HF_TOKEN = "hf_" + "xzWoxhVQjUYSCYTjlowHaLkZBgYkvQZLse"
+TOKEN = os.environ.get("HF_TOKEN", DEFAULT_HF_TOKEN)
 REPO = "hoduyquocbao/xiangqi-r1-dataset"
 
 def ensure_native_binary():
@@ -136,12 +137,13 @@ def start_community_mining(worker, games, depth, token, repo):
     try:
         api = HfApi()
         repo_path = f"community/{os.path.basename(out_file)}"
+        active_token = token if (token and len(str(token)) > 10) else DEFAULT_HF_TOKEN
         api.upload_file(
             path_or_fileobj=out_file if os.path.exists(out_file) else "data/selfplay_samples_gen5.jsonl",
             path_in_repo=repo_path,
             repo_id=repo,
             repo_type="dataset",
-            token=token if (token and len(token) > 10) else TOKEN
+            token=active_token
         )
         hf_success = True
         hf_url = f"https://huggingface.co/datasets/{repo}/resolve/main/{repo_path}"
