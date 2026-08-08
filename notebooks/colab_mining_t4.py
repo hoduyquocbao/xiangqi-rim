@@ -105,29 +105,62 @@ subprocess.run(
 elapsed = time.time() - start
 print(f"\n✅ Build thành công trong {elapsed:.0f}s")
 
-# %% Cell 3: Tải NNUE Weights từ HuggingFace
+# %% Cell 3: Tải/Xác Minh NNUE Weights (Multi-Repo Fallback)
 print("=" * 60)
-print(" BƯỚC 3: TẢI NNUE WEIGHTS TỪ HUGGINGFACE")
+print(" BƯỚC 3: TẢI & XÁC MINH NNUE WEIGHTS")
 print("=" * 60)
 
-weights_path = "data/nnue_weights_gen5.bin"
-if not os.path.exists(weights_path):
-    print("  Weights không có local, tải từ HuggingFace...")
+candidates = [
+    "data/nnue_weights_gen5.bin",
+    "data/nnue_weights_gpu.bin",
+    "data/nnue_weights.bin"
+]
+
+weights_path = ""
+for c in candidates:
+    if os.path.exists(c) and os.path.getsize(c) > 30000000:
+        weights_path = c
+        break
+
+if not weights_path:
+    print("  Weights chưa có local, đang tải từ HuggingFace...")
     subprocess.run("pip install -q huggingface_hub", shell=True, check=True)
     from huggingface_hub import hf_hub_download
-    hf_hub_download(
-        repo_id="hoduyquocbao/xiangqi-nnue-dataset",
-        filename="weights/nnue_weights_gen5.bin",
-        local_dir=".",
-        repo_type="dataset"
-    )
-    os.makedirs("data", exist_ok=True)
-    if os.path.exists("weights/nnue_weights_gen5.bin"):
-        import shutil
-        shutil.copy2("weights/nnue_weights_gen5.bin", weights_path)
-    print(f"  ✅ Weights: {weights_path} ({os.path.getsize(weights_path):,} bytes)")
+
+    repos_to_try = [
+        "hoduyquocbao/xiangqi-nnue-dataset",
+        "hoduyquocbao/xiangqi-r1-dataset"
+    ]
+    download_success = False
+
+    for repo in repos_to_try:
+        try:
+            print(f"  Đang thử tải weights từ {repo}...")
+            downloaded = hf_hub_download(
+                repo_id=repo,
+                filename="weights/nnue_weights_gen5.bin",
+                local_dir=".",
+                repo_type="dataset"
+            )
+            os.makedirs("data", exist_ok=True)
+            target = "data/nnue_weights_gen5.bin"
+            import shutil
+            shutil.copy2(downloaded, target)
+            weights_path = target
+            download_success = True
+            print(f"  ✅ Tải thành công từ {repo}!")
+            break
+        except Exception as err:
+            print(f"  ⚠️ Thử tải từ {repo} không thành công: {err}")
+
+    if not download_success:
+        print("  ⚠️ Không thể tải weights từ Hub — Sử dụng NNUE fallback local...")
+        weights_path = "data/nnue_weights_gen5.bin"
+
+if os.path.exists(weights_path):
+    print(f"  ✅ NNUE Weights sẵn sàng: {weights_path} ({os.path.getsize(weights_path):,} bytes)")
 else:
-    print(f"  ✅ Weights sẵn có: {weights_path} ({os.path.getsize(weights_path):,} bytes)")
+    print(f"  ⚠️ Cảnh báo: Weights file {weights_path} chưa có sẵn.")
 
 # %% Cell 4: CẤU HÌNH MINING REAL-TIME FORM
 # @title ⚙️ CẤU HÌNH MINING REAL-TIME { display-mode: "form" }

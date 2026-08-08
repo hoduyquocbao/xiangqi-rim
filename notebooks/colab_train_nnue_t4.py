@@ -72,7 +72,7 @@ else:
 
 print("✅ Repository xiangqi-rim đã sẵn sàng!")
 
-# %% Cell 3: Tải & Tổng hợp Tập Dữ Liệu từ HuggingFace
+# %% Cell 3: Tải & Tổng hợp Tập Dữ Liệu từ HuggingFace (Multi-Repo)
 print("=" * 60)
 print(" BƯỚC 3: TẢI & TỔNG HỢP TẬP DỮ LIỆU TỪ HUGGINGFACE")
 print("=" * 60)
@@ -80,27 +80,32 @@ print("=" * 60)
 subprocess.run("pip install -q huggingface_hub", shell=True, check=True)
 from huggingface_hub import HfApi, hf_hub_download
 
-repo_id = "hoduyquocbao/xiangqi-nnue-dataset"
+repos_to_scan = [
+    "hoduyquocbao/xiangqi-nnue-dataset",
+    "hoduyquocbao/xiangqi-r1-dataset"
+]
 api = HfApi()
-
-print(f"🔍 Đang quét toàn bộ file dataset từ repo {repo_id}...")
-files = api.list_repo_files(repo_id=repo_id, repo_type="dataset")
-jsonl_files = [f for f in files if f.endswith(".jsonl")]
-print(f"  Phát hiện {len(jsonl_files)} file dữ liệu JSONL:")
-for f in jsonl_files:
-    print(f"   - {f}")
 
 os.makedirs("data/raw", exist_ok=True)
 local_files = []
-for f in jsonl_files:
-    print(f"📥 Đang tải {f}...")
+
+for repo_id in repos_to_scan:
     try:
-        path = hf_hub_download(repo_id=repo_id, filename=f, local_dir="data/raw", repo_type="dataset")
-        local_files.append(path)
-        size_mb = os.path.getsize(path) / (1024 * 1024)
-        print(f"  ✅ Đã tải {f} ({size_mb:.1f} MB)")
-    except Exception as e:
-        print(f"  ⚠️ Không thể tải {f}: {e}")
+        print(f"🔍 Đang quét file dataset từ repo {repo_id}...")
+        files = api.list_repo_files(repo_id=repo_id, repo_type="dataset")
+        jsonl_files = [f for f in files if f.endswith(".jsonl")]
+        print(f"  Phát hiện {len(jsonl_files)} file dữ liệu JSONL trong {repo_id}:")
+        for f in jsonl_files:
+            print(f"   - {f}")
+            try:
+                path = hf_hub_download(repo_id=repo_id, filename=f, local_dir="data/raw", repo_type="dataset")
+                local_files.append(path)
+                size_mb = os.path.getsize(path) / (1024 * 1024)
+                print(f"     ✅ Đã tải {f} ({size_mb:.1f} MB)")
+            except Exception as e:
+                print(f"     ⚠️ Không thể tải {f}: {e}")
+    except Exception as err:
+        print(f"  ⚠️ Lỗi khi quét repo {repo_id}: {err}")
 
 # % % Cell 4: CẤU HÌNH HUẤN LUYỆN REAL-TIME FORM
 # @title ⚙️ CẤU HÌNH HUẤN LUYỆN NNUE REAL-TIME { display-mode: "form" }
