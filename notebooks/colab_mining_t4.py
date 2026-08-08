@@ -470,8 +470,19 @@ print(f"✅ Uploaded: {destination} ({os.path.getsize(destination)/(1024*1024):.
 
 # %% Cell 9: UPLOAD TRỰC TIẾP LÊN HUGGINGFACE HUB
 # @title ☁️ UPLOAD TRỰC TIẾP LÊN HUGGINGFACE HUB { display-mode: "form" }
-hf_token = "" # @param {"type":"string"}
+variable_hf_token = "" # @param {"type":"string"}
 hf_repo = "hoduyquocbao/xiangqi-nnue-dataset" # @param {"type":"string"}
+
+# Tự động lấy HF_TOKEN từ Google Colab Secrets (userdata) nếu có
+hf_token = variable_hf_token
+try:
+    from google.colab import userdata
+    secret_tok = userdata.get('HF_TOKEN')
+    if secret_tok:
+        hf_token = secret_tok
+        print("🔑 Đã tự động nạp HF_TOKEN từ Colab Secrets (userdata)!")
+except Exception:
+    pass
 
 if hf_token and len(hf_token) > 10:
     from huggingface_hub import HfApi
