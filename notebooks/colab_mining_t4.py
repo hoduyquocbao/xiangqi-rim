@@ -129,16 +129,20 @@ if not os.path.exists(weights_path):
 else:
     print(f"  ✅ Weights sẵn có: {weights_path} ({os.path.getsize(weights_path):,} bytes)")
 
-# %% Cell 4: CẤU HÌNH MINING
-# ============================================================
-# ⚠️ SỬA CÁC GIÁ TRỊ SAU THEO TỪNG COLAB INSTANCE
-# ============================================================
+# %% Cell 4: CẤU HÌNH MINING REAL-TIME FORM
+# @title ⚙️ CẤU HÌNH MINING REAL-TIME { display-mode: "form" }
 
-GAMES = 25000       # Số ván cờ (25000 × 4 instances = 100000)
-SEED = 1            # Base seed (1, 2, 3, 4 cho mỗi instance)
-DEPTH_GEN = 2       # Depth cho Phase 1 (CPU gen positions — nhanh)
-GPU_BATCH = 65536   # [FIX #3] Tăng từ 8192 → 65536 (T4 16GB VRAM dư sức)
-OUTPUT = f"data/gen7_gpu_seed{SEED}.jsonl"
+variable_games = 25000 # @param {"type":"integer"}
+variable_seed = 1 # @param {"type":"slider","min":1,"max":10,"step":1}
+variable_depth = 2 # @param {"type":"slider","min":1,"max":12,"step":1}
+variable_gpu_batch = 65536 # @param {"type":"slider","min":8192,"max":131072,"step":8192}
+variable_name = "gen7_gpu" # @param {"type":"string"}
+
+GAMES = int(variable_games)
+SEED = int(variable_seed)
+DEPTH_GEN = int(variable_depth)
+GPU_BATCH = int(variable_gpu_batch)
+OUTPUT = f"data/{variable_name}_seed{SEED}.jsonl"
 
 print("=" * 60)
 print(" CẤU HÌNH T4 GPU MINING PIPELINE v2.0")
@@ -446,6 +450,9 @@ print(f"  GPU evaluated: {sum(1 for s in scored if s.get('gpu'))}")
 print(f"\n  Sample: {json.dumps(scored[0])}")
 
 # %% Cell 8: UPLOAD LÊN GOOGLE DRIVE
+# @title 📁 UPLOAD LÊN GOOGLE DRIVE { display-mode: "form" }
+drive_folder = "xiangqi-mining" # @param {"type":"string"}
+
 from google.colab import drive
 
 print("=" * 60)
@@ -453,7 +460,7 @@ print(" BƯỚC 8: UPLOAD LÊN GOOGLE DRIVE")
 print("=" * 60)
 
 drive.mount("/content/drive")
-target = "/content/drive/MyDrive/xiangqi-mining"
+target = f"/content/drive/MyDrive/{drive_folder}"
 os.makedirs(target, exist_ok=True)
 
 import shutil
@@ -461,17 +468,25 @@ destination = os.path.join(target, os.path.basename(OUTPUT))
 shutil.copy2(OUTPUT, destination)
 print(f"✅ Uploaded: {destination} ({os.path.getsize(destination)/(1024*1024):.1f} MB)")
 
-# %% Cell 9 (TÙY CHỌN): UPLOAD TRỰC TIẾP LÊN HUGGINGFACE
-# HF_TOKEN = "hf_YOUR_TOKEN_HERE"  # Thay bằng token thật từ huggingface.co/settings/tokens
-# REPO = "hoduyquocbao/xiangqi-r1-dataset"
-#
-# from huggingface_hub import HfApi
-# api = HfApi(token=HF_TOKEN)
-# api.upload_file(
-#     path_or_fileobj=OUTPUT,
-#     path_in_repo=os.path.basename(OUTPUT),
-#     repo_id=REPO,
-#     repo_type="dataset",
-#     commit_message=f"feat: T4 GPU mining SEED={SEED} GAMES={GAMES}"
-# )
-# print(f"✅ Uploaded to HuggingFace: {REPO}")
+# %% Cell 9: UPLOAD TRỰC TIẾP LÊN HUGGINGFACE HUB
+# @title ☁️ UPLOAD TRỰC TIẾP LÊN HUGGINGFACE HUB { display-mode: "form" }
+hf_token = "" # @param {"type":"string"}
+hf_repo = "hoduyquocbao/xiangqi-r1-dataset" # @param {"type":"string"}
+
+if hf_token and len(hf_token) > 10:
+    from huggingface_hub import HfApi
+    print("=" * 60)
+    print(" BƯỚC 9: UPLOAD LÊN HUGGINGFACE HUB")
+    print("=" * 60)
+    api = HfApi(token=hf_token)
+    repo_path = f"community/{os.path.basename(OUTPUT)}"
+    api.upload_file(
+        path_or_fileobj=OUTPUT,
+        path_in_repo=repo_path,
+        repo_id=hf_repo,
+        repo_type="dataset",
+        commit_message=f"feat: T4 GPU mining SEED={SEED} GAMES={GAMES}"
+    )
+    print(f"✅ Uploaded to HuggingFace: https://huggingface.co/datasets/{hf_repo}/blob/main/{repo_path}")
+else:
+    print("⚠️ Bỏ qua upload HuggingFace (chưa điền hf_token).")
