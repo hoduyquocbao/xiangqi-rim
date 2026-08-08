@@ -4,7 +4,7 @@
 # ============================================================================
 # Application Gradio phục vụ khai thác dữ liệu cờ Tướng tự đấu phân tán trên
 # HuggingFace Spaces (12 CPUs, 64GB RAM).
-# Tối ưu 64GB RAM: 36GB Shared Transposition Table + 2GB Sieve Bitset + 16GB RAM Buffer.
+# Tối ưu 64GB RAM: 6GB TT (512MB×12) + 8GB Dual-Hash Sieve Bitset + Swap-and-Drain RAM Buffer.
 #
 # Định danh từ đơn tiếng Anh (Single-Word Identifier Protocol):
 # worker, games, depth, threads, seed, token, repo, status, metrics, logs,
@@ -86,8 +86,8 @@ def hardware() -> str:
     info = f"""### 🖥️ HẠ TẦNG PHẦN CỨNG 64GB RAM & 12 CPU CORES
 - **CPU Cores**: `{cpu_logical}` vCPUs (`{cpu_physical}` Physical Cores)
 - **RAM Khả Dụng**: {mem_str}
-- **Cấu hình RAM Engine**: `36 GB` Transposition Table + `2 GB` Sieve Bitset + `16 GB` Sample Buffer
-- **Tốc độ dự kiến**: **~1,500 - 2,500 FEN/giây** (Zero Disk Latency & O(1) Memory Hash)
+- **Cấu hình RAM Engine v2.0**: `6 GB` TT (512MB×12) + `8 GB` Dual-Hash Sieve Bitset + Swap-and-Drain RAM Buffer
+- **Tốc độ dự kiến**: **~1,500 - 2,500 FEN/giây** (Zero Lock Contention & O(1) Dedup)
 """
     return info
 
@@ -103,7 +103,7 @@ def stop_mining():
             process.kill()
     return "🛑 Đã yêu cầu dừng khai thác dữ liệu."
 
-def start_mining(worker, games, depth, threads, tt_mb, seed, token, repo):
+def start_mining(worker, games, depth, threads, tt_mb, sieve_mb, seed, token, repo):
     """Khởi chạy và stream tiến trình khai thác dữ liệu đa luồng 64GB RAM."""
     global process, running
 
@@ -122,7 +122,8 @@ def start_mining(worker, games, depth, threads, tt_mb, seed, token, repo):
     threads = int(threads or 12)
     games = int(games or 50000)
     depth = int(depth or 4)
-    tt_mb = int(tt_mb or 3072)
+    tt_mb = int(tt_mb or 512)
+    sieve_mb = int(sieve_mb or 8192)
     seed = int(seed or 1)
 
     # Khởi tạo binary 64GB RAM optimized miner
@@ -145,6 +146,7 @@ def start_mining(worker, games, depth, threads, tt_mb, seed, token, repo):
     env["DEPTH"] = str(depth)
     env["THREADS"] = str(threads)
     env["TT_MB"] = str(tt_mb)
+    env["SIEVE_MB"] = str(sieve_mb)
     env["SEED"] = str(seed)
     env["OUTPUT"] = out_file
 
@@ -152,11 +154,13 @@ def start_mining(worker, games, depth, threads, tt_mb, seed, token, repo):
     logs = []
 
     total_tt_gb = (tt_mb * threads) / 1024.0
+    sieve_gb = sieve_mb / 1024.0
+    total_ram_gb = total_tt_gb + sieve_gb + 2.0
 
     yield (
-        f"### 🚀 ĐÃ KHỞI CHẠY ENGINE 64GB RAM ({threads}-CPUs, {total_tt_gb:.1f}GB TT RAM)\n- **Worker Node**: `{worker}`\n- **Mục tiêu**: `{games:,}` ván cờ (Depth {depth})\n- **TT RAM**: `{tt_mb} MB`/thread (`{total_tt_gb:.1f} GB` tổng TT RAM)\n- **Sieve RAM**: `2.0 GB` O(1) Bitset\n- **File**: `{out_file}`",
-        f"**Khởi tạo**: Đang nạp {total_tt_gb:.1f}GB RAM Transposition Table...",
-        "Đang kích hoạt Native 64GB RAM Engine..."
+        f"### 🚀 ĐÃ KHỞI CHẠY ENGINE 64GB RAM v2.0 ({threads}-CPUs)\n- **Worker Node**: `{worker}`\n- **Mục tiêu**: `{games:,}` ván cờ (Depth {depth})\n- **TT RAM**: `{tt_mb} MB`/thread × {threads} = `{total_tt_gb:.1f} GB`\n- **Sieve RAM**: `{sieve_gb:.1f} GB` Dual-Hash O(1) Bitset\n- **Tổng RAM**: `{total_ram_gb:.1f} GB` / 64.0 GB\n- **File**: `{out_file}`",
+        f"**Khởi tạo**: Đang nạp {total_tt_gb:.1f}GB TT + {sieve_gb:.1f}GB Sieve...",
+        "Đang kích hoạt Native 64GB RAM Engine v2.0 (Swap-and-Drain)..."
     )
 
     process = subprocess.Popen(
@@ -223,6 +227,7 @@ def start_mining(worker, games, depth, threads, tt_mb, seed, token, repo):
 | 🧩 **Mẫu FEN Độc Nhất** | `{current_samples:,}` mẫu |
 | ⚡ **Vận Tốc Khai Thác** | `{speed:.1f}` FEN/s |
 | 🧠 **TT RAM Allocated** | `{total_tt_gb:.1f} GB` (`{tt_mb} MB` × `{threads}` threads) |
+| 🧬 **Sieve RAM Allocated** | `{sieve_gb:.1f} GB` Dual-Hash Bitset |
 | 🧠 **RAM Hệ Thống** | {mem_str} |
 | 💻 **CPU Usage** | {cpu_str} |
 | ⏱️ **ETA Dự Kiến** | `{eta_sec / 60:.1f}` phút |
@@ -303,7 +308,7 @@ def create_app():
 # 🏯 XIANGQI-RIM: ULTRA 64GB RAM DATA MINER
 ### 🚀 Hệ Thống Tận Dụng Triệt Để 64GB RAM & 12 CPUs Khai Thác Dữ Liệu Cờ Tướng Tự Đấu Hiệu Năng Tối Thượng
 ---
-Vận hành **Native Rust 64GB RAM Engine** với 36GB Transposition Table, 2GB Atomic Sieve Bitset (O(1) Bitset Dedup) và 16GB In-Memory Sample Buffer. Tự động hợp nhất và upload lên **HuggingFace Dataset Hub** (`hoduyquocbao/xiangqi-r1-dataset`).
+Vận hành **Native Rust 64GB RAM Engine v2.0** với TT tối ưu cho depth, 8GB Dual-Hash Sieve Bitset (O(1) Dedup) và Swap-and-Drain RAM Buffer không block worker threads. Tự động upload lên **HuggingFace Dataset Hub** (`hoduyquocbao/xiangqi-r1-dataset`).
 """)
 
         gr.Markdown(hardware())
@@ -339,12 +344,20 @@ Vận hành **Native Rust 64GB RAM Engine** với 36GB Transposition Table, 2GB 
                     step=1
                 )
                 tt_mb_slider = gr.Slider(
-                    label="🧠 RAM Transposition Table cho mỗi Thread (MB)",
-                    minimum=512,
+                    label="🧠 RAM Transposition Table mỗi Thread (MB)",
+                    minimum=128,
                     maximum=4096,
-                    value=3072,
-                    step=256,
-                    info="3072 MB × 12 threads = 36 GB TT RAM dành riêng cho Transposition Table!"
+                    value=512,
+                    step=128,
+                    info="512 MB × 12 threads = 6 GB TT (depth 4 đủ dùng, tăng cho depth 6+)"
+                )
+                sieve_mb_slider = gr.Slider(
+                    label="🧬 RAM Sieve Dual-Hash Bitset (MB)",
+                    minimum=1024,
+                    maximum=16384,
+                    value=8192,
+                    step=1024,
+                    info="8192 MB = 8 GB = 64 tỷ bit flags → tỷ lệ false positive ≈ 0%"
                 )
                 seed_input = gr.Number(
                     label="🎲 PRNG Base Seed (Dùng cho multi-instance)",
@@ -376,7 +389,7 @@ Vận hành **Native Rust 64GB RAM Engine** với 36GB Transposition Table, 2GB 
 
             with gr.Column(scale=2):
                 gr.Markdown("### 📊 Trạng Thái & Báo Cáo Real-Time 64GB RAM")
-                status_box = gr.Markdown("Sẵn sàng khai thác dữ liệu với 36GB TT RAM, 2GB Sieve Bitset...")
+                status_box = gr.Markdown("Sẵn sàng khai thác dữ liệu với TT tối ưu + 8GB Dual-Hash Sieve Bitset v2.0...")
                 metrics_box = gr.Markdown("Chờ khởi chạy...")
                 logs_box = gr.Textbox(
                     label="📜 Nhật ký Native Engine Real-Time (Streaming Logs)",
@@ -387,7 +400,7 @@ Vận hành **Native Rust 64GB RAM Engine** với 36GB Transposition Table, 2GB 
 
         start_btn.click(
             fn=start_mining,
-            inputs=[worker_input, games_slider, depth_slider, threads_slider, tt_mb_slider, seed_input, token_input, repo_input],
+            inputs=[worker_input, games_slider, depth_slider, threads_slider, tt_mb_slider, sieve_mb_slider, seed_input, token_input, repo_input],
             outputs=[status_box, metrics_box, logs_box]
         )
 
