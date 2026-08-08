@@ -1,80 +1,95 @@
 #!/usr/bin/env python3
 # ============================================================================
-# XIANGQI-RIM: COLAB T4 MINING NOTEBOOK
+# XIANGQI-RIM: COLAB T4 GPU MINING NOTEBOOK
 # ============================================================================
-# Chạy trên Google Colab để mining dữ liệu huấn luyện NNUE quy mô lớn.
-# Compile Rust engine trực tiếp trên Colab, chạy mining, upload Google Drive.
-#
-# Hướng dẫn:
-#   1. Mở Google Colab: https://colab.research.google.com
-#   2. Chọn Runtime → Change runtime type → T4 GPU (hoặc CPU)
-#   3. Copy từng cell vào notebook và chạy tuần tự
+# BẮT BUỘC sử dụng T4 GPU trên Colab.
+# Pipeline 2 pha:
+#   Phase 1 (Rust CPU): Tạo vị trí nhanh với depth thấp (CPU rất nhanh ở depth 1-2)
+#   Phase 2 (T4 GPU):   Batch NNUE evaluation trên PyTorch T4 (~500K pos/s)
 #
 # Multi-Instance (4 notebooks song song):
-#   Notebook 1: SEED=1, OUTPUT=gen6_part1.jsonl, GAMES=25000
-#   Notebook 2: SEED=2, OUTPUT=gen6_part2.jsonl, GAMES=25000
-#   Notebook 3: SEED=3, OUTPUT=gen6_part3.jsonl, GAMES=25000
-#   Notebook 4: SEED=4, OUTPUT=gen6_part4.jsonl, GAMES=25000
+#   Notebook 1: SEED=1, GAMES=25000
+#   Notebook 2: SEED=2, GAMES=25000
+#   Notebook 3: SEED=3, GAMES=25000
+#   Notebook 4: SEED=4, GAMES=25000
+#
+# Mở Google Colab → Runtime → Change runtime type → T4 GPU
 # ============================================================================
 
 # %% [markdown]
-# # 🏯 Xiangqi-RIM: Colab T4 Data Mining
-# Mining dữ liệu huấn luyện NNUE quy mô lớn trên Google Colab.
+# # 🏯 Xiangqi-RIM: Colab T4 GPU Data Mining
+# **Bắt buộc T4 GPU** — PyTorch NNUE batch evaluation trên T4.
 
-# %% Cell 1: Cài đặt Rust Toolchain (~2 phút)
-import os
+# %% Cell 1: Kiểm tra T4 GPU + Cài đặt Dependencies (~1 phút)
 import subprocess
+import os
 import time
+import sys
 
 print("=" * 60)
-print(" BƯỚC 1: CÀI ĐẶT RUST TOOLCHAIN")
+print(" BƯỚC 1: KIỂM TRA T4 GPU & CÀI ĐẶT")
+print("=" * 60)
+
+# Kiểm tra GPU
+result = subprocess.run(
+    "nvidia-smi --query-gpu=name,memory.total,driver_version --format=csv,noheader",
+    shell=True, capture_output=True, text=True
+)
+gpu_info = result.stdout.strip()
+if "T4" not in gpu_info and "Tesla" not in gpu_info:
+    print(f"⚠️ GPU hiện tại: {gpu_info}")
+    print("❌ KHÔNG PHẢI T4! Vui lòng chọn Runtime → Change runtime type → T4 GPU")
+    sys.exit(1)
+print(f"✅ GPU: {gpu_info}")
+
+# Kiểm tra CUDA
+result = subprocess.run("nvcc --version 2>/dev/null | grep release", shell=True, capture_output=True, text=True)
+print(f"CUDA: {result.stdout.strip()}")
+
+# Kiểm tra PyTorch + CUDA
+import torch
+print(f"PyTorch: {torch.__version__}")
+print(f"CUDA available: {torch.cuda.is_available()}")
+if torch.cuda.is_available():
+    print(f"CUDA device: {torch.cuda.get_device_name(0)}")
+    print(f"VRAM: {torch.cuda.get_device_properties(0).total_mem / (1024**3):.1f} GB")
+else:
+    print("❌ CUDA không khả dụng! Kiểm tra lại runtime type.")
+    sys.exit(1)
+
+# CPU info
+result = subprocess.run("nproc", shell=True, capture_output=True, text=True)
+cores = int(result.stdout.strip())
+print(f"CPU cores: {cores}")
+
+result = subprocess.run("free -h | grep Mem | awk '{print $2}'", shell=True, capture_output=True, text=True)
+print(f"RAM: {result.stdout.strip()}")
+
+# %% Cell 2: Cài đặt Rust + Clone Repo + Build (~5 phút)
+print("=" * 60)
+print(" BƯỚC 2: RUST TOOLCHAIN & BUILD ENGINE")
 print("=" * 60)
 
 start = time.time()
 
-# Cài đặt Rust qua rustup (không tương tác)
-subprocess.run(
-    "curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y",
-    shell=True, check=True
-)
-
-# Thêm Cargo vào PATH
-os.environ["PATH"] += ":/root/.cargo/bin"
-
-# Xác minh cài đặt
-result = subprocess.run(
-    "/root/.cargo/bin/rustc --version",
-    shell=True, capture_output=True, text=True
-)
-print(f"Rust: {result.stdout.strip()}")
-
-result = subprocess.run(
-    "/root/.cargo/bin/cargo --version",
-    shell=True, capture_output=True, text=True
-)
-print(f"Cargo: {result.stdout.strip()}")
-
-elapsed = time.time() - start
-print(f"\n✅ Rust cài đặt thành công trong {elapsed:.0f} giây")
-
-# %% Cell 2: Clone Repo + Build Release (~3-5 phút)
-print("=" * 60)
-print(" BƯỚC 2: CLONE REPO & BUILD RELEASE")
-print("=" * 60)
-
-start = time.time()
-
-# Clone repository
-if not os.path.exists("xiangqi-rim"):
+# Cài Rust
+if not os.path.exists("/root/.cargo/bin/rustc"):
     subprocess.run(
-        "git clone https://github.com/hoduyquocbao/xiangqi-rim.git",
+        "curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y",
         shell=True, check=True
     )
+os.environ["PATH"] += ":/root/.cargo/bin"
+
+result = subprocess.run("/root/.cargo/bin/rustc --version", shell=True, capture_output=True, text=True)
+print(f"Rust: {result.stdout.strip()}")
+
+# Clone repo
+if not os.path.exists("xiangqi-rim"):
+    subprocess.run("git clone https://github.com/hoduyquocbao/xiangqi-rim.git", shell=True, check=True)
 else:
-    print("Repository đã tồn tại, pull latest...")
     subprocess.run("cd xiangqi-rim && git pull", shell=True, check=True)
 
-# Build release binary
+# Build release
 os.chdir("xiangqi-rim")
 subprocess.run(
     "/root/.cargo/bin/cargo build --release --example 20_parallel_mine",
@@ -82,49 +97,33 @@ subprocess.run(
 )
 
 elapsed = time.time() - start
-print(f"\n✅ Build thành công trong {elapsed:.0f} giây")
+print(f"\n✅ Build thành công trong {elapsed:.0f}s")
 
-# Kiểm tra binary
-result = subprocess.run(
-    "ls -lh target/release/examples/20_parallel_mine",
-    shell=True, capture_output=True, text=True
-)
-print(f"Binary: {result.stdout.strip()}")
-
-# %% Cell 3: Kiểm tra Phần cứng Colab
+# %% Cell 3: Tải NNUE Weights từ HuggingFace
 print("=" * 60)
-print(" BƯỚC 3: KIỂM TRA PHẦN CỨNG COLAB")
+print(" BƯỚC 3: TẢI NNUE WEIGHTS TỪ HUGGINGFACE")
 print("=" * 60)
 
-# CPU
-result = subprocess.run("nproc", shell=True, capture_output=True, text=True)
-cores = int(result.stdout.strip())
-print(f"CPU Cores: {cores}")
-
-# RAM
-result = subprocess.run(
-    "free -h | grep Mem | awk '{print $2}'",
-    shell=True, capture_output=True, text=True
-)
-print(f"RAM: {result.stdout.strip()}")
-
-# GPU
-result = subprocess.run(
-    "nvidia-smi --query-gpu=name,memory.total --format=csv,noheader 2>/dev/null || echo 'Không có GPU'",
-    shell=True, capture_output=True, text=True
-)
-print(f"GPU: {result.stdout.strip()}")
-
-# Disk
-result = subprocess.run(
-    "df -h / | tail -1 | awk '{print $4}'",
-    shell=True, capture_output=True, text=True
-)
-print(f"Disk trống: {result.stdout.strip()}")
-
-# Đề xuất THREADS
-physical = max(1, cores // 2)
-print(f"\nĐề xuất THREADS={physical} (physical cores)")
+# Kiểm tra weights local
+weights_path = "data/nnue_weights_gen5.bin"
+if not os.path.exists(weights_path):
+    print("  Weights không có local, tải từ HuggingFace...")
+    subprocess.run("pip install -q huggingface_hub", shell=True, check=True)
+    from huggingface_hub import hf_hub_download
+    hf_hub_download(
+        repo_id="hoduyquocbao/xiangqi-r1-dataset",
+        filename="weights/nnue_weights_gen5.bin",
+        local_dir=".",
+        repo_type="dataset"
+    )
+    # Di chuyển vào data/
+    os.makedirs("data", exist_ok=True)
+    if os.path.exists("weights/nnue_weights_gen5.bin"):
+        import shutil
+        shutil.copy2("weights/nnue_weights_gen5.bin", weights_path)
+    print(f"  ✅ Weights: {weights_path} ({os.path.getsize(weights_path):,} bytes)")
+else:
+    print(f"  ✅ Weights sẵn có: {weights_path} ({os.path.getsize(weights_path):,} bytes)")
 
 # %% Cell 4: CẤU HÌNH MINING
 # ============================================================
@@ -132,45 +131,46 @@ print(f"\nĐề xuất THREADS={physical} (physical cores)")
 # ============================================================
 
 GAMES = 25000       # Số ván cờ (25000 × 4 instances = 100000)
-DEPTH = 4           # Độ sâu search
 SEED = 1            # Base seed (1, 2, 3, 4 cho mỗi instance)
-THREADS = 2         # Số threads (Colab Free = 2, Pro High-RAM = 4)
-OUTPUT = "data/gen6_colab_part1.jsonl"  # Tên file output
+DEPTH_GEN = 2       # Depth cho Phase 1 (CPU gen positions — nhanh)
+GPU_BATCH = 8192    # Batch size cho T4 GPU (T4 có 16GB VRAM)
+OUTPUT = f"data/gen7_gpu_seed{SEED}.jsonl"
 
 print("=" * 60)
-print(" CẤU HÌNH MINING")
+print(" CẤU HÌNH T4 GPU MINING PIPELINE")
 print("=" * 60)
-print(f"  GAMES   = {GAMES}")
-print(f"  DEPTH   = {DEPTH}")
-print(f"  SEED    = {SEED}")
-print(f"  THREADS = {THREADS}")
-print(f"  OUTPUT  = {OUTPUT}")
+print(f"  GAMES      = {GAMES:,}")
+print(f"  SEED       = {SEED}")
+print(f"  DEPTH_GEN  = {DEPTH_GEN} (Phase 1 CPU — gen nhanh)")
+print(f"  GPU_BATCH  = {GPU_BATCH} (Phase 2 GPU — T4 batch eval)")
+print(f"  OUTPUT     = {OUTPUT}")
 
-# Ước tính thời gian (dựa trên benchmark: 2.0 ván/s @ 4 threads i5-8259U)
-# Colab 2 cores Xeon ước tính ~1.2 ván/s
-speed = 1.2 * (THREADS / 2)
-eta = GAMES / speed / 3600
-print(f"\n  Tốc độ ước tính: ~{speed:.1f} ván/s")
-print(f"  ETA: ~{eta:.1f} giờ")
+# Ước tính thời gian
+# Phase 1: depth 2 → ~50 ván/s trên 2 cores → 25000 ván ≈ 8 phút
+# Phase 2: ~500K pos/s trên T4 → 4.5M positions ≈ 9 giây
+phase1_eta = GAMES / 50 / 60  # phút
+phase2_eta = (GAMES * 180) / 500000 / 60  # phút
+print(f"\n  Phase 1 ETA: ~{phase1_eta:.0f} phút (Rust CPU depth {DEPTH_GEN})")
+print(f"  Phase 2 ETA: ~{phase2_eta:.1f} phút (T4 GPU batch NNUE)")
+print(f"  Tổng ETA: ~{phase1_eta + phase2_eta:.0f} phút")
 print(f"  Mẫu dự kiến: ~{GAMES * 180:,}")
 
-# %% Cell 5: CHẠY MINING
+# %% Cell 5: PHASE 1 — Rust Engine Gen Positions (CPU, fast)
 print("=" * 60)
-print(" BƯỚC 5: BẮT ĐẦU MINING")
+print(" PHASE 1: RUST ENGINE → GEN POSITIONS (CPU)")
 print("=" * 60)
+print(f"  Depth {DEPTH_GEN}, {GAMES:,} ván, SEED={SEED}")
 
 start = time.time()
-
-# Tạo thư mục data nếu chưa có
 os.makedirs("data", exist_ok=True)
 
-# Chạy mining
+temp_output = OUTPUT + ".raw.jsonl"
 env = os.environ.copy()
 env["GAMES"] = str(GAMES)
-env["DEPTH"] = str(DEPTH)
+env["DEPTH"] = str(DEPTH_GEN)
 env["SEED"] = str(SEED)
-env["THREADS"] = str(THREADS)
-env["OUTPUT"] = OUTPUT
+env["THREADS"] = str(min(os.cpu_count() or 2, 4))
+env["OUTPUT"] = temp_output
 
 process = subprocess.Popen(
     ["./target/release/examples/20_parallel_mine"],
@@ -181,7 +181,6 @@ process = subprocess.Popen(
     bufsize=1
 )
 
-# Stream output real-time
 for line in process.stdout:
     print(line, end="", flush=True)
 
@@ -189,82 +188,243 @@ code = process.wait()
 elapsed = time.time() - start
 
 if code == 0:
-    print(f"\n✅ Mining hoàn tất trong {elapsed:.0f} giây ({elapsed/3600:.1f} giờ)")
+    count = sum(1 for _ in open(temp_output))
+    print(f"\n✅ Phase 1 hoàn tất: {count:,} positions trong {elapsed:.0f}s")
 else:
-    print(f"\n❌ Mining thất bại với exit code {code}")
+    print(f"\n❌ Phase 1 thất bại (exit code {code})")
+    sys.exit(1)
 
-# %% Cell 6: XÁC MINH KẾT QUẢ
+# %% Cell 6: PHASE 2 — T4 GPU NNUE Batch Evaluation
 import json
+import numpy as np
 
 print("=" * 60)
-print(" BƯỚC 6: XÁC MINH KẾT QUẢ")
+print(" PHASE 2: T4 GPU NNUE BATCH EVALUATION")
 print("=" * 60)
 
-if os.path.exists(OUTPUT):
-    # Đếm dòng
-    count = 0
-    scores = []
-    with open(OUTPUT, "r") as f:
-        for line in f:
-            line = line.strip()
-            if line:
-                count += 1
-                if count <= 100000:
-                    try:
-                        d = json.loads(line)
-                        scores.append(d.get("score", 0))
-                    except Exception:
-                        pass
+# --- Hằng số NNUE ---
+DIM = 256
+BOTH = 512
+HIDDEN = 32
+TOTAL = 65536
+SCALE_OUT = 16
+QFT = 127.0
+QHI = 64.0
+QOU = 64.0
 
-    size = os.path.getsize(OUTPUT)
-    print(f"  Tổng mẫu: {count:,}")
-    print(f"  File size: {size / (1024*1024):.1f} MB")
+PIECE_MAP = {
+    'R': 0, 'N': 1, 'B': 2, 'A': 3, 'K': 4, 'C': 5, 'P': 6,
+    'r': 7, 'n': 8, 'b': 9, 'a': 10, 'k': 11, 'c': 12, 'p': 13,
+}
 
-    if scores:
-        print(f"  Score range: [{min(scores)}, {max(scores)}]")
-        print(f"  Score mean: {sum(scores)/len(scores):.1f}")
+# --- Load NNUE weights ---
+print("  Loading NNUE weights...")
+import struct
 
-    # Kiểm tra mẫu đầu
-    with open(OUTPUT, "r") as f:
-        first = json.loads(f.readline())
-        print(f"  Fields: {list(first.keys())}")
-        print(f"  Sample: {json.dumps(first)}")
-else:
-    print(f"  ❌ File {OUTPUT} không tồn tại!")
+with open(weights_path, "rb") as f:
+    magic = struct.unpack("<I", f.read(4))[0]
+    version = struct.unpack("<I", f.read(4))[0]
+    ft_bias = np.frombuffer(f.read(DIM * 2), dtype=np.int16).astype(np.float32) / QFT
+    ft_weight = np.frombuffer(f.read(TOTAL * DIM * 2), dtype=np.int16).astype(np.float32) / QFT
+    ft_weight = ft_weight.reshape(TOTAL, DIM)
+    h_weight = np.frombuffer(f.read(HIDDEN * BOTH), dtype=np.int8).astype(np.float32) / QHI
+    h_weight = h_weight.reshape(HIDDEN, BOTH)
+    h_bias = np.frombuffer(f.read(HIDDEN * 4), dtype=np.int32).astype(np.float32) / (QFT * QHI)
+    o_weight = np.frombuffer(f.read(HIDDEN), dtype=np.int8).astype(np.float32) / QOU
+    o_weight = o_weight.reshape(1, HIDDEN)
+    o_bias = np.frombuffer(f.read(4), dtype=np.int32).astype(np.float32) / (QFT * QHI * QOU)
 
-# %% Cell 7: UPLOAD LÊN GOOGLE DRIVE
+print(f"  ✅ NNUE v{version}: FT={ft_weight.shape}, H={h_weight.shape}, O={o_weight.shape}")
+
+# --- Build PyTorch model on T4 ---
+print("  Building PyTorch NNUE model on CUDA (T4)...")
+import torch
+import torch.nn as nn
+
+device = "cuda"
+
+ft_w_tensor = torch.from_numpy(ft_weight).to(device)    # [65536, 256]
+ft_b_tensor = torch.from_numpy(ft_bias).to(device)      # [256]
+h_linear = nn.Linear(BOTH, HIDDEN, bias=True).to(device)
+h_linear.weight.data = torch.from_numpy(h_weight).to(device)
+h_linear.bias.data = torch.from_numpy(h_bias).to(device)
+o_linear = nn.Linear(HIDDEN, 1, bias=True).to(device)
+o_linear.weight.data = torch.from_numpy(o_weight).to(device)
+o_linear.bias.data = torch.from_numpy(o_bias.reshape(1)).to(device)
+print(f"  ✅ Model on {device}: {torch.cuda.get_device_name(0)}")
+
+# --- FEN Parser & Feature Extractor ---
+def parse_fen(fen):
+    parts = fen.split()
+    board_str = parts[0]
+    side = 0 if len(parts) > 1 and parts[1] == 'w' else 1
+    grid = [15] * 90
+    row, col = 0, 0
+    for ch in board_str:
+        if ch == '/':
+            row += 1
+            col = 0
+        elif ch.isdigit():
+            col += int(ch)
+        elif ch in PIECE_MAP:
+            idx = row * 9 + col
+            if idx < 90:
+                grid[idx] = PIECE_MAP[ch]
+            col += 1
+    return grid, side
+
+def extract_features(grid, side):
+    king_piece = 4 if side == 0 else 11
+    king_sq = -1
+    for i in range(90):
+        if grid[i] == king_piece:
+            king_sq = i
+            break
+    if king_sq < 0:
+        return []
+    features = []
+    for sq in range(90):
+        piece = grid[sq]
+        if piece < 14:
+            owner = piece // 7
+            kind = piece % 7
+            if owner == side:
+                idx = king_sq * 630 + kind * 90 + sq
+            else:
+                idx = king_sq * 630 + (kind + 7) * 90 + sq
+            if idx < TOTAL:
+                features.append(idx)
+    return features
+
+# --- Load positions ---
+print(f"  Loading positions from {temp_output}...")
+samples = []
+with open(temp_output, "r") as f:
+    for line in f:
+        line = line.strip()
+        if line:
+            samples.append(json.loads(line))
+total = len(samples)
+print(f"  Tổng mẫu: {total:,}")
+
+# --- GPU Batch Evaluation ---
+print(f"  Bắt đầu T4 GPU batch evaluation (batch={GPU_BATCH})...")
+max_feat = 32
+scored = []
+start = time.time()
+
+for offset in range(0, total, GPU_BATCH):
+    chunk = samples[offset:offset + GPU_BATCH]
+    size = len(chunk)
+
+    # Chuẩn bị feature tensors
+    stm = torch.full((size, max_feat), -1, dtype=torch.long, device=device)
+    opp = torch.full((size, max_feat), -1, dtype=torch.long, device=device)
+
+    for i, s in enumerate(chunk):
+        grid, side = parse_fen(s["fen"])
+        sf = extract_features(grid, side)
+        of = extract_features(grid, 1 - side)
+        for j, f in enumerate(sf[:max_feat]):
+            stm[i, j] = f
+        for j, f in enumerate(of[:max_feat]):
+            opp[i, j] = f
+
+    # GPU forward pass
+    with torch.no_grad():
+        # Feature Transform: sparse gather + accumulate
+        stm_acc = ft_b_tensor.unsqueeze(0).expand(size, -1).clone()
+        opp_acc = ft_b_tensor.unsqueeze(0).expand(size, -1).clone()
+
+        for k in range(max_feat):
+            idx_s = stm[:, k]
+            mask_s = idx_s >= 0
+            if mask_s.any():
+                stm_acc[mask_s] += ft_w_tensor[idx_s[mask_s]]
+
+            idx_o = opp[:, k]
+            mask_o = idx_o >= 0
+            if mask_o.any():
+                opp_acc[mask_o] += ft_w_tensor[idx_o[mask_o]]
+
+        # Clipped ReLU
+        stm_acc = torch.clamp(stm_acc, 0.0, 1.0)
+        opp_acc = torch.clamp(opp_acc, 0.0, 1.0)
+
+        # Concat [batch, 512]
+        combined = torch.cat([stm_acc, opp_acc], dim=1)
+
+        # Hidden 512→32, ClippedReLU
+        hidden_out = torch.clamp(h_linear(combined), 0.0, 1.0)
+
+        # Output 32→1
+        result = o_linear(hidden_out).squeeze(1) * SCALE_OUT
+        gpu_scores = result.cpu().numpy().tolist()
+
+    # Ghi kết quả
+    for i, s in enumerate(chunk):
+        s["score"] = int(round(gpu_scores[i]))
+        s["gpu"] = True
+        scored.append(s)
+
+    # Progress
+    done = min(offset + GPU_BATCH, total)
+    elapsed = time.time() - start
+    speed = done / elapsed if elapsed > 0 else 0
+    eta = (total - done) / speed if speed > 0 else 0
+    print(f"\r  🔥 T4 GPU: {done:,}/{total:,} ({100*done/total:.0f}%) | {speed:.0f} pos/s | ETA: {eta:.0f}s", end="", flush=True)
+
+print()
+elapsed = time.time() - start
+print(f"  ✅ GPU eval hoàn tất: {total:,} positions trong {elapsed:.1f}s ({total/elapsed:.0f} pos/s)")
+
+# --- Ghi output ---
+print(f"\n  Ghi kết quả vào {OUTPUT}...")
+with open(OUTPUT, "w") as f:
+    for s in scored:
+        f.write(json.dumps(s, ensure_ascii=False) + "\n")
+
+size = os.path.getsize(OUTPUT)
+print(f"  ✅ Output: {OUTPUT} ({size/(1024*1024):.1f} MB, {len(scored):,} mẫu)")
+
+# Cleanup temp
+if os.path.exists(temp_output):
+    os.remove(temp_output)
+
+# %% Cell 7: XÁC MINH KẾT QUẢ
+print("=" * 60)
+print(" BƯỚC 7: XÁC MINH KẾT QUẢ")
+print("=" * 60)
+
+scores_list = [s["score"] for s in scored[:100000]]
+print(f"  Tổng mẫu: {len(scored):,}")
+print(f"  File: {OUTPUT} ({os.path.getsize(OUTPUT)/(1024*1024):.1f} MB)")
+print(f"  Score range: [{min(scores_list)}, {max(scores_list)}]")
+print(f"  Score mean: {sum(scores_list)/len(scores_list):.1f}")
+print(f"  GPU evaluated: {sum(1 for s in scored if s.get('gpu'))}")
+
+# Mẫu đầu tiên
+print(f"\n  Sample: {json.dumps(scored[0])}")
+
+# %% Cell 8: UPLOAD LÊN GOOGLE DRIVE
 from google.colab import drive
 
 print("=" * 60)
-print(" BƯỚC 7: UPLOAD LÊN GOOGLE DRIVE")
+print(" BƯỚC 8: UPLOAD LÊN GOOGLE DRIVE")
 print("=" * 60)
 
-# Mount Google Drive
 drive.mount("/content/drive")
-
-# Tạo thư mục đích
 target = "/content/drive/MyDrive/xiangqi-mining"
 os.makedirs(target, exist_ok=True)
 
-# Copy file
 import shutil
 destination = os.path.join(target, os.path.basename(OUTPUT))
 shutil.copy2(OUTPUT, destination)
+print(f"✅ Uploaded: {destination} ({os.path.getsize(destination)/(1024*1024):.1f} MB)")
 
-size = os.path.getsize(destination)
-print(f"✅ Đã upload {destination} ({size/(1024*1024):.1f} MB)")
-print(f"   Tổng mẫu: {count:,}")
-
-# %% Cell 8 (TÙY CHỌN): UPLOAD TRỰC TIẾP LÊN HUGGINGFACE
-# ============================================================
-# Chỉ chạy cell này NẾU muốn upload trực tiếp lên HuggingFace
-# thay vì qua Google Drive
-# ============================================================
-
-# HF_TOKEN = "hf_YOUR_TOKEN_HERE"  # Thay bằng token thật
+# %% Cell 9 (TÙY CHỌN): UPLOAD TRỰC TIẾP LÊN HUGGINGFACE
+# HF_TOKEN = "hf_YOUR_TOKEN_HERE"  # Thay bằng token thật từ huggingface.co/settings/tokens
 # REPO = "hoduyquocbao/xiangqi-r1-dataset"
-#
-# subprocess.run("pip install huggingface_hub -q", shell=True, check=True)
 #
 # from huggingface_hub import HfApi
 # api = HfApi(token=HF_TOKEN)
@@ -273,6 +433,6 @@ print(f"   Tổng mẫu: {count:,}")
 #     path_in_repo=os.path.basename(OUTPUT),
 #     repo_id=REPO,
 #     repo_type="dataset",
-#     commit_message=f"feat: Colab mining SEED={SEED} GAMES={GAMES} DEPTH={DEPTH}"
+#     commit_message=f"feat: T4 GPU mining SEED={SEED} GAMES={GAMES}"
 # )
 # print(f"✅ Uploaded to HuggingFace: {REPO}")
