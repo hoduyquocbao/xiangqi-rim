@@ -95,20 +95,54 @@ fn main() {
                     break;
                 }
 
-                // 1. Tạo vị trí mở đầu ngẫu nhiên 6 nước
+                // 1. Tạo vị trí mở đầu: 50% Book Opening + 50% Random Opening
                 let mut pos = Parser::parse(Parser::DEFAULT);
-                for _ in 0..6 {
-                    let mut moves = xiangrust::movegen::List::new();
-                    xiangrust::movegen::legal(&mut pos, &mut moves);
-                    if moves.len() == 0 {
-                        break;
+                seed ^= seed << 13;
+                seed ^= seed >> 7;
+                seed ^= seed << 17;
+                let use_book = (seed % 2) == 0;
+
+                if use_book {
+                    // Dùng Opening Book: đi theo sách khai cuộc đến khi hết
+                    let mut book_steps = 0u8;
+                    while book_steps < 12 {
+                        if let Some(mv) = xiangrust::book::Book::probe(&pos) {
+                            pos.apply(mv.from, mv.to);
+                            book_steps += 1;
+                        } else {
+                            break;
+                        }
                     }
-                    seed ^= seed << 13;
-                    seed ^= seed >> 7;
-                    seed ^= seed << 17;
-                    let idx = (seed as usize) % moves.len();
-                    let m = moves.items[idx];
-                    pos.apply(m.from, m.to);
+                    // Sau khi hết sách, thêm 2-4 nước random để đa dạng hóa
+                    let extra = 2 + (seed as usize % 3);
+                    for _ in 0..extra {
+                        let mut moves = xiangrust::movegen::List::new();
+                        xiangrust::movegen::legal(&mut pos, &mut moves);
+                        if moves.len() == 0 {
+                            break;
+                        }
+                        seed ^= seed << 13;
+                        seed ^= seed >> 7;
+                        seed ^= seed << 17;
+                        let idx = (seed as usize) % moves.len();
+                        let m = moves.items[idx];
+                        pos.apply(m.from, m.to);
+                    }
+                } else {
+                    // Random opening thuần: 6 nước ngẫu nhiên (phương pháp cũ)
+                    for _ in 0..6 {
+                        let mut moves = xiangrust::movegen::List::new();
+                        xiangrust::movegen::legal(&mut pos, &mut moves);
+                        if moves.len() == 0 {
+                            break;
+                        }
+                        seed ^= seed << 13;
+                        seed ^= seed >> 7;
+                        seed ^= seed << 17;
+                        let idx = (seed as usize) % moves.len();
+                        let m = moves.items[idx];
+                        pos.apply(m.from, m.to);
+                    }
                 }
 
                 // 2. Chơi 1 ván cờ và thu thập dữ liệu
@@ -151,7 +185,7 @@ fn main() {
                 if let Ok(mut file) = file_mutex.lock() {
                     for sample in &local_samples {
                         let line = format!(
-                            "{{\"fen\":\"{}\",\"best_move\":\"{}\",\"eval\":{},\"depth\":{}}}\n",
+                            "{{\"fen\":\"{}\",\"best_move\":\"{}\",\"score\":{},\"depth\":{}}}\n",
                             sample.fen, sample.move_uci, sample.score, sample.depth
                         );
                         let _ = file.write_all(line.as_bytes());
