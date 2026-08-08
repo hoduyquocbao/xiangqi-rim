@@ -124,7 +124,7 @@ impl Table {
     /// Tự động quy đổi số MB RAM thành $2^k$ entries trong khoảng [16MB, 8192MB].
     #[inline(always)]
     pub fn allocate(mb: usize) -> Self {
-        let size = mb.clamp(16, 8192);
+        let size = mb.clamp(16, 49152); // Nâng giới hạn TT tối đa 48GB cho hệ thống 64GB+
         Self::new(size)
     }
 

@@ -78,7 +78,7 @@ def get_system_specs():
     if cgroup_cpus > 0:
         cpu_effective = max(1, int(cgroup_cpus))
     else:
-        cpu_effective = min(raw_logical, 12)
+        cpu_effective = min(raw_logical, 32)  # Nâng từ 12 lên 32 cores cho bare-metal
 
     cpu_logical = max(1, cpu_effective)
 
@@ -94,7 +94,7 @@ def get_system_specs():
 
     return cpu_logical, cpu_physical, mem_total, mem_avail, raw_logical, cgroup_cpus
 
-def setup(example_name: str = "21_ram64g_mine") -> str:
+def setup(example_name: str = "23_jrcp3_ram64g_miner") -> str:
     """Tự động kiểm tra phần cứng và biên dịch nhị phân Rust Native Engine."""
     cargo_bin = shutil.which("cargo")
     if not cargo_bin:
@@ -432,7 +432,7 @@ def start_mining(worker, games, depth, threads, tt_mb, sieve_mb, seed, token, re
 
     total_tt_gb = (tt_mb * threads) / 1024.0
     sieve_gb = sieve_mb / 1024.0
-    total_ram_gb = total_tt_gb + sieve_gb + 2.0
+    total_ram_gb = total_tt_gb + sieve_gb + 4.0  # 4GB: Engine heap + NNUE weights + OS + Python
 
     yield (
         f"### 🚀 ĐÃ KHỞI CHẠY ENGINE MULTI-THREAD v2.0 ({threads}/{cpu_logical}-CPUs)\n- **Worker Node**: `{worker}`\n- **Mục tiêu**: `{games:,}` ván cờ (Depth {depth})\n- **TT RAM**: `{tt_mb} MB`/thread × {threads} = `{total_tt_gb:.1f} GB`\n- **Sieve RAM**: `{sieve_gb:.1f} GB` Dual-Hash O(1) Bitset\n- **Tổng RAM Cấp**: `{total_ram_gb:.1f} GB` / `{mem_total:.1f} GB` RAM Hệ Thống\n- **File Output**: `{out_file}`",
