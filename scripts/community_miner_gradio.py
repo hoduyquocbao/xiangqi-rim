@@ -17,8 +17,11 @@ import threading
 import gradio as gr
 from huggingface_hub import HfApi
 
-DEFAULT_HF_TOKEN = "hf_" + "xzWoxhVQjUYSCYTjlowHaLkZBgYkvQZLse"
-TOKEN = os.environ.get("HF_TOKEN", DEFAULT_HF_TOKEN)
+TOKEN = os.environ.get("HF_TOKEN", "")
+if not TOKEN:
+    print("⚠️ Biến môi trường HF_TOKEN chưa được cấu hình.")
+    print("   Dữ liệu sẽ được lưu cục bộ nhưng KHÔNG tự động upload lên HuggingFace Hub.")
+    print("   Cấu hình: export HF_TOKEN=hf_your_write_token_here")
 REPO = "hoduyquocbao/xiangqi-r1-dataset"
 
 def ensure_native_binary():
@@ -137,16 +140,20 @@ def start_community_mining(worker, games, depth, token, repo):
     try:
         api = HfApi()
         repo_path = f"community/{os.path.basename(out_file)}"
-        active_token = token if (token and len(str(token)) > 10) else DEFAULT_HF_TOKEN
-        api.upload_file(
-            path_or_fileobj=out_file if os.path.exists(out_file) else "data/selfplay_samples_gen5.jsonl",
-            path_in_repo=repo_path,
-            repo_id=repo,
-            repo_type="dataset",
-            token=active_token
-        )
-        hf_success = True
-        hf_url = f"https://huggingface.co/datasets/{repo}/resolve/main/{repo_path}"
+        active_token = token if (token and len(str(token)) > 10) else TOKEN
+        if not active_token or len(active_token) < 10:
+            hf_success = False
+            hf_url = "⚠️ Không có HF_TOKEN — dữ liệu đã lưu cục bộ tại: " + (out_file if os.path.exists(out_file) else "data/selfplay_samples_gen5.jsonl")
+        else:
+            api.upload_file(
+                path_or_fileobj=out_file if os.path.exists(out_file) else "data/selfplay_samples_gen5.jsonl",
+                path_in_repo=repo_path,
+                repo_id=repo,
+                repo_type="dataset",
+                token=active_token
+            )
+            hf_success = True
+            hf_url = f"https://huggingface.co/datasets/{repo}/resolve/main/{repo_path}"
     except Exception as e:
         hf_success = False
         hf_url = str(e)
@@ -212,7 +219,8 @@ Chạy bộ đào **Native Rust Engine 100% Chuẩn Luật Cờ Tướng** bằn
                 )
                 token_input = gr.Textbox(
                     label="🔑 HuggingFace Write Token",
-                    value=TOKEN,
+                    value="",
+                    placeholder="Dán HuggingFace Write Token của bạn tại đây (hf_xxx...)",
                     type="password"
                 )
                 repo_input = gr.Textbox(

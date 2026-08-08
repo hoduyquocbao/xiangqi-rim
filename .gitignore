@@ -16,9 +16,10 @@ outputs/
 # Secrets & Configuration
 .env
 .env.*
+!.env.example
 *.pem
 *.key
-example-xiangqi_gradio_mcp_backend.ipynb
+# example-xiangqi_gradio_mcp_backend.ipynb  # Token đã xóa, an toàn để commit
 
 # Internal Development Requests & Diagnostic Reports
 ORIGINAL_REQUEST.md
