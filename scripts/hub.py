@@ -17,7 +17,7 @@ from typing import List, Dict, Tuple, Set
 from huggingface_hub import HfApi, hf_hub_download
 from huggingface_hub.utils import RepositoryNotFoundError, EntryNotFoundError, HfHubHTTPError
 
-REPO = "hoduyquocbao/xiangqi-r1-dataset"
+REPO = "hoduyquocbao/xiangqi-nnue-dataset"
 
 def verify(item: Dict) -> bool:
     """Xác minh cấu trúc của mẫu cờ tư duy (Schema Validation hỗ trợ cả Legacy & Conversation format)."""

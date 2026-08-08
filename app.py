@@ -30,7 +30,7 @@ from huggingface_hub import HfApi
 
 # Biến môi trường mặc định
 TOKEN = os.environ.get("HF_TOKEN", "")
-REPO = "hoduyquocbao/xiangqi-r1-dataset"
+REPO = "hoduyquocbao/xiangqi-nnue-dataset"
 
 # Biến toàn cục theo dõi tiến trình background
 process = None
@@ -267,6 +267,13 @@ def start_mining(worker, games, depth, threads, tt_mb, sieve_mb, seed, token, re
                 )
                 hf_success = True
                 hf_url = f"https://huggingface.co/datasets/{repo}/blob/main/{repo_path}"
+                # Tự động cập nhật README.md thống kê trên HuggingFace Hub
+                try:
+                    sys.path.append(os.path.abspath("scripts"))
+                    import update_dataset_readme
+                    update_dataset_readme.update_readme_on_hub(token=token, repo_id=repo)
+                except Exception as ex:
+                    print(f"⚠️ Thống kê README chưa cập nhật: {ex}")
             except Exception as e:
                 hf_url = f"❌ Lỗi Upload: {str(e)}"
         else:
@@ -308,7 +315,7 @@ def create_app():
 # 🏯 XIANGQI-RIM: ULTRA 64GB RAM DATA MINER
 ### 🚀 Hệ Thống Tận Dụng Triệt Để 64GB RAM & 12 CPUs Khai Thác Dữ Liệu Cờ Tướng Tự Đấu Hiệu Năng Tối Thượng
 ---
-Vận hành **Native Rust 64GB RAM Engine v2.0** với TT tối ưu cho depth, 8GB Dual-Hash Sieve Bitset (O(1) Dedup) và Swap-and-Drain RAM Buffer không block worker threads. Tự động upload lên **HuggingFace Dataset Hub** (`hoduyquocbao/xiangqi-r1-dataset`).
+Vận hành **Native Rust 64GB RAM Engine v2.0** với TT tối ưu cho depth, 8GB Dual-Hash Sieve Bitset (O(1) Dedup) và Swap-and-Drain RAM Buffer không block worker threads. Tự động upload lên **HuggingFace Dataset Hub** (`hoduyquocbao/xiangqi-nnue-dataset`).
 """)
 
         gr.Markdown(hardware())

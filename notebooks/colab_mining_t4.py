@@ -116,7 +116,7 @@ if not os.path.exists(weights_path):
     subprocess.run("pip install -q huggingface_hub", shell=True, check=True)
     from huggingface_hub import hf_hub_download
     hf_hub_download(
-        repo_id="hoduyquocbao/xiangqi-r1-dataset",
+        repo_id="hoduyquocbao/xiangqi-nnue-dataset",
         filename="weights/nnue_weights_gen5.bin",
         local_dir=".",
         repo_type="dataset"
@@ -471,7 +471,7 @@ print(f"✅ Uploaded: {destination} ({os.path.getsize(destination)/(1024*1024):.
 # %% Cell 9: UPLOAD TRỰC TIẾP LÊN HUGGINGFACE HUB
 # @title ☁️ UPLOAD TRỰC TIẾP LÊN HUGGINGFACE HUB { display-mode: "form" }
 hf_token = "" # @param {"type":"string"}
-hf_repo = "hoduyquocbao/xiangqi-r1-dataset" # @param {"type":"string"}
+hf_repo = "hoduyquocbao/xiangqi-nnue-dataset" # @param {"type":"string"}
 
 if hf_token and len(hf_token) > 10:
     from huggingface_hub import HfApi
@@ -488,5 +488,13 @@ if hf_token and len(hf_token) > 10:
         commit_message=f"feat: T4 GPU mining SEED={SEED} GAMES={GAMES}"
     )
     print(f"✅ Uploaded to HuggingFace: https://huggingface.co/datasets/{hf_repo}/blob/main/{repo_path}")
+
+    # Tự động cập nhật README.md thống kê trên HuggingFace Dataset Hub
+    try:
+        sys.path.append(os.path.abspath("scripts"))
+        import update_dataset_readme
+        update_dataset_readme.update_readme_on_hub(token=hf_token, repo_id=hf_repo)
+    except Exception as ex:
+        print(f"⚠️ Thống kê README chưa cập nhật: {ex}")
 else:
     print("⚠️ Bỏ qua upload HuggingFace (chưa điền hf_token).")

@@ -28,7 +28,7 @@ except ImportError:
 
 # 1. Khởi tạo Token HuggingFace & Cấu hình Hub
 token = os.environ.get("HF_TOKEN", "")
-repo = "hoduyquocbao/xiangqi-r1-dataset"
+repo = "hoduyquocbao/xiangqi-nnue-dataset"
 
 try:
     import torch

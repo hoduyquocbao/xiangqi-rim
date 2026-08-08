@@ -80,7 +80,7 @@ print("=" * 60)
 subprocess.run("pip install -q huggingface_hub", shell=True, check=True)
 from huggingface_hub import HfApi, hf_hub_download
 
-repo_id = "hoduyquocbao/xiangqi-r1-dataset"
+repo_id = "hoduyquocbao/xiangqi-nnue-dataset"
 api = HfApi()
 
 print(f"🔍 Đang quét toàn bộ file dataset từ repo {repo_id}...")
@@ -386,7 +386,7 @@ print(f"✅ Đã sao lưu thành công sang Google Drive: {drive_path}")
 # %% Cell 10: Upload Trọng Số Lên HuggingFace Hub
 # @title ☁️ UPLOAD TRỌNG SỐ LÊN HUGGINGFACE HUB { display-mode: "form" }
 hf_token = "" # @param {"type":"string"}
-hf_repo = "hoduyquocbao/xiangqi-r1-dataset" # @param {"type":"string"}
+hf_repo = "hoduyquocbao/xiangqi-nnue-dataset" # @param {"type":"string"}
 
 if hf_token and len(hf_token) > 10:
     print("=" * 60)
@@ -402,5 +402,13 @@ if hf_token and len(hf_token) > 10:
         commit_message=f"feat: Train NNUE binary weights {os.path.basename(OUTPUT_BIN)}"
     )
     print(f"✅ Uploaded trọng số lên HuggingFace: https://huggingface.co/datasets/{hf_repo}/blob/main/{repo_path}")
+
+    # Tự động cập nhật README.md thống kê trên HuggingFace Dataset Hub
+    try:
+        sys.path.append(os.path.abspath("scripts"))
+        import update_dataset_readme
+        update_dataset_readme.update_readme_on_hub(token=hf_token, repo_id=hf_repo)
+    except Exception as ex:
+        print(f"⚠️ Thống kê README chưa cập nhật: {ex}")
 else:
     print("⚠️ Bỏ qua upload HuggingFace Hub (chưa nhập hf_token).")
