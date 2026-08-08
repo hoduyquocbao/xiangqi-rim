@@ -141,7 +141,7 @@ def start_community_mining(worker, games, depth, token, repo):
             path_in_repo=repo_path,
             repo_id=repo,
             repo_type="dataset",
-            token=token
+            token=token if (token and len(token) > 10) else TOKEN
         )
         hf_success = True
         hf_url = f"https://huggingface.co/datasets/{repo}/resolve/main/{repo_path}"
@@ -244,4 +244,4 @@ Chạy bộ đào **Native Rust Engine 100% Chuẩn Luật Cờ Tướng** bằn
 
 if __name__ == "__main__":
     app = create_ui()
-    app.queue().launch(server_name="0.0.0.0", server_port=7860, share=True)
+    app.queue().launch(server_name="0.0.0.0", server_port=7860, share=True, prevent_thread_lock=True)
