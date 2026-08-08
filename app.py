@@ -1,15 +1,10 @@
 #!/usr/bin/env python3
 # ============================================================================
-# XIANGQI-RIM: HUGGINGFACE SPACE 12-CPU 64GB RAM ULTRA HIGH-THROUGHPUT MINER
+# XIANGQI-RIM: DYNAMIC HARDWARE AUTO-SCALING ULTRA HIGH-THROUGHPUT MINER
 # ============================================================================
 # Application Gradio phục vụ khai thác dữ liệu cờ Tướng tự đấu phân tán trên
-# HuggingFace Spaces (12 CPUs, 64GB RAM).
-# Tối ưu 64GB RAM: 6GB TT (512MB×12) + 8GB Dual-Hash Sieve Bitset + Swap-and-Drain RAM Buffer.
-#
-# Định danh từ đơn tiếng Anh (Single-Word Identifier Protocol):
-# worker, games, depth, threads, seed, token, repo, status, metrics, logs,
-# proc, line, count, samples, speed, elapsed, start, file, path, api, info,
-# yield, run, stop, total, push, upload, text, view, memory, system, ram
+# hạ tầng phần cứng thực tế (tự động nhận diện CPU Cores và RAM hệ thống).
+# Tối ưu hóa bộ nhớ: TT RAM đa luồng + Dual-Hash Sieve Bitset + Swap-and-Drain RAM Buffer.
 # ============================================================================
 
 import os
@@ -18,6 +13,8 @@ import time
 import json
 import shutil
 import signal
+import gc
+import atexit
 import threading
 import subprocess
 try:
@@ -28,17 +25,77 @@ except ImportError:
 import gradio as gr
 from huggingface_hub import HfApi
 
-# Biến môi trường mặc định
-TOKEN = os.environ.get("HF_TOKEN", "")
+# Biến môi trường mặc định (Trỏ về repo NNUE dataset mới)
+TOKEN = os.environ.get("HF_TOKEN", os.environ.get("WRITE_TOKEN", ""))
 REPO = "hoduyquocbao/xiangqi-nnue-dataset"
 
 # Biến toàn cục theo dõi tiến trình background
 process = None
 running = False
 
+def get_cgroup_cpu_quota() -> float:
+    """Tự động khai phá giới hạn CPU quota thực tế bị cgroups/HuggingFace giới hạn."""
+    # 1. cgroups v1
+    q_file = "/sys/fs/cgroup/cpu/cpu.cfs_quota_us"
+    p_file = "/sys/fs/cgroup/cpu/cpu.cfs_period_us"
+    if os.path.exists(q_file) and os.path.exists(p_file):
+        try:
+            q = int(open(q_file).read().strip())
+            p = int(open(p_file).read().strip())
+            if q > 0 and p > 0:
+                return round(q / p, 2)
+        except Exception:
+            pass
+
+    # 2. cgroups v2
+    c2_file = "/sys/fs/cgroup/cpu.max"
+    if os.path.exists(c2_file):
+        try:
+            parts = open(c2_file).read().strip().split()
+            if len(parts) == 2 and parts[0] != "max":
+                q, p = int(parts[0]), int(parts[1])
+                if q > 0 and p > 0:
+                    return round(q / p, 2)
+        except Exception:
+            pass
+
+    # 3. sched_getaffinity
+    if hasattr(os, "sched_getaffinity"):
+        try:
+            affinity_cpus = len(os.sched_getaffinity(0))
+            if affinity_cpus > 0:
+                return float(affinity_cpus)
+        except Exception:
+            pass
+
+    return 0.0
+
+def get_system_specs():
+    """Nhận diện chính xác thông số phần cứng thực tế và khai phá CPU quota bị HuggingFace giới hạn."""
+    raw_logical = os.cpu_count() or 12
+    cgroup_cpus = get_cgroup_cpu_quota()
+
+    if cgroup_cpus > 0:
+        cpu_effective = max(1, int(cgroup_cpus))
+    else:
+        cpu_effective = min(raw_logical, 12)
+
+    cpu_logical = max(1, cpu_effective)
+
+    if HAS_PSUTIL:
+        phys = psutil.cpu_count(logical=False) or max(1, cpu_logical // 2)
+        cpu_physical = min(phys, cpu_logical)
+        mem_total = psutil.virtual_memory().total / (1024 ** 3)
+        mem_avail = psutil.virtual_memory().available / (1024 ** 3)
+    else:
+        cpu_physical = max(1, cpu_logical // 2)
+        mem_total = 64.0
+        mem_avail = 64.0
+
+    return cpu_logical, cpu_physical, mem_total, mem_avail, raw_logical, cgroup_cpus
+
 def setup(example_name: str = "21_ram64g_mine") -> str:
-    """Tự động kiểm tra phần cứng và biên dịch nhị phân Rust Native Engine 64GB RAM."""
-    # 1. Kiểm tra Rust toolchain
+    """Tự động kiểm tra phần cứng và biên dịch nhị phân Rust Native Engine."""
     cargo_bin = shutil.which("cargo")
     if not cargo_bin:
         home_cargo = os.path.expanduser("~/.cargo/bin/cargo")
@@ -50,18 +107,21 @@ def setup(example_name: str = "21_ram64g_mine") -> str:
             cargo_bin = root_cargo
             os.environ["PATH"] += ":/root/.cargo/bin"
         else:
-            print("🔨 Cài đặt Rust toolchain cho HuggingFace Space...")
+            print("🔨 Cài đặt Rust toolchain...")
             res = subprocess.run(
-                "curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y",
+                "curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain stable",
                 shell=True, capture_output=True, text=True
             )
             os.environ["PATH"] += f":{os.path.expanduser('~/.cargo/bin')}:/root/.cargo/bin"
             cargo_bin = shutil.which("cargo") or os.path.expanduser("~/.cargo/bin/cargo")
 
-    # 2. Biên dịch nhị phân example_name
+    rustup_bin = shutil.which("rustup") or os.path.expanduser("~/.cargo/bin/rustup")
+    if os.path.exists(rustup_bin):
+        subprocess.run([rustup_bin, "default", "stable"], capture_output=True)
+
     target_path = f"target/release/examples/{example_name}"
     if not os.path.exists(target_path):
-        print(f"⚡ Đang biên dịch Native Rust 64GB RAM Data Miner ({example_name})...")
+        print(f"⚡ Đang biên dịch Native Rust Data Miner ({example_name})...")
         cmd = [cargo_bin, "build", "--release", "--example", example_name]
         res = subprocess.run(cmd, capture_output=True, text=True)
         if res.returncode != 0:
@@ -72,61 +132,280 @@ def setup(example_name: str = "21_ram64g_mine") -> str:
     return target_path
 
 def hardware() -> str:
-    """Truy vấn thông tin phần cứng hệ thống (12 CPU, 64GB RAM)."""
-    cpu_logical = os.cpu_count() or 12
-    if HAS_PSUTIL:
-        cpu_physical = psutil.cpu_count(logical=False) or (cpu_logical // 2)
-        mem_total = psutil.virtual_memory().total / (1024 ** 3)
-        mem_avail = psutil.virtual_memory().available / (1024 ** 3)
-        mem_str = f"`{mem_avail:.1f} GB` / `{mem_total:.1f} GB`"
-    else:
-        cpu_physical = cpu_logical // 2
-        mem_str = "`64.0 GB` (HuggingFace Space)"
-
-    info = f"""### 🖥️ HẠ TẦNG PHẦN CỨNG 64GB RAM & 12 CPU CORES
-- **CPU Cores**: `{cpu_logical}` vCPUs (`{cpu_physical}` Physical Cores)
-- **RAM Khả Dụng**: {mem_str}
-- **Cấu hình RAM Engine v2.0**: `6 GB` TT (512MB×12) + `8 GB` Dual-Hash Sieve Bitset + Swap-and-Drain RAM Buffer
-- **Tốc độ dự kiến**: **~1,500 - 2,500 FEN/giây** (Zero Lock Contention & O(1) Dedup)
+    """Truy vấn thông tin phần cứng thực tế của hệ thống."""
+    cpu_logical, cpu_physical, mem_total, mem_avail, raw_logical, cgroup_cpus = get_system_specs()
+    
+    quota_str = f"`{cgroup_cpus:.1f} CPUs` (cgroups limit)" if cgroup_cpus > 0 else f"Tự động điều chỉnh theo hệ thống ({cpu_logical} Cores)"
+    info = f"""### 🖥️ HẠ TẦNG PHẦN CỨNG & CPU KHAI PHÁ THỰC TẾ (AUTO-SCALING)
+- **CPU Băng Thông Tối Đa**: `{cpu_logical} Cores` (Host Node: `{raw_logical}` vCPUs | Quota: {quota_str})
+- **Physical Cores Tối Ưu**: `{cpu_physical}` Physical Cores (Loại bỏ lock contention & cache miss)
+- **RAM Hệ Thống**: `{mem_avail:.1f} GB` khả dụng / `{mem_total:.1f} GB` tổng RAM
+- **Kiến Trúc RAM Engine v2.0**: TT (Transposition Table) đa luồng + Dual-Hash Sieve Bitset (O(1) Dedup) + Swap-and-Drain Buffer
+- **Vận Tốc Dự Kiến**: **~{cpu_logical * 200:,} - {cpu_logical * 400:,} FEN/giây** (Khai thác song song {cpu_logical} Cores)
 """
     return info
 
-def stop_mining():
-    """Dừng tiến trình khai thác dữ liệu đang chạy."""
+def get_running_miner_pids():
+    """Tìm tất cả PID của tiến trình Rust Miner đang chạy ngầm trong OS."""
+    pids = []
+    if HAS_PSUTIL:
+        for proc in psutil.process_iter(['pid', 'name', 'cmdline']):
+            try:
+                cmdline = proc.info.get('cmdline') or []
+                cmd_str = " ".join(cmdline)
+                if "21_ram64g_mine" in cmd_str:
+                    pids.append(proc.info['pid'])
+            except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
+                pass
+    else:
+        try:
+            res = subprocess.run(["pgrep", "-f", "21_ram64g_mine"], capture_output=True, text=True)
+            if res.returncode == 0:
+                pids = [int(p) for p in res.stdout.strip().split() if p.isdigit()]
+        except Exception:
+            pass
+    return pids
+
+SESSION_FILE = "data/active_session.json"
+
+def save_session_state(data: dict):
+    """Lưu thông tin phiên khai thác hiện tại vào file JSON để khôi phục khi reload."""
+    os.makedirs(os.path.dirname(SESSION_FILE), exist_ok=True)
+    try:
+        with open(SESSION_FILE, "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
+    except Exception:
+        pass
+
+def clear_session_state():
+    """Xóa file lưu phiên khai thác khi kết thúc hoặc dọn dẹp."""
+    if os.path.exists(SESSION_FILE):
+        try:
+            os.remove(SESSION_FILE)
+        except Exception:
+            pass
+
+def load_session_state() -> dict:
+    """Tải thông tin phiên khai thác từ file lưu trữ."""
+    if os.path.exists(SESSION_FILE):
+        try:
+            with open(SESSION_FILE, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except Exception:
+            pass
+    return {}
+
+def kill_all_miner_processes():
+    """Tiêu diệt hoàn toàn mọi tiến trình Rust Miner ngầm để giải phóng bộ nhớ RAM lập tức."""
     global process, running
     running = False
+    killed_count = 0
+
     if process and process.poll() is None:
         try:
             process.terminate()
-            process.wait(timeout=3)
+            process.wait(timeout=2)
         except Exception:
-            process.kill()
-    return "🛑 Đã yêu cầu dừng khai thác dữ liệu."
+            try:
+                process.kill()
+            except Exception:
+                pass
+        process = None
+
+    pids = get_running_miner_pids()
+    for pid in pids:
+        try:
+            if HAS_PSUTIL:
+                p = psutil.Process(pid)
+                p.kill()
+            else:
+                os.kill(pid, signal.SIGKILL)
+            killed_count += 1
+        except Exception:
+            pass
+
+    clear_session_state()
+    gc.collect()
+
+    cpu_logical, cpu_physical, mem_total, mem_avail, *_ = get_system_specs()
+    msg = (
+        f"🧹 **Đã giải phóng RAM & Dừng tiến trình ngầm thành công!**\n"
+        f"- Đã thu hồi bộ nhớ từ `{killed_count}` tiến trình Rust Engine.\n"
+        f"- **RAM Hệ Thống Khả Dụng Hiện Tại**: `{mem_avail:.2f} GB` / `{mem_total:.1f} GB`"
+    )
+    return msg
+
+def _cleanup_on_exit():
+    """Tự động dọn dẹp tiến trình con khi ứng dụng Python dừng."""
+    kill_all_miner_processes()
+
+atexit.register(_cleanup_on_exit)
+
+def stop_mining():
+    """Dừng tiến trình khai thác dữ liệu đang chạy và giải phóng RAM."""
+    return kill_all_miner_processes()
+
+def get_miner_process_details():
+    """Truy vấn thông tin chi tiết (PID, RAM đang dùng, Uptime, CPU %) của các tiến trình Rust Miner đang vận hành."""
+    details = []
+    if HAS_PSUTIL:
+        for proc in psutil.process_iter(['pid', 'name', 'cmdline', 'create_time', 'memory_info', 'cpu_percent']):
+            try:
+                cmdline = proc.info.get('cmdline') or []
+                cmd_str = " ".join(cmdline)
+                if "21_ram64g_mine" in cmd_str:
+                    pid = proc.info['pid']
+                    mem_info = proc.info.get('memory_info')
+                    rss_gb = (mem_info.rss / (1024 ** 3)) if mem_info else 0.0
+                    create_time = proc.info.get('create_time') or time.time()
+                    uptime_sec = max(0.0, time.time() - create_time)
+                    cpu_pct = proc.cpu_percent(interval=None)
+                    
+                    details.append({
+                        "pid": pid,
+                        "name": "21_ram64g_mine",
+                        "rss_gb": rss_gb,
+                        "uptime_sec": uptime_sec,
+                        "cpu_pct": cpu_pct
+                    })
+            except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
+                pass
+    return details
+
+def sync_on_load():
+    """Được gọi tự động khi trang Gradio được reload/mở mới để đồng bộ và hiển thị lại toàn bộ thông tin tiến trình thực tế."""
+    cpu_logical, cpu_physical, mem_total, mem_avail, raw_logical, cgroup_cpus = get_system_specs()
+    proc_details = get_miner_process_details()
+    pids = [d["pid"] for d in proc_details] or get_running_miner_pids()
+    session = load_session_state()
+
+    if proc_details or pids or running:
+        worker = session.get("worker", f"worker_{cpu_logical}cpu_{int(mem_total)}g")
+        games = session.get("games", 100000)
+        depth = session.get("depth", 4)
+        threads = session.get("threads", cpu_logical)
+        tt_mb = session.get("tt_mb", 512)
+        sieve_mb = session.get("sieve_mb", 8192)
+        seed = session.get("seed", 1)
+        out_file = session.get("out_file", "data/hf_space/output.jsonl")
+        start_time = session.get("start_time", time.time())
+        saved_samples = session.get("current_samples", 0)
+        saved_games = session.get("current_games", 0)
+
+        elapsed = max(0.1, time.time() - start_time)
+
+        current_samples = saved_samples
+        file_size_mb = 0.0
+        if os.path.exists(out_file):
+            try:
+                file_size_mb = os.path.getsize(out_file) / (1024 * 1024)
+                if current_samples == 0:
+                    with open(out_file, "r", encoding="utf-8") as f:
+                        current_samples = sum(1 for _ in f)
+            except Exception:
+                pass
+
+        speed = current_samples / elapsed
+        current_games = saved_games if saved_games > 0 else int(current_samples / 50)
+        pct = min(100, int(current_games / max(1, games) * 100))
+        eta_sec = (games - current_games) / (current_games / elapsed) if current_games > 0 else 0
+
+        total_tt_gb = (tt_mb * threads) / 1024.0
+        sieve_gb = sieve_mb / 1024.0
+        total_proc_ram = sum(d["rss_gb"] for d in proc_details) if proc_details else total_tt_gb + sieve_gb
+
+        proc_info_lines = []
+        for d in proc_details:
+            mins, secs = divmod(int(d['uptime_sec']), 60)
+            hours, mins = divmod(mins, 60)
+            time_str = f"{hours}h {mins}m {secs}s" if hours > 0 else f"{mins}m {secs}s"
+            proc_info_lines.append(
+                f"- 🔹 **PID `{d['pid']}`**: RAM chiếm: `{d['rss_gb']:.2f} GB` | "
+                f"Uptime: `{time_str}` | CPU: `{d['cpu_pct']:.1f}%`"
+            )
+        proc_str = "\n".join(proc_info_lines) if proc_info_lines else f"- 🔹 Active PIDs: `{pids}`"
+
+        status_md = (
+            f"### ⚡ THÔNG TIN PHIÊN KHAI THÁC ĐANG CHẠY REAL-TIME (KHÔI PHỤC TỰ ĐỘNG)\n"
+            f"- **Worker Node**: `{worker}` | **Seed**: `{seed}`\n"
+            f"- **Tiến độ ván cờ**: `{current_games:,} / {games:,}` ván (`{pct}%`)\n"
+            f"- **Số mẫu FEN sạch 100%**: `{current_samples:,}` mẫu\n"
+            f"- **Vận tốc khai thác**: `{speed:.1f}` mẫu/s (`{int(speed * 60):,}` mẫu/phút)\n"
+            f"- **Thời gian đã chạy**: `{elapsed / 60:.1f}` phút (`{elapsed:.1f}s`) | **ETA**: `{eta_sec / 60:.1f}` phút\n"
+            f"- **Tệp Dữ Liệu**: `{out_file}` (`{file_size_mb:.2f} MB`)\n"
+            f"### ⚙️ Tiến Trình Ngầm Đang Vận Hành OS:\n{proc_str}\n\n"
+            f"⛔ **LƯU Ý**: Hệ thống **ĐÃ KHÓA** chạy phiên mới để bảo vệ bộ nhớ. Bấm **'🛑 DỪNG KHAI THÁC'** hoặc **'🧹 GIẢI PHÓNG RAM'** nếu bạn muốn kết thúc phiên này."
+        )
+
+        metrics_md = (
+            f"| Chỉ Số Tiến Trình Đang Chạy Ngầm | Giá Trị Thực Tế |\n|---|---|\n"
+            f"| 🎮 **Ván Cờ Mined** | `{current_games:,}` / `{games:,}` ({pct}%) |\n"
+            f"| 🧩 **Mẫu FEN Sạch** | `{current_samples:,}` mẫu |\n"
+            f"| ⚡ **Tốc Độ Khai Thác** | `{speed:.1f}` FEN/s |\n"
+            f"| 📁 **Dung Lượng File Output** | `{file_size_mb:.2f} MB` |\n"
+            f"| 🧠 **RAM Tiến Trình Chiếm** | `{total_proc_ram:.2f} GB` |\n"
+            f"| 🧠 **RAM Hệ Thống Khả Dụng** | `{mem_avail:.2f} GB` / `{mem_total:.1f} GB` |\n"
+            f"| 💻 **CPU vCPUs** | `{cpu_logical}` vCPUs (Host Node: `{raw_logical}`) |\n"
+            f"| ⛔ **Khóa Chạy Mới** | `ĐÃ KHÓA (Phiên PID {pids} đang active)` |"
+        )
+
+        last_logs = session.get("last_logs", [])
+        if last_logs:
+            log_text = "📜 Nhật ký khôi phục từ phiên đang chạy ngầm:\n" + "\n".join(last_logs[-25:])
+        else:
+            log_text = (
+                f"📊 ĐÃ KHÔI PHỤC TRẠNG THÁI PHIÊN KHAI THÁC CHẠY NGẦM:\n"
+                f"• Worker: {worker} | Seed: {seed} | Depth: {depth}\n"
+                f"• Tiến độ: {current_games:,}/{games:,} ván cờ | {current_samples:,} mẫu FEN\n"
+                f"• Tốc độ: {speed:.1f} FEN/s | Tệp xuất: {out_file} ({file_size_mb:.2f} MB)\n"
+                f"• Tiến trình OS PID: {pids}\n"
+                f"Bấm '🛑 Dừng Khai Thác' hoặc '🧹 Giải Phóng RAM' nếu bạn muốn dừng phiên này."
+            )
+    else:
+        status_md = f"Sẵn sàng khai thác dữ liệu trên hệ thống `{cpu_logical}` vCPUs & `{mem_total:.1f} GB` RAM..."
+        metrics_md = "Chờ khởi chạy..."
+        log_text = "Hệ thống sẵn sàng."
+
+    return status_md, metrics_md, log_text
 
 def start_mining(worker, games, depth, threads, tt_mb, sieve_mb, seed, token, repo):
-    """Khởi chạy và stream tiến trình khai thác dữ liệu đa luồng 64GB RAM."""
+    """Khởi chạy và stream tiến trình khai thác dữ liệu đa luồng theo phần cứng thực tế."""
     global process, running
 
-    if running:
+    proc_details = get_miner_process_details()
+    active_pids = [d["pid"] for d in proc_details] or get_running_miner_pids()
+    
+    if running or active_pids:
+        proc_info_lines = [
+            f"  - **PID `{d['pid']}`**: RAM chiếm: `{d['rss_gb']:.2f} GB` | CPU: `{d['cpu_pct']:.1f}%`"
+            for d in proc_details
+        ]
+        proc_str = "\n".join(proc_info_lines) if proc_info_lines else f"  - Active PIDs: `{active_pids}`"
+        
         yield (
-            "⚠️ Tiến trình khai thác khác đang chạy!",
-            "Vui lòng bấm 'Dừng Khai Thác' trước khi bắt đầu phiên mới.",
-            ""
+            f"⛔ **KHÔNG THỂ KHỞI CHẠY PHIÊN MỚI (NGUY HIỂM QUÁ TẢI RAM)**\n"
+            f"### ⚙️ Đang có tiến trình ngầm vận hành:\n{proc_str}\n\n"
+            f"- **Đã chặn khởi chạy phiên mới** để bảo vệ RAM/CPU không bị quá tải hoặc treo máy.\n"
+            f"- Vui lòng bấm **'🛑 DỪNG KHAI THÁC'** hoặc **'🧹 GIẢI PHÓNG RAM'** để kết thúc phiên cũ trước khi bắt đầu.",
+            "⚠️ **ĐÃ KHÓA: Đang có phiên ngầm đang chạy.**",
+            f"⛔ TỪ CHỐI KHỞI CHẠY: Tiến trình PID {active_pids} đang hoạt động trong OS.\n"
+            f"Vui lòng dừng phiên cũ trước khi bắt đầu phiên khai thác mới."
         )
         return
 
     running = True
-    worker = (worker or "hf_space_worker_64g").strip().replace(" ", "_")
+    cpu_logical, cpu_physical, mem_total, mem_avail, raw_logical, cgroup_cpus = get_system_specs()
+
+    worker = (worker or f"worker_{cpu_logical}cpu_{int(mem_total)}g").strip().replace(" ", "_")
     token = (token or TOKEN).strip()
     repo = (repo or REPO).strip()
-    threads = int(threads or 12)
-    games = int(games or 50000)
+    threads = int(threads or cpu_logical)
+    games = int(games or 100000)
     depth = int(depth or 4)
     tt_mb = int(tt_mb or 512)
     sieve_mb = int(sieve_mb or 8192)
     seed = int(seed or 1)
 
-    # Khởi tạo binary 64GB RAM optimized miner
     try:
         binary = setup("21_ram64g_mine")
     except Exception as e:
@@ -134,13 +413,11 @@ def start_mining(worker, games, depth, threads, tt_mb, sieve_mb, seed, token, re
         yield (f"❌ Lỗi khởi tạo Engine: {str(e)}", "", "")
         return
 
-    # Đường dẫn file output
     stamp = int(time.time())
     out_dir = "data/hf_space"
     os.makedirs(out_dir, exist_ok=True)
     out_file = f"{out_dir}/selfplay_{worker}_s{seed}_{stamp}.jsonl"
 
-    # Cấu hình biến môi trường cho Rust Engine
     env = os.environ.copy()
     env["GAMES"] = str(games)
     env["DEPTH"] = str(depth)
@@ -158,9 +435,9 @@ def start_mining(worker, games, depth, threads, tt_mb, sieve_mb, seed, token, re
     total_ram_gb = total_tt_gb + sieve_gb + 2.0
 
     yield (
-        f"### 🚀 ĐÃ KHỞI CHẠY ENGINE 64GB RAM v2.0 ({threads}-CPUs)\n- **Worker Node**: `{worker}`\n- **Mục tiêu**: `{games:,}` ván cờ (Depth {depth})\n- **TT RAM**: `{tt_mb} MB`/thread × {threads} = `{total_tt_gb:.1f} GB`\n- **Sieve RAM**: `{sieve_gb:.1f} GB` Dual-Hash O(1) Bitset\n- **Tổng RAM**: `{total_ram_gb:.1f} GB` / 64.0 GB\n- **File**: `{out_file}`",
+        f"### 🚀 ĐÃ KHỞI CHẠY ENGINE MULTI-THREAD v2.0 ({threads}/{cpu_logical}-CPUs)\n- **Worker Node**: `{worker}`\n- **Mục tiêu**: `{games:,}` ván cờ (Depth {depth})\n- **TT RAM**: `{tt_mb} MB`/thread × {threads} = `{total_tt_gb:.1f} GB`\n- **Sieve RAM**: `{sieve_gb:.1f} GB` Dual-Hash O(1) Bitset\n- **Tổng RAM Cấp**: `{total_ram_gb:.1f} GB` / `{mem_total:.1f} GB` RAM Hệ Thống\n- **File Output**: `{out_file}`",
         f"**Khởi tạo**: Đang nạp {total_tt_gb:.1f}GB TT + {sieve_gb:.1f}GB Sieve...",
-        "Đang kích hoạt Native 64GB RAM Engine v2.0 (Swap-and-Drain)..."
+        "Đang kích hoạt Native Multi-Core Engine v2.0 (Swap-and-Drain)..."
     )
 
     process = subprocess.Popen(
@@ -171,6 +448,25 @@ def start_mining(worker, games, depth, threads, tt_mb, sieve_mb, seed, token, re
         text=True,
         bufsize=1
     )
+
+    session_info = {
+        "worker": worker,
+        "games": games,
+        "depth": depth,
+        "threads": threads,
+        "tt_mb": tt_mb,
+        "sieve_mb": sieve_mb,
+        "seed": seed,
+        "out_file": out_file,
+        "start_time": start_time,
+        "token": token,
+        "repo": repo,
+        "pid": process.pid,
+        "current_samples": 0,
+        "current_games": 0,
+        "last_logs": []
+    }
+    save_session_state(session_info)
 
     current_samples = 0
     current_games = 0
@@ -199,29 +495,33 @@ def start_mining(worker, games, depth, threads, tt_mb, sieve_mb, seed, token, re
                 except Exception:
                     pass
 
+        session_info["current_samples"] = current_samples
+        session_info["current_games"] = current_games
+        session_info["last_logs"] = logs[-25:]
+        save_session_state(session_info)
+
         elapsed = time.time() - start_time
         speed = current_samples / max(0.1, elapsed)
         pct = int(current_games / max(1, games) * 100)
         eta_sec = (games - current_games) / (current_games / max(0.1, elapsed)) if current_games > 0 else 0
 
-        # Đo lường RAM và CPU
         if HAS_PSUTIL:
             mem_used = psutil.virtual_memory().used / (1024 ** 3)
             cpu_percent = psutil.cpu_percent(interval=None)
-            mem_str = f"`{mem_used:.2f} GB` / `64.0 GB`"
-            cpu_str = f"`{cpu_percent:.1f}%` (trên `{threads}`/12 vCPUs)"
+            mem_str = f"`{mem_used:.2f} GB` / `{mem_total:.1f} GB`"
+            cpu_str = f"`{cpu_percent:.1f}%` (trên `{threads}`/{cpu_logical} vCPUs)"
         else:
-            mem_str = f"`~{total_tt_gb + 2.0:.1f} GB` (High RAM Active)"
-            cpu_str = f"`100%` (trên `{threads}`/12 vCPUs)"
+            mem_str = f"`~{total_ram_gb:.1f} GB` (High RAM Active)"
+            cpu_str = f"`100%` (trên `{threads}`/{cpu_logical} vCPUs)"
 
-        status_md = f"""### ⚡ TIẾN TRÌNH KHAI THÁC 64GB RAM REAL-TIME STREAMING
+        status_md = f"""### ⚡ TIẾN TRÌNH KHAI THÁC MULTI-CORE REAL-TIME STREAMING
 - **Worker**: `{worker}` | **Seed**: `{seed}`
 - **Tiến độ ván cờ**: `{current_games:,} / {games:,}` ván (`{pct}%`)
 - **Số mẫu FEN chuẩn luật**: `{current_samples:,}` mẫu
 - **Vận tốc khai thác**: `{speed:.1f}` mẫu/s (`{int(speed * 60):,}` mẫu/phút)
 - **Thời gian đã chạy**: `{elapsed:.1f}`s | **ETA**: `{eta_sec / 60:.1f}` phút
 """
-        metrics_md = f"""| Chỉ Số Phần Cứng 64GB RAM & Dữ Liệu | Giá Trị Thực Tế |
+        metrics_md = f"""| Chỉ Số Phần Cứng Thực Tế & Dữ Liệu | Giá Trị Thực Tế |
 |---|---|
 | 🎮 **Ván Cờ Mined** | `{current_games:,}` / `{games:,}` |
 | 🧩 **Mẫu FEN Độc Nhất** | `{current_samples:,}` mẫu |
@@ -235,7 +535,6 @@ def start_mining(worker, games, depth, threads, tt_mb, sieve_mb, seed, token, re
         log_text = "\n".join(logs[-30:])
         yield (status_md, metrics_md, log_text)
 
-    # Chờ tiến trình kết thúc nếu chưa terminate
     if process.poll() is None:
         process.terminate()
         process.wait()
@@ -243,7 +542,7 @@ def start_mining(worker, games, depth, threads, tt_mb, sieve_mb, seed, token, re
     running = False
     total_elapsed = time.time() - start_time
 
-    # Upload dữ liệu lên HuggingFace Hub nếu có token
+    # Upload dữ liệu lên HuggingFace Hub
     yield (
         f"### 📤 ĐANG ĐỒNG BỘ DỮ LIỆU LÊN HUGGINGFACE HUB...\n- File: `{out_file}`\n- Target Repo: `{repo}`",
         "**Uploading Dataset...**",
@@ -267,13 +566,15 @@ def start_mining(worker, games, depth, threads, tt_mb, sieve_mb, seed, token, re
                 )
                 hf_success = True
                 hf_url = f"https://huggingface.co/datasets/{repo}/blob/main/{repo_path}"
-                # Tự động cập nhật README.md thống kê trên HuggingFace Hub
+
+                # Tự động cập nhật README.md thống kê trên HuggingFace Dataset Hub
                 try:
                     sys.path.append(os.path.abspath("scripts"))
                     import update_dataset_readme
                     update_dataset_readme.update_readme_on_hub(token=token, repo_id=repo)
                 except Exception as ex:
                     print(f"⚠️ Thống kê README chưa cập nhật: {ex}")
+
             except Exception as e:
                 hf_url = f"❌ Lỗi Upload: {str(e)}"
         else:
@@ -281,7 +582,7 @@ def start_mining(worker, games, depth, threads, tt_mb, sieve_mb, seed, token, re
     else:
         hf_url = "⚠️ Không tìm thấy file dữ liệu hoặc file rỗng."
 
-    final_status = f"""### 🏆 KẾT THÚC PHIÊN KHAI THÁC DỮ LIỆU 64GB RAM
+    final_status = f"""### 🏆 KẾT THÚC PHIÊN KHAI THÁC DỮ LIỆU REAL-TIME
 - **Worker Node**: `{worker}`
 - **Tổng số ván cờ hoàn tất**: `{current_games:,}` / `{games:,}` ván
 - **Tổng mẫu FEN sạch 100%**: `{current_samples:,}` mẫu
@@ -303,68 +604,80 @@ def start_mining(worker, games, depth, threads, tt_mb, sieve_mb, seed, token, re
     yield (final_status, final_metrics, final_logs)
 
 def create_app():
-    """Xây dựng giao diện web Gradio 4+ tối ưu cho HF Space 12 CPU & 64GB RAM."""
+    """Xây dựng giao diện web Gradio 4+ tự động thích ứng thông số phần cứng thực tế."""
+    cpu_logical, cpu_physical, mem_total, mem_avail, raw_logical, cgroup_cpus = get_system_specs()
+
+    # Thích ứng thông số RAM/CPU mặc định theo phần cứng thực tế
+    default_threads = cpu_logical
+    default_tt = min(2048, max(256, int((mem_total * 1024 * 0.25) / max(1, cpu_logical))))
+    default_sieve = min(65536, max(4096, int(mem_total * 1024 * 0.25)))
+
     theme = gr.themes.Soft(
         primary_hue="red",
         secondary_hue="amber",
         neutral_hue="slate"
     )
 
-    with gr.Blocks(theme=theme, title="Xiangqi R1 Ultra 64GB RAM Data Miner") as app:
-        gr.Markdown("""
-# 🏯 XIANGQI-RIM: ULTRA 64GB RAM DATA MINER
-### 🚀 Hệ Thống Tận Dụng Triệt Để 64GB RAM & 12 CPUs Khai Thác Dữ Liệu Cờ Tướng Tự Đấu Hiệu Năng Tối Thượng
+    with gr.Blocks(theme=theme, title=f"Xiangqi RIM Data Miner ({cpu_logical} CPUs | {int(mem_total)}GB RAM)") as app:
+        gr.Markdown(f"""
+# 🏯 XIANGQI-RIM: DYNAMIC ULTRA HIGH-PERFORMANCE DATA MINER
+### 🚀 Tận Dụng Triệt Để Hạ Tầng Thực Tế ({cpu_logical} Cores & {int(mem_total)}GB RAM) Khai Thác Dữ Liệu Cờ Tướng Tự Đấu
 ---
-Vận hành **Native Rust 64GB RAM Engine v2.0** với TT tối ưu cho depth, 8GB Dual-Hash Sieve Bitset (O(1) Dedup) và Swap-and-Drain RAM Buffer không block worker threads. Tự động upload lên **HuggingFace Dataset Hub** (`hoduyquocbao/xiangqi-nnue-dataset`).
+Vận hành **Native Rust Engine v2.0** tự động scaling theo CPU Quota thực tế (`{cpu_logical}` Cores) và RAM hệ thống (`{mem_total:.1f} GB`). Sử dụng Dual-Hash Sieve Bitset (O(1) Dedup) và Swap-and-Drain RAM Buffer. Tự động upload lên **HuggingFace Dataset Hub** (`{REPO}`).
 """)
 
         gr.Markdown(hardware())
 
         with gr.Row():
             with gr.Column(scale=1):
-                gr.Markdown("### ⚙️ Cấu Hình Khai Thác 64GB RAM")
+                gr.Markdown(f"### ⚙️ Cấu Hình Khai Thác Tối Ưu ({cpu_logical} Cores / {int(mem_total)}GB RAM)")
 
                 worker_input = gr.Textbox(
                     label="👤 Worker Name (Tên node khai thác)",
-                    value="hf_space_worker_64g",
+                    value=f"worker_{cpu_logical}cpu_{int(mem_total)}g",
                     placeholder="Nhập tên node..."
                 )
                 games_slider = gr.Slider(
                     label="🎮 Số ván cờ tự đấu (Target Games)",
-                    minimum=500,
-                    maximum=500000,
-                    value=50000,
-                    step=1000
+                    minimum=1000,
+                    maximum=2000000,
+                    value=100000,
+                    step=5000
                 )
                 depth_slider = gr.Slider(
                     label="🧠 Độ sâu tìm kiếm Engine (Search Depth)",
                     minimum=3,
-                    maximum=8,
+                    maximum=12,
                     value=4,
                     step=1
                 )
                 threads_slider = gr.Slider(
-                    label="⚡ Số luồng CPU song song (Threads)",
+                    label=f"⚡ Số luồng CPU song song (Threads - Tối ưu max {cpu_logical})",
                     minimum=1,
-                    maximum=12,
-                    value=12,
-                    step=1
+                    maximum=raw_logical,
+                    value=default_threads,
+                    step=1,
+                    info=f"Tự động thích ứng theo CPU quota: {cpu_logical} Cores (Host Server: {raw_logical} vCPUs)"
                 )
+                
+                max_tt = max(4096, int((mem_total * 1024 * 0.5) / max(1, cpu_logical)))
                 tt_mb_slider = gr.Slider(
                     label="🧠 RAM Transposition Table mỗi Thread (MB)",
-                    minimum=128,
-                    maximum=4096,
-                    value=512,
-                    step=128,
-                    info="512 MB × 12 threads = 6 GB TT (depth 4 đủ dùng, tăng cho depth 6+)"
+                    minimum=64,
+                    maximum=max_tt,
+                    value=default_tt,
+                    step=64,
+                    info=f"{default_tt} MB × {cpu_logical} threads = {(default_tt * cpu_logical)/1024:.1f} GB TT RAM"
                 )
+
+                max_sieve = max(8192, int(mem_total * 1024 * 0.5))
                 sieve_mb_slider = gr.Slider(
                     label="🧬 RAM Sieve Dual-Hash Bitset (MB)",
                     minimum=1024,
-                    maximum=16384,
-                    value=8192,
+                    maximum=max_sieve,
+                    value=default_sieve,
                     step=1024,
-                    info="8192 MB = 8 GB = 64 tỷ bit flags → tỷ lệ false positive ≈ 0%"
+                    info=f"{default_sieve} MB = {default_sieve/1024:.1f} GB Sieve Bitset cho O(1) Dedup"
                 )
                 seed_input = gr.Number(
                     label="🎲 PRNG Base Seed (Dùng cho multi-instance)",
@@ -384,7 +697,7 @@ Vận hành **Native Rust 64GB RAM Engine v2.0** với TT tối ưu cho depth, 8
 
                 with gr.Row():
                     start_btn = gr.Button(
-                        "🚀 BẮT ĐẦU KHAI THÁC (64GB RAM & 12 CPU)",
+                        f"🚀 BẮT ĐẦU KHAI THÁC ({cpu_logical} CPUs & {int(mem_total)}GB RAM)",
                         variant="primary",
                         size="lg"
                     )
@@ -393,10 +706,15 @@ Vận hành **Native Rust 64GB RAM Engine v2.0** với TT tối ưu cho depth, 8
                         variant="stop",
                         size="lg"
                     )
+                    free_ram_btn = gr.Button(
+                        "🧹 GIẢI PHÓNG RAM",
+                        variant="secondary",
+                        size="lg"
+                    )
 
             with gr.Column(scale=2):
-                gr.Markdown("### 📊 Trạng Thái & Báo Cáo Real-Time 64GB RAM")
-                status_box = gr.Markdown("Sẵn sàng khai thác dữ liệu với TT tối ưu + 8GB Dual-Hash Sieve Bitset v2.0...")
+                gr.Markdown("### 📊 Trạng Thái & Báo Cáo Real-Time Hệ Thống")
+                status_box = gr.Markdown(f"Sẵn sàng khai thác dữ liệu trên hệ thống `{cpu_logical}` vCPUs & `{mem_total:.1f} GB` RAM...")
                 metrics_box = gr.Markdown("Chờ khởi chạy...")
                 logs_box = gr.Textbox(
                     label="📜 Nhật ký Native Engine Real-Time (Streaming Logs)",
@@ -417,9 +735,22 @@ Vận hành **Native Rust 64GB RAM Engine v2.0** với TT tối ưu cho depth, 8
             outputs=[status_box]
         )
 
+        free_ram_btn.click(
+            fn=kill_all_miner_processes,
+            inputs=[],
+            outputs=[status_box]
+        )
+
+        app.load(
+            fn=sync_on_load,
+            inputs=[],
+            outputs=[status_box, metrics_box, logs_box]
+        )
+
     return app
 
 if __name__ == "__main__":
+    port = int(os.environ.get("PORT", os.environ.get("GRADIO_SERVER_PORT", 7860)))
     demo = create_app()
     demo.queue()
-    demo.launch(server_name="0.0.0.0", server_port=7860)
+    demo.launch(server_name="0.0.0.0", server_port=port)
