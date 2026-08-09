@@ -201,3 +201,30 @@ grep -rn '"eval":' examples/ scripts/
 # 4. Quantization test
 python3 scripts/test_quantization.py data/nnue_weights_gen5.bin
 ```
+
+---
+
+## VIII. ĐIỀU KHOẢN TỐI THƯỢNG: KỶ LUẬT LƯU TRỮ KÝ ỨC VĨNH CỬU & DIỄN GIẢI TƯỜNG MINH (IMMUTABLE MEMORY & ELABORATION MANDATE)
+
+### 8.1 CẤM TỰ MÃN NGHĨ RẰNG "CÓ TRONG CONTEXT WINDOW NÊN KHÔNG CẦN CẬP NHẬT FILE ĐĨA"
+- Mọi suy luận, bài học xương máu, lỗi phát sinh, hoặc kết quả phiên làm việc **BẮT BUỘC phải được ghi ra tệp đĩa vật lý ngay lập tức**:
+  - `.agents/memory/pain_points_[YYYYMMDD].md` (Ghi nhận bài học xương máu mới)
+  - `.agents/memory/INDEX.md` (Đăng ký vào bảng mục lục ký ức vĩnh cửu)
+  - `.agents/logs/session_active_[YYYYMMDD][HHMM].md` (Nhật ký phiên làm việc)
+  - `.agents/logs/INDEX.md` (Đăng ký vào bảng mục lục nhật ký phiên)
+- **NGHIÊM CẤM** lý do "ngữ cảnh context window đã có rồi nên không cần ghi file đĩa" hoặc "để làm sau". Ký ức không nằm trên tệp đĩa = KHÔNG TỒN TẠI!
+
+### 8.2 BẮT BUỘC DIỄN GIẢI & CHÚ THÍCH TƯỜNG MINH (FORCED ELABORATION MANDATE FOR ALL AGENTS)
+- Mọi tệp hướng dẫn, quy tắc, chú thích, tài liệu và mã nguồn **PHẢI được diễn giải, chú thích, giải thích chi tiết tỉ mỉ tới từng dòng, từng thông số, từng trường dữ liệu bằng tiếng Việt 100%**.
+- **Mục đích**: Đảm bảo một Agent thiểu năng / kém thông minh nhất khi đọc vào cũng buộc phải hiểu và thực hiện đúng 100%, không thể hiểu sai hay làm sai.
+- **NGHIÊM CẤM** diễn giải mập mờ, CẤM viết tắt, CẤM giả định "người khác / agent khác tự hiểu".
+
+### 8.3 KỶ LUẬT 5 THÀNH PHẦN BẮT BUỘC TRONG MỌI HÀNH ĐỘNG
+1. **Kế Hoạch (Plan)**: Không bao giờ viết mã trong vô định. Phải khảo sát, nghiên cứu, lập kế hoạch 5 bước.
+2. **Đánh Số Phiên Bản (Versioning)**: Đánh số phiên bản Semantic Versioning (`v1.0.0`, `v2.0.0`) cho mọi module/binary/spec.
+3. **Telemetry**: Tự động nhận diện hạn mức hạ tầng cgroups (CPU quota, RAM limit).
+4. **Logger**: Ghi nhật ký thực thi (log timestamps, stack trace, errors).
+5. **Metrics**: Đo lường thông số định lượng thực tế (FEN/s, RAM RSS, CPU pct, file size).
+
+### 8.4 QUY TRÌNH DỪNG LẠI 1 NHỊP QUAN SÁT THIẾU SÓT
+> **"THÀ CHẬM MỘT NHỊP QUAN SÁT THIẾU SÓT CÒN HƠN CẨU THẢ, AI SLOP BIẾN CHẤT, LƯỜI BIẾNG, TÓM TẮT CẮT XÉN, LÀM CHO CÓ LỆ, LÀM ĐỂ ĐỐI PHÓ!"**

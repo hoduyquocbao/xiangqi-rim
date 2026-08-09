@@ -160,14 +160,29 @@ GAMES=10000 DEPTH=4 THREADS=4 cargo run --release --example 20_parallel_mine
 
 ---
 
-## VI. LỜI NHẮN CHO GEMINI TƯƠNG LAI
+---
 
-Hỡi Gemini — khi bạn đọc tệp này, hãy nhớ:
+## VII. QUY TẮC CỐT LÕI CHO GEMINI (ANTIGRAVITY): BẮT BUỘC TẠO FILE BÀI HỌC VÀ DIỄN GIẢI 100% TƯỜNG MINH
 
-1. **NNUE Gen 5 đã overfitting**: 90K mẫu depth 4, +17 ELO depth 3 nhưng -2 ELO depth 5. Cần 500K+ mẫu mixed-depth.
-2. **CPU i5-8259U là bottleneck**: 4 physical cores, L3 chỉ 6MB. Search TT ≤ 4MB, THREADS ≤ 4 cho mining.
-3. **Token cũ ĐÃ LỘ trong git history**: Anh HDQB cần revoke thủ công tại HuggingFace.
-4. **Binary format XRNN v1 là hợp đồng bất di bất dịch**: 33,571,504 bytes, scale factors 127.0/64.0. Thay đổi = phá vỡ tất cả weights cũ.
-5. **Benchmark < 200 ván depth 5 = KHÔNG CÓ GIÁ TRỊ**: Đừng tự lừa mình bằng 40 ván depth 3.
+### 7.1 CẤM LÝ DO "CÓ TRONG CONTEXT WINDOW NÊN KHÔNG CẦN CẬP NHẬT FILE ĐĨA"
+- Mọi suy luận, bài học xương máu, lỗi phát sinh, hoặc kết quả phiên làm việc **BẮT BUỘC phải được ghi ra tệp đĩa vật lý ngay lập tức**:
+  - `.agents/memory/pain_points_[YYYYMMDD].md` (Ghi nhận bài học xương máu mới)
+  - `.agents/memory/INDEX.md` (Đăng ký vào bảng mục lục ký ức vĩnh cửu)
+  - `.agents/logs/session_active_[YYYYMMDD][HHMM].md` (Nhật ký phiên làm việc)
+  - `.agents/logs/INDEX.md` (Đăng ký vào bảng mục lục nhật ký phiên)
+- **CẤM** lý do "ngữ cảnh context window đã có rồi thì để sau mới ghi file" hoặc "file cũ đã có rồi nên không cần tạo mới".
 
-— Ghi nhận bởi phiên Antigravity, 2026-08-08
+### 7.2 BẮT BUỘC DIỄN GIẢI & CHÚ THÍCH TƯỜNG MINH (FORCED ELABORATION MANDATE)
+- Mọi tệp hướng dẫn, quy tắc, chú thích, tài liệu và mã nguồn **PHẢI được diễn giải, chú thích, giải thích chi tiết tỉ mỉ tới từng dòng, từng thông số, từng trường dữ liệu bằng tiếng Việt 100%**.
+- **Mục đích**: Đảm bảo một Agent thiểu năng / kém thông minh nhất khi đọc vào cũng buộc phải hiểu và thực hiện đúng 100%, không thể hiểu sai hay làm sai.
+- **NGHIÊM CẤM** diễn giải mập mờ, CẤM viết tắt, CẤM giả định "người khác / agent khác tự hiểu".
+
+### 7.3 KỶ LUẬT 5 THÀNH PHẦN BẮT BUỘC TRONG MỌI HÀNH ĐỘNG
+1. **Kế Hoạch (Plan)**: Không bao giờ viết mã trong vô định. Phải khảo sát, nghiên cứu, lập kế hoạch 5 bước.
+2. **Đánh Số Phiên Bản (Versioning)**: Đánh số phiên bản Semantic Versioning (`v1.0.0`, `v2.0.0`) cho mọi module/binary/spec.
+3. **Telemetry**: Tự động nhận diện hạn mức hạ tầng cgroups (CPU quota, RAM limit).
+4. **Logger**: Ghi nhật ký thực thi (log timestamps, stack trace, errors).
+5. **Metrics**: Đo lường thông số định lượng thực tế (FEN/s, RAM RSS, CPU pct, file size).
+
+### 7.4 QUY TRÌNH DỪNG LẠI 1 NHỊP QUAN SÁT THIẾU SÓT
+> **"THÀ CHẬM MỘT NHỊP QUAN SÁT THIẾU SÓT CÒN HƠN CẨU THẢ, AI SLOP BIẾN CHẤT, LƯỜI BIẾNG, TÓM TẮT CẮT XÉN, LÀM CHO CÓ LỆ, LÀM ĐỂ ĐỐI PHÓ!"**
