@@ -141,6 +141,7 @@ def get_system_specs():
 
 def setup(example_name: str = "23_jrcp3_ram64g_miner") -> str:
     """Tự động kiểm tra phần cứng và biên dịch nhị phân Rust Native Engine."""
+    import subprocess
     cargo_bin = shutil.which("cargo")
     if not cargo_bin:
         home_cargo = os.path.expanduser("~/.cargo/bin/cargo")
