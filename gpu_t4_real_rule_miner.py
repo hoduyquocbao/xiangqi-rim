@@ -1193,9 +1193,14 @@ if HAS_TORCH:
             h = F.gelu(self.fc2(h))
             return self.head(h) * 100.0
 
-    def board_to_tensor(board: Board, device) -> object:
-        """Chuyển đổi mảng 90 ô cờ của Board thành PyTorch Tensor dạng Long trên thiết bị `device`."""
-        return torch.tensor(board.grid, dtype=torch.long, device=device)
+def board_to_tensor(board: Board, device=None):
+    """Chuyển đổi mảng 90 ô cờ của Board thành PyTorch Tensor hoặc mảng ô cờ an toàn."""
+    if HAS_TORCH and torch is not None and device is not None:
+        try:
+            return torch.tensor(board.grid, dtype=torch.long, device=device)
+        except Exception:
+            pass
+    return board.grid
 
 # ==============================================================================
 # PHẦN IV: CHECKPOINT PHYSICAL UNIT TESTS & DATA VALIDATOR FIREWALL
@@ -1518,9 +1523,13 @@ def mine(target_games: int = 1000, depth: int = 12):
     dataset_repo = "hoduyquocbao/xiangqi-r1-nnue-dataset"
     last_push_time = time.time()
 
-    import psutil, platform
+    import platform
     cpu_count = os.cpu_count() or 1
-    ram_gb = psutil.virtual_memory().total / (1024 ** 3) if hasattr(psutil, 'virtual_memory') else 12.0
+    try:
+        import psutil
+        ram_gb = psutil.virtual_memory().total / (1024 ** 3)
+    except Exception:
+        ram_gb = 12.0
     python_ver = sys.version.split()[0]
     torch_ver = torch.__version__ if HAS_TORCH else "N/A"
     vram_allocated = (torch.cuda.memory_allocated(0) / (1024 ** 3)) if (use_gpu and torch and torch.cuda.is_available()) else 0.0
@@ -1611,8 +1620,8 @@ def mine(target_games: int = 1000, depth: int = 12):
 
             visited[s].add(fen)
 
-            # Temperature sampling khai cuộc
-            if plies[s] < 10 and random.random() < 0.25:
+            # Temperature sampling khai cuộc hoặc fallback khi không dùng GPU
+            if (plies[s] < 10 and random.random() < 0.25) or not use_gpu:
                 slot_info.append((s, legal, -1, 0, True))
             else:
                 offset = len(all_tensors)
@@ -1630,12 +1639,15 @@ def mine(target_games: int = 1000, depth: int = 12):
         # === GPU MEGA-BATCH EVALUATION (2000-4000 positions / batch) ===
         all_scores = None
         eval_start = time.time()
-        if all_tensors:
-            mega_batch = torch.stack(all_tensors)
-            with torch.no_grad():
-                with torch.amp.autocast('cuda'):
-                    all_scores = evaluator(mega_batch).squeeze(-1)
-            torch.cuda.synchronize()
+        if use_gpu and all_tensors and evaluator is not None:
+            try:
+                mega_batch = torch.stack(all_tensors)
+                with torch.no_grad():
+                    with torch.amp.autocast('cuda'):
+                        all_scores = evaluator(mega_batch).squeeze(-1)
+                torch.cuda.synchronize()
+            except Exception as e:
+                all_scores = None
         eval_ms = (time.time() - eval_start) * 1000.0
 
         # REAL-TIME HEARTBEAT PROGRESS LOGGING (Mỗi 3 giây NẢY SỐ MỘT LẦN)
@@ -1651,9 +1663,9 @@ def mine(target_games: int = 1000, depth: int = 12):
 
         # Phân phối kết quả về từng slot
         for s, legal, offset, count, is_random in slot_info:
-            if is_random:
+            if is_random or not use_gpu or all_scores is None or count == 0:
                 best_move = random.choice(legal)
-                best_score = 0
+                best_score = boards[s].material(boards[s].turn) - boards[s].material(1 - boards[s].turn)
                 encoded_move = best_move.encode()
             else:
                 game_scores = all_scores[offset:offset + count]
