@@ -450,3 +450,19 @@ $$\text{Điểm Chất Lượng Agent} = \text{Kế Hoạch Rõ Ràng} + \text{V
 2. **CẤU HÌNH TỐI ƯU ĐÃ ĐƯỢC NẠP VÀO SLIDER UI**:
    - Hệ thống tự động cập nhật các thanh trượt slider về cấu hình vàng: **16 Cores | Depth 4 | TT 2048 MB | Sieve 32768 MB** (~64GB RAM tổng cộng được sử dụng hiệu quả).
    - **Nâng Cấp Phiên Bản Mới**: `v5.9.0-production` (Build `2026-08-09 22:45:00 ICT`).
+
+---
+
+### XXXV. XÂY DỰNG VÀ KÍCH HOẠT ENGINE GPU T4 MINER THUẦN PYTORCH FP16 TENSOR CORES (v6.0.0-gpu)
+
+1. **CHUYỂN ĐỔI KIẾN TRÚC THEO CHỈ ĐẠO CỦA ANH HDQB**:
+   - Thay vì phụ thuộc vào CPU 2-cores chậm chạp trên Colab Free, đã xây dựng engine mới [`gpu_t4_depth12_miner.py`](file:///Users/hdqb/workspaces/xiangqi-rim/gpu_t4_depth12_miner.py) vận hành **100% bằng PyTorch CUDA FP16 Autocast Tensor Cores** trên card đồ họa **NVIDIA Tesla T4 (15.36 GB VRAM)**.
+   - **Cấu hình GPU Batched Vectorized Inference**:
+     - `batch_size = 4,096 FENs/step`
+     - Chế độ Mixed Precision: `torch.amp.autocast('cuda')` ép 2,560 nhân CUDA và Tensor Cores chạy tối đa băng thông VRAM.
+     - Tự động sinh Thought Chain JRCP 3.0 với 14 chiều kích phân tích và nhãn Centipawn Score ở Depth 12.
+     - Tích hợp Auto-Push background thread đẩy checkpoint `jrcp3_d12_gpu_t4_*.jsonl` về repo HuggingFace Hub `hoduyquocbao/xiangqi-r1-nnue-dataset` mỗi 10 steps.
+
+2. **THỰC THI TRỰC TIẾP QUA COLAB MCP**:
+   - Đã cập nhật và kích hoạt thành công cell trên Google Colab Cloud Runtime, ghi nhận thông số khởi chạy: `🚀 [GPU T4 MINER] Launching gpu_t4_depth12_miner.py on Tesla T4 FP16 Tensor Cores...`
+   - **Nâng Cấp Phiên Bản Mới**: `v6.0.0-gpu` (Build `2026-08-09 23:10:00 ICT`).
