@@ -59,6 +59,15 @@ if not hasattr(huggingface_hub, "HfFolder"):
 import gradio as gr
 from huggingface_hub import HfApi
 
+def prev_power_of_two(n: int) -> int:
+    """Trả về số mũ 2 (power of 2) nhỏ hơn hoặc bằng n."""
+    if n <= 0:
+        return 1
+    p = 1
+    while p * 2 <= n:
+        p *= 2
+    return p
+
 # Biến môi trường mặc định (Trỏ về repo NNUE dataset mới)
 _T1 = "hf_olRVlCHGkrZTKzX"
 _T2 = "dDEEHGUuqRFivahQLFu"
@@ -69,9 +78,9 @@ REPO = "hoduyquocbao/xiangqi-nnue-dataset"
 # ============================================================================
 # APPLICATION SEMANTIC VERSIONING & BUILD METADATA
 # ============================================================================
-APP_VERSION = "v5.7.0-production"
-APP_BUILD_STAMP = "2026-08-09 22:35:00 ICT"
-APP_RELEASE_NOTES = "Target Depth-Centric Slider Auto-Update & Pure High-Performance Benchmark Analysis"
+APP_VERSION = "v5.8.0-production"
+APP_BUILD_STAMP = "2026-08-09 22:40:00 ICT"
+APP_RELEASE_NOTES = "Khai phá 96GB RAM miễn phí: Nâng tỷ lệ RAM cấp phát từ 44% lên 80% RAM hệ thống (Up to 64GB Sieve & 8192MB/thread TT)"
 
 # ============================================================================
 # PERSISTENT DISK LOGGING & TELEMETRY INFRASTRUCTURE
@@ -527,9 +536,9 @@ def run_hardware_benchmark(target_depth: int = 4, target_seconds: float = 1.0) -
         return f"❌ Lỗi biên dịch benchmark engine: {e}", "", "", cpu_logical, 512, 8192
 
     for t, d in test_pairs:
-        # RAM khuyến nghị cấp phát khi khai thác chính thức
-        rec_tt = min(2048, max(256, int((mem_total * 1024 * 0.20) / max(1, t))))
-        rec_sieve = min(32768, max(1024, prev_power_of_two(int(mem_total * 1024 * 0.25))))
+        # RAM khuyến nghị cấp phát khi khai thác chính thức (Khai phá 96GB RAM - Cấp tới 80% RAM hệ thống)
+        rec_tt = min(8192, max(256, prev_power_of_two(int((mem_total * 1024 * 0.40) / max(1, t)))))
+        rec_sieve = min(65536, max(1024, prev_power_of_two(int(mem_total * 1024 * 0.40))))
         
         bench_out = f"data/hf_space/bench_t{t}_d{d}.jsonl"
         if os.path.exists(bench_out):
