@@ -6,23 +6,12 @@
 import os, sys, time, json, math, random, threading
 from pathlib import Path
 
-# Kiểm tra khả năng tương thích của hệ thống với PyTorch & HuggingFace Hub (Phòng ngự thép)
+# Cấu hình độc lập 100% Pure Python Engine (Triệt tiêu rủi ro bug PyTorch Colab C++ registrations)
 HAS_TORCH = False
 torch = None
 nn = None
 F = None
 HfApi = None
-
-try:
-    import torch
-    import torch.nn as nn
-    import torch.nn.functional as F
-    HAS_TORCH = True
-except BaseException:
-    HAS_TORCH = False
-    torch = None
-    nn = None
-    F = None
 
 try:
     from huggingface_hub import HfApi
