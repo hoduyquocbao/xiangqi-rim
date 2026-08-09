@@ -390,6 +390,15 @@ def get_miner_process_details():
                 pass
     return details
 
+def get_file_size_mb(filepath: str) -> float:
+    """Trả về dung lượng tệp theo MB an toàn tuyệt đối (bảo vệ khỏi FileNotFoundError)."""
+    if filepath and os.path.exists(filepath):
+        try:
+            return round(os.path.getsize(filepath) / (1024 * 1024), 2)
+        except Exception:
+            pass
+    return 0.0
+
 def sync_on_load():
     """Được gọi tự động khi trang Gradio được reload/mở mới để đồng bộ và hiển thị lại toàn bộ thông tin tiến trình thực tế."""
     cpu_logical, cpu_physical, mem_total, mem_avail, raw_logical, cgroup_cpus = get_system_specs()
@@ -434,11 +443,10 @@ def sync_on_load():
         elapsed = max(0.1, time.time() - start_time)
 
         current_samples = 0
-        file_size_mb = 0.0
+        file_size_mb = get_file_size_mb(out_file)
         tail_log_lines = []
         if os.path.exists(out_file):
             try:
-                file_size_mb = os.path.getsize(out_file) / (1024 * 1024)
                 with open(out_file, "r", encoding="utf-8") as f:
                     lines = f.readlines()
                     current_samples = len(lines)
@@ -779,8 +787,9 @@ def start_mining(worker, games, depth, threads, tt_mb, sieve_mb, seed, token, re
     hf_success = False
     hf_url = "Chưa cấu hình HF_TOKEN"
     repo_path = f"community/{os.path.basename(out_file)}"
+    out_size_mb = get_file_size_mb(out_file)
 
-    if os.path.exists(out_file) and os.path.getsize(out_file) > 0:
+    if out_size_mb > 0:
         if token and len(token) > 10:
             try:
                 api = HfApi()
@@ -823,7 +832,7 @@ def start_mining(worker, games, depth, threads, tt_mb, sieve_mb, seed, token, re
 | 🏆 **Tổng Ván Cờ** | `{current_games:,}` ván |
 | 🧩 **Mẫu FEN Sạch** | `{current_samples:,}` mẫu |
 | ⚡ **Tốc Độ Trung Bình** | `{current_samples / max(0.1, total_elapsed):.1f}` FEN/s |
-| 📁 **File Size** | `{os.path.getsize(out_file) / (1024 * 1024):.2f} MB` |
+| 📁 **File Size** | `{out_size_mb:.2f} MB` |
 | ☁️ **HuggingFace Hub** | `{repo_path}` |
 """
     final_logs = "\n".join(logs[-30:]) + f"\n\n✅ ĐÃ HOÀN TẤT & LƯU KẾT QUẢ!\n{hf_url}"
