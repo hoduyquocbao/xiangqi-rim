@@ -69,9 +69,9 @@ REPO = "hoduyquocbao/xiangqi-nnue-dataset"
 # ============================================================================
 # APPLICATION SEMANTIC VERSIONING & BUILD METADATA
 # ============================================================================
-APP_VERSION = "v5.1.0-production"
-APP_BUILD_STAMP = "2026-08-09 22:10:00 ICT"
-APP_RELEASE_NOTES = "Fix Benchmark Zero-FEN Bug & Enable Lightweight 64MB RAM Instant Startup Benchmark Mode"
+APP_VERSION = "v5.2.0-production"
+APP_BUILD_STAMP = "2026-08-09 22:15:00 ICT"
+APP_RELEASE_NOTES = "Default Hardware Benchmark to 21_ram64g_mine Pure Engine & Add Startup Pre-Compilation for HuggingFace Space"
 
 # ============================================================================
 # PERSISTENT DISK LOGGING & TELEMETRY INFRASTRUCTURE
@@ -282,6 +282,19 @@ def setup(example_name: str = "23_jrcp3_ram64g_miner") -> str:
 
     return target_path
 
+def precompile_binaries():
+    """Tự động biên dịch ngầm các binary nhị phân Rust Miner ngay khi ứng dụng khởi động."""
+    def _worker():
+        for example_name in ["21_ram64g_mine", "23_jrcp3_ram64g_miner"]:
+            try:
+                if os.path.exists(f"examples/{example_name}.rs"):
+                    setup(example_name)
+            except Exception as e:
+                print(f"⚠️ Precompile {example_name} error: {e}")
+
+    thread = threading.Thread(target=_worker, daemon=True)
+    thread.start()
+
 def hardware() -> str:
     """Truy vấn thông tin phần cứng thực tế của hệ thống."""
     cpu_logical, cpu_physical, mem_total, mem_avail, raw_logical, cgroup_cpus = get_system_specs()
@@ -476,7 +489,7 @@ def run_hardware_benchmark(target_seconds: int = 2) -> tuple[str, str, str, int,
     benchmark_report_lines.append(f"| Cores | Depth | TT RAM | Sieve RAM | Ván Mined | Mẫu FEN POS | Vận Tốc FEN/s | RAM Used | Ma Trận Trọng Số (Score) | Trạng Thái |")
     benchmark_report_lines.append(f"|---|---|---|---|---|---|---|---|---|---|")
 
-    binary_target = "23_jrcp3_ram64g_miner" if os.path.exists("examples/23_jrcp3_ram64g_miner.rs") else "21_ram64g_mine"
+    binary_target = "21_ram64g_mine" if os.path.exists("examples/21_ram64g_mine.rs") else "23_jrcp3_ram64g_miner"
     try:
         binary = setup(binary_target)
     except Exception as e:
@@ -1408,6 +1421,7 @@ if __name__ == "__main__":
     print(f"📅 BUILD STAMP: {APP_BUILD_STAMP}")
     print(f"📝 RELEASE NOTES: {APP_RELEASE_NOTES}")
     print("============================================================================")
+    precompile_binaries()
     port = int(os.environ.get("PORT", os.environ.get("GRADIO_SERVER_PORT", 7860)))
     demo = create_app()
     demo.queue()

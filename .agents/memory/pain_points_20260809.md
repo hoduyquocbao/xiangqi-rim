@@ -347,3 +347,16 @@ $$\text{Điểm Chất Lượng Agent} = \text{Kế Hoạch Rõ Ràng} + \text{V
    - **Tối ưu RAM Chế Độ Benchmark (`TT_MB=64` & `SIEVE_MB=64`)**: Cấu hình chế độ benchmark nạp bộ nhớ 64MB siêu tốc trong 0.001 giây, giúp CPU nhảy ngay vào tính toán FEN positions từ miligiây đầu tiên!
    - **Kết quả kiểm thử thực tế**: Thu hoạch được từ **540 FEN đến 4,800 FEN** trên mỗi ô ma trận, vận tốc đo đạc thực đạt **2,397.7 FEN/s**, điểm số phân hóa rõ ràng từ **141.10 Pts đến 1,414.16 Pts**!
    - **Nâng Cấp Phiên Bản Mới**: `v5.1.0-production` (Build `2026-08-09 22:10:00 ICT`).
+
+---
+
+### XXVII. CHUYỂN BỘ BENCHMARK SANG 21_RAM64G_MINE THUẦN VÀ THÊM PRE-COMPILATION KHỞI ĐỘNG (v5.2.0-production)
+
+1. **GIẢI THÍCH LÝ DO DÙNG 21_RAM64G_MINE THAY VÌ 23_JRCP3_RAM64G_MINER KHI BENCHMARK**:
+   - `23_jrcp3_ram64g_miner` là bộ sinh dữ liệu JRCP 3.0 chuyên dụng (với 14 chiều kích thought chain, 8 hàm phân tích chuyên sâu). Khi đo đạc năng lực xử lý thuần FEN/s của CPU/Hardware, việc dùng engine thuần `21_ram64g_mine` cho phép đo chính xác băng thông tính toán phần cứng mà không bị ảnh hưởng bởi overhead chuỗi JSON phức tạp.
+   - Khi khởi chạy trên HuggingFace Spaces container, nếu chưa có tệp nhị phân release, lần bấm nút benchmark đầu tiên sẽ gây ra `cargo build` ngầm mất 25s khiến Gradio HTTP request bị timeout.
+
+2. **GIẢI PHÁP ĐÃ THỰC THI (Commit `v5.2.0-production`)**:
+   - **Tự động Pre-Compile khi khởi động App (`precompile_binaries()`)**: Ngay khi ứng dụng Gradio khởi chạy, `precompile_binaries()` biên dịch ngầm `21_ram64g_mine` và `23_jrcp3_ram64g_miner` trong background thread. Khi người dùng bấm nút trên Web UI, tệp nhị phân đã sẵn sàng 100%!
+   - **Mặc định Benchmark Engine bằng `21_ram64g_mine`**: Đã cập nhật `run_hardware_benchmark()` mặc định sử dụng `21_ram64g_mine` (và hỗ trợ `BENCHMARK=1` instant flush).
+   - **Nâng Cấp Phiên Bản Mới**: `v5.2.0-production` (Build `2026-08-09 22:15:00 ICT`).
