@@ -46,6 +46,13 @@ _DEFAULT_TOKEN = _T1 + _T2
 TOKEN = os.environ.get("HF_TOKEN", os.environ.get("WRITE_TOKEN", _DEFAULT_TOKEN))
 REPO = "hoduyquocbao/xiangqi-nnue-dataset"
 
+# ============================================================================
+# APPLICATION SEMANTIC VERSIONING & BUILD METADATA
+# ============================================================================
+APP_VERSION = "v2.5.0-production"
+APP_BUILD_STAMP = "2026-08-09 20:38:00 ICT"
+APP_RELEASE_NOTES = "cgroups RAM Limit + Auto-Sync Timer + Live Version Header"
+
 # Biến toàn cục theo dõi tiến trình background
 process = None
 running = False
@@ -185,11 +192,12 @@ def hardware() -> str:
     cpu_logical, cpu_physical, mem_total, mem_avail, raw_logical, cgroup_cpus = get_system_specs()
     
     quota_str = f"`{cgroup_cpus:.1f} CPUs` (cgroups limit)" if cgroup_cpus > 0 else f"Tự động điều chỉnh theo hệ thống ({cpu_logical} Cores)"
-    info = f"""### 🖥️ HẠ TẦNG PHẦN CỨNG & CPU KHAI PHÁ THỰC TẾ (AUTO-SCALING)
+    info = f"""### 🖥️ HẠ TẦNG PHẦN CỨNG & TELEMETRY (`{APP_VERSION}`)
+- **Phiên Bản App**: `{APP_VERSION}` (Build `{APP_BUILD_STAMP}`)
 - **CPU Băng Thông Tối Đa**: `{cpu_logical} Cores` (Host Node: `{raw_logical}` vCPUs | Quota: {quota_str})
 - **Physical Cores Tối Ưu**: `{cpu_physical}` Physical Cores (Loại bỏ lock contention & cache miss)
-- **RAM Hệ Thống**: `{mem_avail:.1f} GB` khả dụng / `{mem_total:.1f} GB` tổng RAM
-- **Kiến Trúc RAM Engine v2.0**: TT (Transposition Table) đa luồng + Dual-Hash Sieve Bitset (O(1) Dedup) + Swap-and-Drain Buffer
+- **RAM Container Hệ Thống**: `{mem_avail:.1f} GB` khả dụng / `{mem_total:.1f} GB` cgroups limit
+- **Kiến Trúc RAM Engine**: TT (Transposition Table) đa luồng + Dual-Hash Sieve Bitset (O(1) Dedup) + Swap-and-Drain Buffer
 - **Vận Tốc Dự Kiến**: **~{cpu_logical * 200:,} - {cpu_logical * 400:,} FEN/giây** (Khai thác song song {cpu_logical} Cores)
 """
     return info
@@ -674,12 +682,14 @@ def create_app():
         neutral_hue="slate"
     )
 
-    with gr.Blocks(theme=theme, title=f"Xiangqi RIM Data Miner ({cpu_logical} CPUs | {int(mem_total)}GB RAM)") as app:
+    with gr.Blocks(theme=theme, title=f"Xiangqi RIM Data Miner {APP_VERSION} ({cpu_logical} CPUs | {int(mem_total)}GB RAM)") as app:
         gr.Markdown(f"""
-# 🏯 XIANGQI-RIM: DYNAMIC ULTRA HIGH-PERFORMANCE DATA MINER
+# 🏯 XIANGQI-RIM: DYNAMIC ULTRA HIGH-PERFORMANCE DATA MINER `{APP_VERSION}`
+> 📌 **Build Stamp**: `{APP_BUILD_STAMP}` | **Release Notes**: `{APP_RELEASE_NOTES}`
+
 ### 🚀 Tận Dụng Triệt Để Hạ Tầng Thực Tế ({cpu_logical} Cores & {int(mem_total)}GB RAM) Khai Thác Dữ Liệu Cờ Tướng Tự Đấu
 ---
-Vận hành **Native Rust Engine v2.0** tự động scaling theo CPU Quota thực tế (`{cpu_logical}` Cores) và RAM hệ thống (`{mem_total:.1f} GB`). Sử dụng Dual-Hash Sieve Bitset (O(1) Dedup) và Swap-and-Drain RAM Buffer. Tự động upload lên **HuggingFace Dataset Hub** (`{REPO}`).
+Vận hành **Native Rust Engine {APP_VERSION}** tự động scaling theo CPU Quota thực tế (`{cpu_logical}` Cores) và RAM container hệ thống (`{mem_total:.1f} GB`). Sử dụng Dual-Hash Sieve Bitset (O(1) Dedup) và Swap-and-Drain RAM Buffer. Tự động upload lên **HuggingFace Dataset Hub** (`{REPO}`).
 """)
 
         gr.Markdown(hardware())
@@ -813,6 +823,11 @@ Vận hành **Native Rust Engine v2.0** tự động scaling theo CPU Quota th�
     return app
 
 if __name__ == "__main__":
+    print("============================================================================")
+    print(f"🚀 XIANGQI-RIM APPLICATION VERSION: {APP_VERSION}")
+    print(f"📅 BUILD STAMP: {APP_BUILD_STAMP}")
+    print(f"📝 RELEASE NOTES: {APP_RELEASE_NOTES}")
+    print("============================================================================")
     port = int(os.environ.get("PORT", os.environ.get("GRADIO_SERVER_PORT", 7860)))
     demo = create_app()
     demo.queue()
