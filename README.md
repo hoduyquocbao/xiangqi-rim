@@ -2,7 +2,7 @@
 title: Xiangqi R1 Data Miner
 emoji: 🏯
 colorFrom: red
-colorTo: amber
+colorTo: yellow
 sdk: gradio
 sdk_version: 5.16.0
 app_file: app.py
