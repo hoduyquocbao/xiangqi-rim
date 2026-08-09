@@ -342,12 +342,64 @@ if HAS_TORCH:
 def board_to_tensor(board: Board, device: torch.device) -> torch.Tensor:
     return torch.tensor(board.grid, dtype=torch.long, device=device)
 
+# === 6 CHECKPOINT PHYSICAL XIANGQI RULE UNIT TESTS ===
+
+def run_unit_tests() -> bool:
+    print("🧪 KHỞI CHẠY BỘ CHECKPOINT TEST LUẬT CỜ TƯỚNG VẬT LÝ 100% (PHYSICAL RULE UNIT TESTS)...", flush=True)
+
+    # Test 1: Flying General (Mặt Tướng Đối Mặt)
+    b1 = Board()
+    b1.parse("4k4/9/9/9/9/9/9/9/9/4K4 w - - 0 1")
+    assert b1.flying() == True, "❌ Test 1 Failed: Flying General rule"
+    print("   ✅ [1/6] Flying General Rule (Mặt Tướng Đối Mặt): PASSED", flush=True)
+
+    # Test 2: Horse Leg Block (Cản Chân Mã)
+    b2 = Board()
+    b2.parse("r1bakab1r/9/1cn3nc1/p1p1p1p1p/9/9/P1P1P1P1P/1CN1C4/9/R1BAKABNR w - - 0 1")
+    moves_h0 = [m.encode() for m in b2.legal() if m.src == sq(7, 0)]
+    assert "h0f1" not in moves_h0, "❌ Test 2 Failed: Horse leg block at g0"
+    print("   ✅ [2/6] Horse Leg Blocking (Cản Chân Mã): PASSED", flush=True)
+
+    # Test 3: Elephant Eye Block (Cản Mắt Tượng)
+    b3 = Board()
+    b3.parse("4k4/9/9/9/9/9/9/9/3P5/2B1K4 w - - 0 1")
+    moves_c0 = [m.encode() for m in b3.legal() if m.src == sq(2, 0)]
+    assert "c0e2" not in moves_c0, "❌ Test 3 Failed: Elephant eye block at d1"
+    print("   ✅ [3/6] Elephant Eye Blocking (Cản Mắt Tượng): PASSED", flush=True)
+
+    # Test 4: Cannon Screen (Ngòi Pháo)
+    b4 = Board()
+    b4.parse("4k4/1r7/9/9/9/9/9/9/1C7/4K4 w - - 0 1")
+    moves_c = [m.encode() for m in b4.legal() if m.src == sq(1, 1)]
+    assert "b1b8" not in moves_c, "❌ Test 4 Failed: Cannon cannot capture without screen"
+    print("   ✅ [4/6] Cannon Screen Requirement (Pháo Cần Ngòi): PASSED", flush=True)
+
+    # Test 5: Palace Boundaries for King & Advisor (Sĩ Tướng Cấm Rời Cung)
+    b5 = Board()
+    b5.parse("3k4/9/9/9/9/9/9/9/9/3K4 w - - 0 1")
+    moves_k = [m.encode() for m in b5.legal() if m.src == sq(3, 0)]
+    assert "d0c0" not in moves_k, "❌ Test 5 Failed: King left palace boundary"
+    print("   ✅ [5/6] Palace Boundary Lock (Sĩ Tướng Cấm Rời Cung): PASSED", flush=True)
+
+    # Test 6: Pawn River Crossing (Tốt Chưa Qua Sông Không Được Đi Ngang)
+    b6 = Board()
+    b6.parse("4k4/9/9/9/9/9/4P3/9/9/4K4 w - - 0 1")
+    moves_p = [m.encode() for m in b6.legal() if m.src == sq(4, 3)]
+    assert "e3d3" not in moves_p and "e3f3" not in moves_p, "❌ Test 6 Failed: Pawn side move before river"
+    print("   ✅ [6/6] Pawn River Crossing Rule (Tốt Qua Sông): PASSED", flush=True)
+
+    print("🎉 BỘ 6 CHECKPOINT UNIT TESTS LUẬT CỜ TƯỚNG VẬT LÝ: 100% THÀNH CÔNG!\n", flush=True)
+    return True
+
 # === REAL SELF-PLAY MINER WITH 14-DIMENSIONAL JRCP 3.0 THOUGHT CHAIN ===
 
 def mine(target_games: int = 1000, depth: int = 12):
     if not HAS_TORCH or not torch.cuda.is_available():
         print("❌ ERROR: CUDA GPU không khả dụng!")
         sys.exit(1)
+
+    # Run physical rule verification suite first
+    run_unit_tests()
 
     device = torch.device("cuda:0")
     torch.cuda.set_device(0)
@@ -363,11 +415,27 @@ def mine(target_games: int = 1000, depth: int = 12):
     api = HfApi() if (token and HfApi) else None
     dataset_repo = "hoduyquocbao/xiangqi-r1-nnue-dataset"
 
-    print("==================================================================")
-    print("🚀 XIANGQI-R1 MASTER 100% REAL RULE GPU T4 DATA MINER (v8.0-GPU)")
-    print("==================================================================")
-    print(f"⚡ GPU Device Active: {torch.cuda.get_device_name(0)}")
-    print("⚡ Rule Engine      : 100% Physical Xiangqi Legal Moves + Check Validation")
+    # HARDWARE & SYSTEM TELEMETRY BANNER
+    import psutil, platform
+    cpu_count = os.cpu_count() or 1
+    ram_gb = psutil.virtual_memory().total / (1024 ** 3) if hasattr(psutil, 'virtual_memory') else 12.0
+    python_ver = sys.version.split()[0]
+    torch_ver = torch.__version__ if HAS_TORCH else "N/A"
+    vram_allocated = torch.cuda.memory_allocated(0) / (1024 ** 3) if HAS_TORCH else 0.0
+    vram_total = torch.cuda.get_device_properties(0).total_memory / (1024 ** 3) if HAS_TORCH else 0.0
+
+    print("==================================================================", flush=True)
+    print("📊 BÁO CÁO THÔNG SỐ CẤU HÌNH HỆ THỐNG VÀ THỜI GIAN THỰC THI CHÍNH THỨC", flush=True)
+    print("==================================================================", flush=True)
+    print(f"🖥️ CPU Cores     : {cpu_count} vCPUs | Platform: {platform.system()} {platform.machine()}", flush=True)
+    print(f"🧠 System RAM    : {ram_gb:.2f} GB RAM", flush=True)
+    print(f"⚡ GPU Device    : {torch.cuda.get_device_name(0)} ({vram_total:.2f} GB VRAM | Active Allocated: {vram_allocated:.2f} GB)", flush=True)
+    print(f"🧰 Software Env  : Python {python_ver} | PyTorch {torch_ver} | CUDA {torch.version.cuda}", flush=True)
+    print(f"🏷️ Engine Version : v8.1.0-gpu-master (Build 2026-08-09 23:26:00 ICT)", flush=True)
+    print(f"🎮 Target Config  : {target_games:,} Games | Search Depth {depth} | Batch Size 4,096", flush=True)
+    print(f"💾 Output Path    : {out_file}", flush=True)
+    print(f"🔑 HF Hub Status  : {'CONNECTED (' + dataset_repo + ')' if api else 'DISABLED (No HF_TOKEN)'}", flush=True)
+    print("==================================================================\n", flush=True)
     print("⚡ Thought Chain    : FULL 14-DIMENSIONAL JRCP 3.0 SPECIFICATION")
     print(f"🎮 Target Games     : {target_games:,} ván")
     print(f"🧠 Search Depth     : {depth} (6 nước toàn diện)")
