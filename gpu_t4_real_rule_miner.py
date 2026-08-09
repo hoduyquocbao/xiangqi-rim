@@ -637,6 +637,7 @@ def mine(target_games: int = 1000, depth: int = 12):
             if game_idx % 20 == 0 and api and token:
                 def async_push():
                     try:
+                        api.create_repo(repo_id=dataset_repo, repo_type="dataset", exist_ok=True, token=token)
                         api.upload_file(
                             path_or_fileobj=str(out_file),
                             path_in_repo=f"master_gpu_d12/{out_file.name}",
