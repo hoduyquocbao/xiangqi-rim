@@ -69,9 +69,9 @@ REPO = "hoduyquocbao/xiangqi-nnue-dataset"
 # ============================================================================
 # APPLICATION SEMANTIC VERSIONING & BUILD METADATA
 # ============================================================================
-APP_VERSION = "v4.0.0-production"
-APP_BUILD_STAMP = "2026-08-09 21:42:00 ICT"
-APP_RELEASE_NOTES = "Release Hardware Auto-Benchmark Sweep Engine & Decision Weight Matrix Optimal Config Finder"
+APP_VERSION = "v4.1.0-production"
+APP_BUILD_STAMP = "2026-08-09 21:45:00 ICT"
+APP_RELEASE_NOTES = "UI Multi-Panel Redesign: Split Monolithic Log Box into Tabbed Console, Telemetry Events, & Hardware Benchmark Matrix"
 
 # ============================================================================
 # PERSISTENT DISK LOGGING & TELEMETRY INFRASTRUCTURE
@@ -444,10 +444,13 @@ def get_file_size_mb(filepath: str) -> float:
             pass
     return 0.0
 
-def reset_logs_to_blank() -> str:
+def reset_logs_to_blank() -> tuple[str, str]:
     """Xóa sạch và đưa toàn bộ tệp log đĩa cứng & telemetry về mặc định trắng (blank)."""
     TelemetryLogger.clear_all_logs()
-    return "🧹 Đã đưa toàn bộ tệp log đĩa cứng (logs/miner_stdout_stderr.log) và telemetry (logs/system_telemetry.jsonl) về mặc định trắng (blank) 100%!"
+    return (
+        "🧹 Đã đưa tệp log đĩa cứng (logs/miner_stdout_stderr.log) về mặc định trắng (blank) 100%!",
+        "🧹 Đã đưa tệp telemetry (logs/system_telemetry.jsonl) về mặc định trắng (blank) 100%!"
+    )
 
 def run_hardware_benchmark(target_seconds: int = 5) -> tuple[str, str, str, int, int, int]:
     """Chạy thử nghiệm Micro-Benchmark đa luồng thực tế trong 5s để tự động chấm điểm Ma Trận Trọng Số và tìm ra Cấu hình Nhanh Nhất (FEN/s) trên phần cứng này."""
@@ -577,8 +580,9 @@ def purge_current_output_file() -> tuple[str, str, str]:
     cpu_logical, cpu_physical, mem_total, mem_avail, *_ = get_system_specs()
     status_md = f"### 🗑️ ĐÃ DỌN DẸP TỆP DỮ LIỆU & RESET LOG ĐĨA VỀ BLANK THÀNH CÔNG\n{deleted_msg}\n- **Log đĩa**: Đã đưa `logs/system_telemetry.jsonl` và `logs/miner_stdout_stderr.log` về trắng (blank).\n- **Hệ thống**: Sẵn sàng bắt đầu lượt khai thác mới."
     metrics_md = "Hệ thống sạch 100% (Logs reset blank)."
-    logs_text = f"{deleted_msg}\n\n🧹 Đã reset toàn bộ log đĩa & telemetry về trắng (blank). Hệ thống sẵn sàng cho lượt khai thác mới!"
-    return status_md, metrics_md, logs_text
+    console_text = f"{deleted_msg}\n\n🧹 Đã reset console log về trắng (blank 100%). Hệ thống sẵn sàng!"
+    telemetry_text = f"🧹 Đã reset telemetry event log về trắng (blank 100%)."
+    return status_md, metrics_md, console_text, telemetry_text
 
 def list_dataset_files():
     """Liệt kê danh sách tất cả các tệp dataset .jsonl/.json trên đĩa."""
@@ -740,23 +744,12 @@ def sync_on_load():
             log_text = f"📜 Nhật ký Real-Time ({current_samples:,} mẫu FEN | {file_size_mb:.2f} MB):\n" + "\n".join(tail_log_lines)
         elif session.get("last_logs"):
             log_text = "📜 Nhật ký khôi phục từ phiên đang chạy ngầm:\n" + "\n".join(session["last_logs"][-25:])
-        else:
-            log_text = (
-                f"📊 ĐÃ KHÔI PHỤC TRẠNG THÁI PHIÊN KHAI THÁC CHẠY NGẦM:\n"
-                f"• Worker: {worker} | Seed: {seed} | Depth: {depth}\n"
-                f"• Tiến độ: {current_games:,}/{games:,} ván cờ | {current_samples:,} mẫu FEN\n"
-                f"• Tốc độ: {speed:.1f} FEN/s | Tệp xuất: {out_file} ({file_size_mb:.2f} MB)\n"
-                f"• Tiến trình OS PID: {pids}\n"
-                f"Bấm '🛑 Dừng Khai Thác' hoặc '🧹 Giải Phóng RAM' nếu bạn muốn dừng phiên này."
-            )
-    else:
-        status_md = f"Sẵn sàng khai thác dữ liệu trên hệ thống `{cpu_logical}` vCPUs & `{mem_total:.1f} GB` RAM..."
-        metrics_md = "Chờ khởi chạy..."
-        events = TelemetryLogger.read_tail_telemetry_events(10)
-        disk_logs = TelemetryLogger.read_tail_disk_logs(25)
-        log_text = f"📜 NHẬT KÝ TELEMETRY EVENTS (logs/system_telemetry.jsonl):\n{events}\n\n📜 NHẬT KÝ ĐĨA CỨNG (logs/miner_stdout_stderr.log):\n{disk_logs}"
+    events = TelemetryLogger.read_tail_telemetry_events(15)
+    disk_logs = TelemetryLogger.read_tail_disk_logs(35)
+    miner_console_text = f"📜 NHẬT KÝ CONSOLE REAL-TIME (logs/miner_stdout_stderr.log):\n{disk_logs if disk_logs else (log_text if 'log_text' in locals() and log_text else 'Console rỗng.')}"
+    telemetry_events_text = f"📡 NHẬT KÝ TELEMETRY EVENTS (logs/system_telemetry.jsonl):\n{events if events else 'Telemetry rỗng.'}"
 
-    return status_md, metrics_md, log_text
+    return status_md, metrics_md, miner_console_text, telemetry_events_text
 
 def start_mining(worker, games, depth, threads, tt_mb, sieve_mb, seed, token, repo):
     """Khởi chạy và stream tiến trình khai thác dữ liệu đa luồng theo phần cứng thực tế."""
@@ -1228,15 +1221,29 @@ Vận hành **Native Rust Engine {APP_VERSION}** tự động scaling theo CPU Q
                     )
 
             with gr.Column(scale=2):
-                gr.Markdown("### 📊 Trạng Thái & Báo Cáo Real-Time Hệ Thống")
+                gr.Markdown("### 📊 STUDIO TELEMETRY & MULTI-PANEL WORKSPACE")
                 status_box = gr.Markdown(f"Sẵn sàng khai thác dữ liệu trên hệ thống `{cpu_logical}` vCPUs & `{mem_total:.1f} GB` RAM...")
                 metrics_box = gr.Markdown("Chờ khởi chạy...")
-                logs_box = gr.Textbox(
-                    label="📜 Nhật ký Native Engine Real-Time & Persistent Disk Telemetry",
-                    lines=15,
-                    max_lines=25,
-                    interactive=False
-                )
+
+                with gr.Tabs():
+                    with gr.Tab("🖥️ CONSOLE LOGS REAL-TIME"):
+                        miner_console_box = gr.Textbox(
+                            label="🖥️ Live Native Engine Stdout/Stderr (logs/miner_stdout_stderr.log)",
+                            lines=15,
+                            max_lines=28,
+                            interactive=False
+                        )
+                    with gr.Tab("📡 TELEMETRY EVENT STREAM"):
+                        telemetry_events_box = gr.Textbox(
+                            label="📡 Structured Telemetry JSON-Lines (logs/system_telemetry.jsonl)",
+                            lines=15,
+                            max_lines=28,
+                            interactive=False
+                        )
+                    with gr.Tab("🧪 HARDWARE BENCHMARK MATRIX"):
+                        benchmark_matrix_box = gr.Markdown(
+                            "Bấm **'⚡ BENCHMARK TÌM CẤU HÌNH NHANH NHẤT'** để hệ thống tự động micro-sweep đo đạc FEN/s và lập Ma Trận Trọng Số trên CPU/RAM node này!"
+                        )
 
         with gr.Accordion("📁 QUẢN LÝ & KHẢO SÁT CÁC TỆP DATASET TRÊN ĐĨA (DATASET FILE MANAGER)", open=False):
             gr.Markdown("### 📂 Quản lý các tệp dataset (.jsonl / .json) trên đĩa cứng:")
@@ -1263,13 +1270,13 @@ Vận hành **Native Rust Engine {APP_VERSION}** tự động scaling theo CPU Q
         start_btn.click(
             fn=start_mining,
             inputs=[worker_input, games_slider, depth_slider, threads_slider, tt_mb_slider, sieve_mb_slider, seed_input, token_input, repo_input],
-            outputs=[status_box, metrics_box, logs_box]
+            outputs=[status_box, metrics_box, miner_console_box]
         )
 
         bench_btn.click(
             fn=run_hardware_benchmark,
             inputs=[],
-            outputs=[logs_box, status_box, metrics_box, threads_slider, tt_mb_slider, sieve_mb_slider]
+            outputs=[benchmark_matrix_box, status_box, metrics_box, threads_slider, tt_mb_slider, sieve_mb_slider]
         )
 
         stop_btn.click(
@@ -1281,7 +1288,7 @@ Vận hành **Native Rust Engine {APP_VERSION}** tự động scaling theo CPU Q
         purge_btn.click(
             fn=purge_current_output_file,
             inputs=[],
-            outputs=[status_box, metrics_box, logs_box]
+            outputs=[status_box, metrics_box, miner_console_box, telemetry_events_box]
         )
 
         free_ram_btn.click(
@@ -1291,20 +1298,23 @@ Vận hành **Native Rust Engine {APP_VERSION}** tự động scaling theo CPU Q
         )
 
         def fetch_disk_telemetry_logs():
-            events = TelemetryLogger.read_tail_telemetry_events(15)
+            events = TelemetryLogger.read_tail_telemetry_events(20)
             disk_logs = TelemetryLogger.read_tail_disk_logs(40)
-            return f"📜 NHẬT KÝ TELEMETRY EVENTS (logs/system_telemetry.jsonl):\n{events}\n\n📜 NHẬT KÝ ĐĨA CỨNG (logs/miner_stdout_stderr.log):\n{disk_logs}"
+            return (
+                f"📜 NHẬT KÝ CONSOLE REAL-TIME (logs/miner_stdout_stderr.log):\n{disk_logs if disk_logs else 'Log đĩa rỗng (Blank).'}",
+                f"📡 NHẬT KÝ TELEMETRY EVENTS (logs/system_telemetry.jsonl):\n{events if events else 'Telemetry rỗng (Blank).'}"
+            )
 
         view_telemetry_btn.click(
             fn=fetch_disk_telemetry_logs,
             inputs=[],
-            outputs=[logs_box]
+            outputs=[miner_console_box, telemetry_events_box]
         )
 
         clear_logs_btn.click(
             fn=reset_logs_to_blank,
             inputs=[],
-            outputs=[logs_box]
+            outputs=[miner_console_box, telemetry_events_box]
         )
 
         refresh_dataset_btn.click(
@@ -1328,14 +1338,14 @@ Vận hành **Native Rust Engine {APP_VERSION}** tự động scaling theo CPU Q
         app.load(
             fn=sync_on_load,
             inputs=[],
-            outputs=[status_box, metrics_box, logs_box]
+            outputs=[status_box, metrics_box, miner_console_box, telemetry_events_box]
         )
 
         timer = gr.Timer(3.0)
         timer.tick(
             fn=sync_on_load,
             inputs=[],
-            outputs=[status_box, metrics_box, logs_box]
+            outputs=[status_box, metrics_box, miner_console_box, telemetry_events_box]
         )
 
     return app

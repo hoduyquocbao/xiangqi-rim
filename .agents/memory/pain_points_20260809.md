@@ -246,3 +246,17 @@ $$\text{Điểm Chất Lượng Agent} = \text{Kế Hoạch Rõ Ràng} + \text{V
    - **Hệ Thống Hardware Auto-Benchmark Sweep Engine (`run_hardware_benchmark`)**: Nhấn nút "⚡ BENCHMARK TÌM CẤU HÌNH NHANH NHẤT" trên Web UI sẽ thực hiện thử nghiệm Micro-Sweep (5 giây per candidate) đo đạc trực tiếp FEN/s thực tế trên CPU/RAM node này.
    - **Ma Trận Trọng Số Bất Biến (Weighted Decision Matrix Score)**: Chấm điểm dựa trên 50% FEN/s + 30% Scalability + 20% RAM Efficiency. Tự động điền cấu hình chiến thắng vào các Slider trên UI!
    - **Nâng Cấp Phiên Bản Mới**: `v4.0.0-production` (Build `2026-08-09 21:42:00 ICT`).
+
+---
+
+### XIX. CHUYỂN ĐỔI PHÂN TÁCH GIAO DIỆN MULTI-PANEL TABBED STUDIO WORKSPACE (v4.1.0-production)
+
+1. **NGUYÊN NHÂN ANH HDQB TRUY VẤN VỀ THIẾT KẾ GIAO DIỆN THIẾU CHUYÊN NGHIỆP**:
+   - Việc nhồi nhét tất cả thông tin (console stdout, telemetry JSON-Lines, báo lỗi) vào một khung Textbox khổng lồ duy nhất gây nhầm lẫn và rối mắt cho người dùng.
+
+2. **GIẢI PHÁP ĐÃ THỰC THI (Commit `v4.1.0-production`)**:
+   - **Tái Cấu Trúc Thành Tabbed Multi-Panel Workspace**: Phân tách khu vực hiển thị thành 3 Tab chuyên biệt riêng biệt:
+     1. **`🖥️ CONSOLE LOGS REAL-TIME`**: Chuyên hiển thị dữ liệu `stdout/stderr` trực tiếp từ tiến trình miner ngầm (`logs/miner_stdout_stderr.log`).
+     2. **`📡 TELEMETRY EVENT STREAM`**: Chuyên hiển thị chuỗi sự kiện `JSON-Lines` có cấu trúc từ Telemetry Logger (`logs/system_telemetry.jsonl`).
+     3. **`🧪 HARDWARE BENCHMARK MATRIX`**: Chuyên hiển thị bảng kết quả Micro-Sweep đo đạc FEN/s và điểm Ma Trận Trọng Số.
+   - **Nâng Cấp Phiên Bản Mới**: `v4.1.0-production` (Build `2026-08-09 21:45:00 ICT`).
