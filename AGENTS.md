@@ -236,3 +236,8 @@ python3 scripts/test_quantization.py data/nnue_weights_gen5.bin
   3. **Cập Nhật Ghi Chú Phát Hành `APP_RELEASE_NOTES`**: Ghi ngắn gọn nội dung lỗi vừa được sửa hoặc tính năng vừa được nâng cấp.
   4. **Kiểm Thử Biên Dịch Mới Cho Phép Commit**: Chạy `python3 -m py_compile app.py` hoặc `cargo check` để đảm bảo bản build mới hoạt động 100% trước khi push.
 - **Lý Do Tối Thượng**: Nếu sửa lỗi mã nguồn mà KHÔNG tăng số phiên bản và dấu thời gian, người dùng khi reload trang web sẽ rơi vào trạng thái "mù thông tin", không thể phân biệt được ứng dụng đang chạy bản cũ hay bản mới đã sửa lỗi!
+
+### 8.6 QUY TẮC CẤM GHI ĐÈ KÝ ỨC CŨ — BẮT BUỘC NỐI THÊM (STRICT IMMUTABLE APPEND-ONLY MEMORY MANDATE)
+- **NGHIÊM CẤM** xóa bỏ, cắt xén, tóm tắt hoặc sử dụng `replace_file_content` làm đè / mất các Mục bài học cũ trong tệp `.agents/memory/pain_points_*.md`.
+- **BẮT BUỘC APPEND-ONLY**: Mọi bài học mới khi bổ sung vào tệp ký ức BẮT BUỘC phải được ghi nối tiếp vào cuối tệp mà không làm ảnh hưởng tới bất kỳ dòng chữ nào của các Mục bài học trước đó.
+- **TẠO TỆP MỚI KHI DUNG LƯỢNG LỚN**: Nếu tệp ký ức hiện tại quá lớn (> 15KB), Agent phải tạo tệp mới mang mốc thời gian (ví dụ `.agents/memory/pain_points_[YYYYMMDD_HHMM].md`) và đăng ký vào bảng mục lục `INDEX.md`.

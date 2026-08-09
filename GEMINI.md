@@ -190,3 +190,6 @@ GAMES=10000 DEPTH=4 THREADS=4 cargo run --release --example 20_parallel_mine
 ### 7.5 QUY TRÌNH BẮT BUỘC TĂNG PHIÊN BẢN KHI SỬA MÃ NGUỒN (MANDATORY AUTOMATIC VERSION BUMP PROTOCOL)
 - **Ràng Buộc Sắt Cho Gemini**: Mỗi khi sửa bất kỳ lỗi nào trong mã nguồn (`app.py`, engine Rust, hay scripts), Gemini BẮT BUỘC phải thực hiện tăng số phiên bản `APP_VERSION` và `APP_BUILD_STAMP`.
 - **Tuyệt đối KHÔNG ĐƯỢC PHÉP**: Sửa lỗi mã nguồn nhưng giữ nguyên số phiên bản cũ. Sửa code mà giữ nguyên version cũ là hành vi cẩu thả, gây lừa dối người dùng khi họ reload trang web!
+
+### 7.6 QUY TẮC CẤM GHI ĐÈ KÝ ỨC CŨ — BẮT BUỘC NỐI THÊM (STRICT IMMUTABLE APPEND-ONLY MEMORY MANDATE)
+- **Ràng Buộc Sắt Cho Ký Ức**: Gemini tuyệt đối KHÔNG ĐƯỢC xóa hoặc làm mất các Mục bài học cũ trong tệp `pain_points_*.md`. Mọi cập nhật ký ức BẮT BUỘC phải là NỐI THÊM (APPEND-ONLY) ở cuối tệp hoặc TẠO TỆP MỚI VỚI TIMESTAMP (`pain_points_[YYYYMMDD_HHMM].md`).
