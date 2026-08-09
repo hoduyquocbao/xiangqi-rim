@@ -66,9 +66,14 @@ $$\text{Điểm Chất Lượng Agent} = \text{Kế Hoạch Rõ Ràng} + \text{V
 
 ---
 
-### V. TẮT TỰ ĐỘNG CI/CD DEPLOY THEO YÊU CẦU ANH HDQB
+### VI. NÂNG CẤP HẠ TẦNG TELEMETRY VĨNH VIỄN & PERSISTENT DISK LOGGER (v2.6.0-production)
 
-1. **QUYẾT ĐỊNH KỸ THUẬT**:
-   - Xóa tệp `.github/workflows/deploy.yml` trên GitHub Repository.
-   - Ngừng toàn bộ thông báo báo lỗi `HF_TOKEN` rác từ GitHub Actions.
-   - Agent không tự động gọi `deploy_space.py` sau các lệnh `git push` ngoại trừ khi người dùng cấp token Write mới và yêu cầu deploy thủ công.
+1. **NGUYÊN NHÂN THẤT BẠI CỦA MÃ NGUỒN CŨ**:
+   - Mã nguồn cũ ghi nhật ký vào mảng `logs = []` trong bộ nhớ RAM của Python. Khi tiến trình bị ngắt/crash hoặc trang web bị reload, toàn bộ log bị mất sạch.
+   - Không có tệp log đĩa cứng vĩnh viễn (`logs/miner_stdout_stderr.log`), dẫn đến khi Rust engine bị OOM Killer ngắt (`exitcode 137`) hoặc panic (`exitcode 101`), không ai biết lý do tại sao và lỗi ở đâu.
+
+2. **HẠ TẦNG TELEMETRY VỚI 4 CHỐT CHẶN BẢO VỆ (Commit `b41ef60`)**:
+   - **Chốt chặn 1 - TelemetryLogger**: Ghi nhận toàn bộ sự kiện khởi chạy, cấu hình phần cứng, và sự cố crash dưới dạng JSON-Lines vào `logs/system_telemetry.jsonl`.
+   - **Chốt chặn 2 - Ghi Nhập Trực Tiếp Đĩa Cứng (Disk Pipe Logging)**: Toàn bộ `stdout` và `stderr` từ Native Engine được ghi đệm liên tục (`flush()`) vào tệp đĩa `logs/miner_stdout_stderr.log`. Dù Python hay Rust bị chết đột ngột, 100% dòng log lỗi cuối cùng vẫn nằm nguyên vẹn trên đĩa.
+   - **Chốt chặn 3 - Giao Diện Truy Vấn Telemetry Trực Tiếp**: Thêm nút **"📜 TRUY VẤN LOG ĐĨA & TELEMETRY"** trên web UI Gradio, cho phép người dùng xem ngay lập tức các sự kiện telemetry và log đĩa chỉ bằng 1 cú click.
+   - **Chốt chặn 4 - Báo Cáo Crash Tự Động Trong `sync_on_load()`**: Khi reload trang, nếu phát hiện phiên trước bị crash, hệ thống sẽ đọc trực tiếp 40 dòng log từ `logs/miner_stdout_stderr.log` để hiển thị nguyên nhân chính xác (OOM / panic / invalid arg) thay vì reset mờ ám!
