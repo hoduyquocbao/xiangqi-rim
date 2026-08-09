@@ -1,4 +1,4 @@
-# === XIANGQI-R1 REAL RULE GPU T4 DATA MINER ENGINE (v11.1-JRCP5-ULTRA-32D) ===
+# === XIANGQI-R1 REAL RULE GPU T4 DATA MINER ENGINE (v11.0-JRCP5-ULTRA-32D) ===
 # 100% PHYSICAL XIANGQI RULES + FULL JRCP 5.0 32-DIMENSIONAL ULTRA-DEEP TACTICAL THOUGHT CHAIN
 # + 36 KẾ BINH PHÁP + THẾ TRẬN KINH ĐIỂN + PERPETUAL CHECK/CHASE RULE ENGINE + OPPONENT COUNTER AUDIT
 # + DYNAMIC OPENING FEN SAMPLER + SIEVE DEDUP + AUTO HF PUSH + REAL-TIME HEARTBEAT (3s)
@@ -1511,9 +1511,13 @@ def mine(target_games: int = 1000, depth: int = 12):
     dataset_repo = "hoduyquocbao/xiangqi-r1-nnue-dataset"
     last_push_time = time.time()
 
-    import psutil, platform
+    import platform
     cpu_count = os.cpu_count() or 1
-    ram_gb = psutil.virtual_memory().total / (1024 ** 3) if hasattr(psutil, 'virtual_memory') else 12.0
+    try:
+        import psutil
+        ram_gb = psutil.virtual_memory().total / (1024 ** 3)
+    except Exception:
+        ram_gb = 12.0
     python_ver = sys.version.split()[0]
     torch_ver = torch.__version__ if HAS_TORCH else "N/A"
     vram_allocated = torch.cuda.memory_allocated(0) / (1024 ** 3) if HAS_TORCH else 0.0
@@ -1526,7 +1530,7 @@ def mine(target_games: int = 1000, depth: int = 12):
     print(f"🧠 System RAM    : {ram_gb:.2f} GB RAM", flush=True)
     print(f"⚡ GPU Device    : {torch.cuda.get_device_name(0)} ({vram_total:.2f} GB VRAM | Allocated: {vram_allocated:.2f} GB)", flush=True)
     print(f"🧰 Software Env  : Python {python_ver} | PyTorch {torch_ver} | CUDA {torch.version.cuda}", flush=True)
-    print(f"🏷️ Engine Version : v11.1-jrcp5-ultra-32d (Build 2026-08-10 02:40:00 ICT)", flush=True)
+    print(f"🏷️ Engine Version : v11.0-jrcp5-ultra-32d (Build 2026-08-10 01:45:00 ICT)", flush=True)
     print(f"🎮 Target Config  : {target_games:,} Games | Search Depth {depth}", flush=True)
     print(f"🆔 Unique Node ID : node_{node_id}", flush=True)
     print(f"📦 File Chunk Cap : 50 MB / Chunk (Active: Chunk #{chunk_idx:04d})", flush=True)
