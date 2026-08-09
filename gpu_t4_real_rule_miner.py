@@ -391,6 +391,63 @@ def run_unit_tests() -> bool:
     print("🎉 BỘ 6 CHECKPOINT UNIT TESTS LUẬT CỜ TƯỚNG VẬT LÝ: 100% THÀNH CÔNG!\n", flush=True)
     return True
 
+# === BỘ LỌC KIỂM CHẤM NGHÊM NGẶT DỮ LIỆU ĐẦU RA (STRICT DATA VALIDATOR) ===
+
+class DataValidator:
+    @staticmethod
+    def validate_sample(board: Board, move_str: str, score: int, thought: str) -> tuple:
+        # 1. UCI Format regex check
+        if not (len(move_str) == 4 and move_str[0] in 'abcdefghi' and move_str[2] in 'abcdefghi' and move_str[1].isdigit() and move_str[3].isdigit()):
+            return False, "UCI_INVALID_FORMAT"
+
+        src_c = ord(move_str[0]) - ord('a')
+        src_r = int(move_str[1])
+        dst_c = ord(move_str[2]) - ord('a')
+        dst_r = int(move_str[3])
+
+        src_sq = sq(src_c, src_r)
+        dst_sq = sq(dst_c, dst_r)
+
+        # 2. Check board boundaries (0..89)
+        if not (0 <= src_sq < 90 and 0 <= dst_sq < 90):
+            return False, "OUT_OF_BOUNDS"
+
+        # 3. Check piece owner matches current turn
+        piece = board.grid[src_sq]
+        if piece == 0 or side(piece) != board.turn:
+            return False, "INVALID_PIECE_OWNER"
+
+        # 4. Check move is strictly physical legal
+        legal_encodings = [m.encode() for m in board.legal()]
+        if move_str not in legal_encodings:
+            return False, "ILLEGAL_PHYSICAL_MOVE"
+
+        # 5. Check Pawn river crossing constraint
+        ptype = piece if side(piece) == 0 else piece - 7
+        if ptype == 7:
+            crossed = (src_r >= 5) if side(piece) == 0 else (src_r <= 4)
+            if not crossed and src_c != dst_c:
+                return False, "PAWN_SIDEWAY_BEFORE_RIVER"
+
+        # 6. Check Elephant river boundary
+        if ptype == 3:
+            crossed = (dst_r >= 5) if side(piece) == 0 else (dst_r <= 4)
+            if crossed:
+                return False, "ELEPHANT_CROSSED_RIVER"
+
+        # 7. Check Palace boundary lock for King & Advisor
+        if ptype in [1, 2]:
+            r_min, r_max = (0, 2) if side(piece) == 0 else (7, 9)
+            if not (3 <= dst_c <= 5 and r_min <= dst_r <= r_max):
+                return False, "LEAVING_PALACE_BOUNDARY"
+
+        # 8. Check Thought Chain 14 tags
+        for i in range(1, 15):
+            if f"[{i}/14]" not in thought:
+                return False, f"MISSING_THOUGHT_TAG_{i}"
+
+        return True, "VALID_OK"
+
 # === REAL SELF-PLAY MINER WITH 14-DIMENSIONAL JRCP 3.0 THOUGHT CHAIN ===
 
 def mine(target_games: int = 1000, depth: int = 12):
@@ -557,9 +614,14 @@ def mine(target_games: int = 1000, depth: int = 12):
                         "stamp": int(time.time())
                     }
 
-                    f.write(json.dumps(sample, ensure_ascii=False) + "\n")
-                    game_samples += 1
-                    total_samples += 1
+                    # STRICT DATA VALIDATION CHECK (Garbage In = Garbage Out protection)
+                    is_valid, err_reason = DataValidator.validate_sample(board, encoded_move, best_score, thought_str)
+                    if is_valid:
+                        f.write(json.dumps(sample, ensure_ascii=False) + "\n")
+                        game_samples += 1
+                        total_samples += 1
+                    else:
+                        print(f"⚠️ [STRICT DATA FILTER REJECTED] Game {game_idx} Ply {ply}: Reason={err_reason} Move={encoded_move}", flush=True)
 
                 board.apply(best_move)
                 ply += 1
