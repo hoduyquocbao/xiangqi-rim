@@ -6,23 +6,38 @@
 import os, sys, time, json, math, random, threading
 from pathlib import Path
 
-# Cấu hình linh hoạt PyTorch CUDA GPU & Pure Python Fallback Engine
+# Cấu hình linh hoạt PyTorch CUDA GPU & Pure Python Fallback Engine (Phòng ngự Kép)
 HAS_TORCH = False
 torch = None
 nn = None
 F = None
 HfApi = None
 
-try:
-    import torch
-    import torch.nn as nn
-    import torch.nn.functional as F
-    HAS_TORCH = True
-except BaseException:
-    HAS_TORCH = False
-    torch = None
-    nn = None
-    F = None
+# Bước 1: Ưu tiên tái sử dụng PyTorch instance từ sys.modules để tránh lỗi C++ duplicate registrations
+import sys
+if 'torch' in sys.modules:
+    try:
+        torch = sys.modules['torch']
+        nn = torch.nn
+        F = torch.nn.functional
+        if torch.cuda.is_available():
+            HAS_TORCH = True
+    except BaseException:
+        pass
+
+# Bước 2: Nếu chưa có trong sys.modules, thực hiện nạp mới với BaseException guard
+if not HAS_TORCH:
+    try:
+        import torch
+        import torch.nn as nn
+        import torch.nn.functional as F
+        if torch.cuda.is_available():
+            HAS_TORCH = True
+    except BaseException:
+        HAS_TORCH = False
+        torch = None
+        nn = None
+        F = None
 
 try:
     from huggingface_hub import HfApi
@@ -1552,7 +1567,10 @@ def mine(target_games: int = 1000, depth: int = 12):
     print(f"🖥️ CPU Cores     : {cpu_count} vCPUs | Platform: {platform.system()} {platform.machine()}", flush=True)
     print(f"🧠 System RAM    : {ram_gb:.2f} GB RAM", flush=True)
     if use_gpu and torch and torch.cuda.is_available():
-        print(f"⚡ GPU Device    : {torch.cuda.get_device_name(0)} ({vram_total:.2f} GB VRAM | Allocated: {vram_allocated:.2f} GB)", flush=True)
+        vram_total = (torch.cuda.get_device_properties(0).total_memory / (1024 ** 3))
+        vram_allocated = (torch.cuda.memory_allocated(0) / (1024 ** 3))
+        vram_reserved = (torch.cuda.memory_reserved(0) / (1024 ** 3))
+        print(f"⚡ GPU Device    : {torch.cuda.get_device_name(0)} ({vram_total:.2f} GB VRAM | Reserved: {vram_reserved:.2f} GB | Active: {vram_allocated:.2f} GB)", flush=True)
         print(f"🧰 Software Env  : Python {python_ver} | PyTorch {torch_ver} | CUDA {torch.version.cuda}", flush=True)
     else:
         print(f"⚡ Execution Mode: Pure Python / Rule Engine (Zero GPU/PyTorch Dependency)", flush=True)
@@ -1667,10 +1685,12 @@ def mine(target_games: int = 1000, depth: int = 12):
             last_heartbeat_time = now_time
             elapsed = max(0.001, now_time - start_time)
             fps = total_samples / elapsed
-            vram_curr = (torch.cuda.memory_allocated(0) / (1024 ** 3)) if (use_gpu and torch and torch.cuda.is_available()) else 0.0
+            vram_res = (torch.cuda.memory_reserved(0) / (1024 ** 3)) if (use_gpu and torch and torch.cuda.is_available()) else 0.0
+            vram_act = (torch.cuda.memory_allocated(0) / (1024 ** 3)) if (use_gpu and torch and torch.cuda.is_available()) else 0.0
+            vram_str = f"{vram_act:.2f}/{vram_res:.2f}GB" if use_gpu else "0.00GB"
             active_slots = sum(1 for s in range(PARALLEL) if slot_game[s] <= target_games)
             mega_size = len(all_tensors)
-            print(f"⚡ [HEARTBEAT | Step {step_counter:05d}] Active Slots: {active_slots}/64 | GPU Batch: {mega_size:,} FENs ({eval_ms:.1f}ms) | Total FENs: {total_samples:,} | Speed: {fps:,.1f} FEN/s | Games: {completed_games}/{target_games} | VRAM: {vram_curr:.2f}GB", flush=True)
+            print(f"⚡ [HEARTBEAT | Step {step_counter:05d}] Active Slots: {active_slots}/64 | GPU Batch: {mega_size:,} FENs ({eval_ms:.1f}ms) | Total FENs: {total_samples:,} | Speed: {fps:,.1f} FEN/s | Games: {completed_games}/{target_games} | VRAM: {vram_str}", flush=True)
 
         # Phân phối kết quả về từng slot
         for s, legal, offset, count, is_random in slot_info:
