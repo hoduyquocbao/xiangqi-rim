@@ -551,3 +551,18 @@ $$\text{Điểm Chất Lượng Agent} = \text{Kế Hoạch Rõ Ràng} + \text{V
      - `Software Env`: Python 3.12.13 | PyTorch 2.11.0+cu128 | CUDA 12.8
      - `Target Config`: 30,000 Games | Search Depth 12 | Batch Size 4,096
    - **Nâng Cấp Phiên Bản Mới**: `v8.1.0-gpu-master` (Build `2026-08-09 23:26:00 ICT`).
+
+---
+
+### XL. TÁI CẤU TRÚC TỆP NOTEBOOK TÀI NGUYÊN THÀNH 5 CELL MODULAR RIÊNG BIỆT TRONG `colab_gpu_depth12_miner.ipynb` (`v8.2.0-gpu-master`)
+
+1. **KHẮC PHỤC THÓI QUEN GHI ĐÈ CELL ĐƠN ĐỘC (DENOUNCING CELL-UPDATE NAIVETY)**:
+   - Theo phản hồi từ anh HDQB (*"tại sao không thêm cell là lại đi update cell"*), việc lạm dụng lệnh `update_cell` trên 1 cell duy nhất làm mất đi tính trực quan, modular và trải nghiệm 1-Click chuyên nghiệp của Colab Notebook.
+
+2. **CẤU TRÚC 5 CELL CHUYÊN NGHIỆP RÕ RÀNG TRONG [`colab_gpu_depth12_miner.ipynb`](file:///Users/hdqb/workspaces/xiangqi-rim/colab_gpu_depth12_miner.ipynb) (Commit `f3adf39`)**:
+   - **Cell 0 (Markdown)**: Hướng dẫn 1-Click tiếng Việt + Anh, hướng dẫn cài Secret `HF_TOKEN`.
+   - **Cell 1 (Code - Setup & Hardware)**: Kiểm tra GPU T4, xác thực HF_TOKEN, cài đặt dependencies và git pull codebase mới nhất.
+   - **Cell 2 (Code - Physical Rule Verification)**: Khởi chạy bộ **6 Checkpoint Physical Rule Unit Tests** (Mặt Tướng, Cản Mã, Cản Tượng, Ngòi Pháo, Cung Tướng, Tốt Qua Sông).
+   - **Cell 3 (Code - Full 30,000 Games Mining)**: Tiến hành tự đấu 30,000 ván @ Depth 12 với Thought Chain 14 chiều kích JRCP 3.0, Sieve Bitset Dedup và Auto HF Push.
+   - **Cell 4 (Code - Dataset Summary)**: Tổng kết kích thước file, kiểm tra mẫu JSONL đầu tiên và báo cáo sản lượng FENs.
+   - **Nâng Cấp Phiên Bản Mới**: `v8.2.0-gpu-master` (Build `2026-08-09 23:29:00 ICT`).
