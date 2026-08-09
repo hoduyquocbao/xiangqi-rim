@@ -60,14 +60,55 @@ START_POS = {
         14: [sq(0, 6), sq(2, 6), sq(4, 6), sq(6, 6), sq(8, 6)]}
 }
 
-# Tập hợp các FEN khai cuộc đa dạng thực chiến (Dynamic Opening FEN Sampler)
+# ============================================================================
+# TẬP HỢP CÁC FEN KHAI CUỘC THỰC CHIẾN (Dynamic Opening FEN Sampler)
+# ============================================================================
+# NGUỒN GỐC: Mỗi FEN được sinh trực tiếp từ Board.apply() với nước đi UCI
+#             hợp lệ, xác minh 16 quân/bên, side-to-move=w đúng luân phiên.
+# MỤC ĐÍCH:   Đa dạng hóa thế cờ khởi đầu khi self-play mining,
+#             triệt tiêu thiên kiến lặp START_FEN đơn điệu.
+# CẬP NHẬT:   2026-08-10 — Thay thế 6 FEN ảo giác bằng 8 FEN kiểm chứng.
+# ============================================================================
 OPENING_FENS = [
-    "r1bakab1r/9/1cn3nc1/p1p1p1p1p/9/9/P1P1P1P1P/1CN1C4/9/R1BAKABNR w - - 0 1", # Chuẩn
-    "rnbakabnr/9/1c4cc1/p1p1p1p1p/9/9/P1P1P1P1P/1C4CC1/9/RNBAKABNR w - - 0 1", # Thuận Pháo
-    "r1bakab1r/9/1c5c1/p1p1p1p1p/2n3n2/9/P1P1P1P1P/1C5C1/9/RNBAKABNR w - - 0 1", # Quá Cung Pháo
-    "r1bakab1r/9/1cn3nc1/p1p1p1p1p/9/2P6/P1P1P1P1/1CN1C4/9/R1BAKABNR w - - 0 1", # Tiến Binh 3
-    "r1bakab1r/9/1cn3nc1/p1p1p1p1p/9/9/P1P1P1P1P/1C2C4/2N6/R1BAKABNR w - - 0 1", # Đơn Đề Mã
-    "r1bakab1r/9/1cn3nc1/p3p1p1p/2p6/9/P1P1P1P1P/1CN1C4/9/R1BAKABNR w - - 0 1"  # Tiên Phong Xe
+    # ── 1. Pháo Đầu đối Bình Phong Mã (中炮对屏风马) ──────────────────────
+    # Nước đi: Đỏ b2e2 (Pháo trái chiếm Trung Lộ e2), Đen h9g7 (Mã phải phòng thủ g7)
+    # Khai cuộc kinh điển nhất cờ Tướng — tấn công trực diện cung Tướng đối phương
+    "rnbakab1r/9/1c4nc1/p1p1p1p1p/9/9/P1P1P1P1P/4C2C1/9/RNBAKABNR w - - 0 1",
+
+    # ── 2. Thuận Pháo (顺炮) ──────────────────────────────────────────────
+    # Nước đi: Đỏ b2e2 (Pháo trái→e2), Đen b7e7 (Pháo trái→e7)
+    # 2 Pháo CÙNG HƯỚNG TRÁI đối mặt trên cột e — biến pháp sắc bén, tấn công mãnh liệt
+    "rnbakabnr/9/4c2c1/p1p1p1p1p/9/9/P1P1P1P1P/4C2C1/9/RNBAKABNR w - - 0 1",
+
+    # ── 3. Nghịch Pháo / Liệt Pháo (逆炮/列炮) ──────────────────────────
+    # Nước đi: Đỏ b2e2 (Pháo trái→e2), Đen h7e7 (Pháo phải→e7)
+    # 2 Pháo NGƯỢC HƯỚNG đối mặt trên cột e — Đen dùng Pháo phải đáp lại Pháo trái Đỏ
+    "rnbakabnr/9/1c2c4/p1p1p1p1p/9/9/P1P1P1P1P/4C2C1/9/RNBAKABNR w - - 0 1",
+
+    # ── 4. Quá Cung Pháo (过宫炮) ────────────────────────────────────────
+    # Nước đi: Đỏ b2d2 (Pháo trái qua cung đến d2), Đen b9c7 (Mã trái khai triển c7)
+    # Pháo đi NGANG QUA CUNG Tướng — thủ vững kết hợp tấn công linh hoạt hai cánh
+    "r1bakabnr/9/1cn4c1/p1p1p1p1p/9/9/P1P1P1P1P/3C3C1/9/RNBAKABNR w - - 0 1",
+
+    # ── 5. Tiên Nhân Chỉ Lộ / Tiến Binh 3 (仙人指路) ────────────────────
+    # Nước đi: Đỏ c3c4 (Binh c tiến 1 bước thăm dò), Đen c6c5 (Tốt c đáp đối xứng)
+    # Nước thăm dò kinh điển — chờ đối phương lộ ý đồ rồi mới quyết định hệ thống khai cuộc
+    "rnbakabnr/9/1c5c1/p3p1p1p/2p6/2P6/P3P1P1P/1C5C1/9/RNBAKABNR w - - 0 1",
+
+    # ── 6. Đơn Đề Mã (单提马) ────────────────────────────────────────────
+    # Nước đi: Đỏ b0c2 (Mã trái nhảy c2 — delta 1×2 chữ L), Đen h9g7 (Mã phải phòng thủ)
+    # 1 Mã phát triển sớm kiểm soát trung tâm, Mã còn lại giữ phòng thủ hậu phương
+    "rnbakab1r/9/1c4nc1/p1p1p1p1p/9/9/P1P1P1P1P/1CN4C1/9/R1BAKABNR w - - 0 1",
+
+    # ── 7. Tiên Phong Xe (先锋车) ────────────────────────────────────────
+    # Nước đi: Đỏ a0a1 (Xe trái tiến 1 bước xuất quân), Đen h9g7 (Mã phải phòng thủ)
+    # Xe xuất quân sớm nhất — chiếm lộ a kiểm soát không gian, chuẩn bị áp lực cánh trái
+    "rnbakab1r/9/1c4nc1/p1p1p1p1p/9/9/P1P1P1P1P/1C5C1/R8/1NBAKABNR w - - 0 1",
+
+    # ── 8. Phi Tượng Cục (飞相局) ────────────────────────────────────────
+    # Nước đi: Đỏ c0e2 (Tượng trái phi lên e2), Đen h9g7 (Mã phải phòng thủ)
+    # Phi Tượng mở đường cho Xe a0 và Mã b0 — khai cuộc thủ vững, chờ thời cơ phản công
+    "rnbakab1r/9/1c4nc1/p1p1p1p1p/9/9/P1P1P1P1P/1C2B2C1/9/RN1AKABNR w - - 0 1",
 ]
 
 # Prompt hệ thống chuẩn hóa cho Xiangqi-R1 Master v5.0 (32 Chiều Kích)
