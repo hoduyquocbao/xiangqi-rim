@@ -49,3 +49,17 @@ $$\text{Điểm Chất Lượng Agent} = \text{Kế Hoạch Rõ Ràng} + \text{V
 
 - **Nếu Điểm < 30/40**: Agent tuyệt đối KHÔNG ĐƯỢC PHÉP xuất mã nguồn ra giao diện.
 - **Nếu Điểm $\ge$ 30/40**: Mới được phép xuất mã nguồn đầy đủ kèm bằng chứng kiểm thử thực tế!
+
+---
+
+### IV. BÀI HỌC VỀ LỖI THÓAT TRẠNG THÁI KHÓA IM LẶNG (SILENT EXIT & MISSING TELEMETRY)
+
+1. **NGUYÊN NHÂN GỐC RỄ**:
+   - Khi tiến trình ngầm Rust Engine bị crash, panic, hoặc bị Linux cgroups OOM Killer ngắt (`exitcode 137`), `process.poll()` trả về giá trị khác None (ví dụ `137` hay `1`).
+   - Vòng lặp `while running and process.poll() is None:` trong `app.py` trước đó bị ngắt ngầm và nhảy thẳng xuống dòng "KẾ THÚC PHIÊN KHAI THÁC", bỏ qua việc kiểm tra `exitcode`, không đọc `stderr` traceback và không ghi lại Telemetry sự cố.
+   - Khi người dùng F5/reload, `sync_on_load()` cũ thấy `pids` rỗng lập tức reset UI về trạng thái "Sẵn sàng" làm người dùng lầm tưởng phiên bị thoát im lặng không lý do.
+
+2. **GIẢI PHÁP ĐÃ THỰC THI (Commit `1d4a7f1`)**:
+   - **Bọc `try ... finally`**: Đảm bảo dọn dẹp tiến trình an toàn khi bị ngắt kết nối WebSocket (`GeneratorExit`).
+   - **Bổ sung Crash Telemetry Audit**: Kiểm tra `exit_code != 0`, đọc toàn bộ `stderr`/log dư thừa, nhận diện chính xác mã thoát `137` (cgroups OOM Killer) để đưa ra cảnh báo quá tải RAM trực quan.
+   - **Nâng cấp `sync_on_load()`**: Khi phát hiện trạng thái `CRASHED`, hiển thị ngay **Crash Telemetry Banner** (Mã thoát OS, vết log báo lỗi cuối cùng) thay vì reset mờ ám!
