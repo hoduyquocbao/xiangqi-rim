@@ -167,13 +167,29 @@ def card(total: int, phases: Dict[str, int], outcomes: Dict[str, int]) -> str:
 license: mit
 language:
 - vi
+- en
+task_categories:
+- reinforcement-learning
+- text-generation
+task_ids:
+- conversational
+- text2text-generation
 tags:
 - xiangqi
 - chinese-chess
+- chess-evaluation
 - reasoning
-- jrcp-2.0
+- jrcp-3.0
 size_categories:
 - 100K<n<1M
+configs:
+- config_name: default
+  data_files:
+  - split: train
+    path:
+    - "*.jsonl"
+    - "data/*.jsonl"
+    - "community/*.jsonl"
 ---
 
 # Xiangqi-R1 JRCP 2.0 Training Dataset

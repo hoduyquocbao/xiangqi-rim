@@ -17,11 +17,19 @@ import gc
 import atexit
 import threading
 import subprocess
-try:
-    import psutil
-    HAS_PSUTIL = True
-except ImportError:
-    HAS_PSUTIL = False
+# Monkey-patch HfFolder phòng ngự chống lỗi ImportError từ huggingface_hub v0.25+
+import huggingface_hub
+if not hasattr(huggingface_hub, "HfFolder"):
+    from huggingface_hub import get_token
+    class HfFolder:
+        @classmethod
+        def get_token(cls):
+            return get_token()
+        @classmethod
+        def save_token(cls, token):
+            pass
+    huggingface_hub.HfFolder = HfFolder
+
 import gradio as gr
 from huggingface_hub import HfApi
 

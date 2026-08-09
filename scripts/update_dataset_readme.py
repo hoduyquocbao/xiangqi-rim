@@ -48,19 +48,20 @@ language:
 license: mit
 task_categories:
 - reinforcement-learning
-- tabular-classification
+- text-generation
 task_ids:
-- chess-evaluation
+- conversational
+- text2text-generation
 size_categories:
 - 1M-10M
 tags:
 - xiangqi
+- chinese-chess
+- chess-evaluation
 - nnue
 - alpha-beta
 - reinforcement-learning
-- chinese-chess
-- high-throughput
-- zero-cost
+- jrcp3
 dataset_info:
   features:
   - name: fen
@@ -83,7 +84,10 @@ configs:
 - config_name: default
   data_files:
   - split: train
-    path: "*.jsonl"
+    path:
+    - "*.jsonl"
+    - "data/*.jsonl"
+    - "community/*.jsonl"
 ---
 
 # 🏯 Xiangqi-NNUE Master Dataset & Model Weights
