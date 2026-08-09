@@ -1,47 +1,23 @@
-# === XIANGQI-R1 REAL RULE DATA MINER ENGINE (v11.1-JRCP5-BULLETPROOF) ===
+# === XIANGQI-R1 REAL RULE GPU T4 DATA MINER ENGINE (v11.1-JRCP5-ULTRA-32D) ===
 # 100% PHYSICAL XIANGQI RULES + FULL JRCP 5.0 32-DIMENSIONAL ULTRA-DEEP TACTICAL THOUGHT CHAIN
 # + 36 KẾ BINH PHÁP + THẾ TRẬN KINH ĐIỂN + PERPETUAL CHECK/CHASE RULE ENGINE + OPPONENT COUNTER AUDIT
-# + DYNAMIC OPENING FEN SAMPLER (100% BOARD.APPLIED) + SIEVE DEDUP + ZERO-DEPENDENCY PURE PYTHON FALLBACK
+# + DYNAMIC OPENING FEN SAMPLER + SIEVE DEDUP + AUTO HF PUSH + REAL-TIME HEARTBEAT (3s)
 
 import os, sys, time, json, math, random, threading
 from pathlib import Path
 
-# Cấu hình linh hoạt PyTorch CUDA GPU & Pure Python Fallback Engine (Phòng ngự Kép)
-HAS_TORCH = False
-torch = None
-nn = None
-F = None
-HfApi = None
-
-# Bước 1: Ưu tiên tái sử dụng PyTorch instance từ sys.modules để tránh lỗi C++ duplicate registrations
-import sys
-if 'torch' in sys.modules:
-    try:
-        torch = sys.modules['torch']
-        nn = torch.nn
-        F = torch.nn.functional
-        if torch.cuda.is_available():
-            HAS_TORCH = True
-    except BaseException:
-        pass
-
-# Bước 2: Nếu chưa có trong sys.modules, thực hiện nạp mới với BaseException guard
-if not HAS_TORCH:
-    try:
-        import torch
-        import torch.nn as nn
-        import torch.nn.functional as F
-        if torch.cuda.is_available():
-            HAS_TORCH = True
-    except BaseException:
-        HAS_TORCH = False
-        torch = None
-        nn = None
-        F = None
-
+# Kiểm tra khả năng tương thích của hệ thống với PyTorch & HuggingFace Hub
 try:
+    import torch
+    import torch.nn as nn
+    import torch.nn.functional as F
     from huggingface_hub import HfApi
-except Exception:
+    HAS_TORCH = True
+except ImportError:
+    HAS_TORCH = False
+    torch = None
+    nn = None
+    F = None
     HfApi = None
 
 # ==============================================================================
@@ -1219,14 +1195,9 @@ if HAS_TORCH:
             h = F.gelu(self.fc2(h))
             return self.head(h) * 100.0
 
-def board_to_tensor(board: Board, device=None):
-    """Chuyển đổi mảng 90 ô cờ của Board thành PyTorch Tensor hoặc mảng ô cờ an toàn."""
-    if HAS_TORCH and torch is not None and device is not None:
-        try:
-            return torch.tensor(board.grid, dtype=torch.long, device=device)
-        except Exception:
-            pass
-    return board.grid
+def board_to_tensor(board: Board, device: torch.device) -> torch.Tensor:
+    """Chuyển đổi mảng 90 ô cờ của Board thành PyTorch Tensor dạng Long trên thiết bị `device`."""
+    return torch.tensor(board.grid, dtype=torch.long, device=device)
 
 # ==============================================================================
 # PHẦN IV: CHECKPOINT PHYSICAL UNIT TESTS & DATA VALIDATOR FIREWALL
@@ -1509,30 +1480,21 @@ PARALLEL = 64  # Số ván cờ chạy song song trên GPU
 
 def mine(target_games: int = 1000, depth: int = 12):
     """Hàm chính khởi chạy mining 64 ván song song kết hợp JRCP 5.0 (32 chiều kích) và nhịp đập tiến trình Real-time."""
+    if not HAS_TORCH or not torch.cuda.is_available():
+        print("❌ ERROR: CUDA GPU không khả dụng!")
+        sys.exit(1)
+
     # Chạy bộ 6 unit tests kiểm tra luật cờ vật lý trước khi khởi động
     run_unit_tests()
 
-    device = None
-    evaluator = None
-    use_gpu = False
-    param_count = 0
-    model_mb = 0.0
+    device = torch.device("cuda:0")
+    torch.cuda.set_device(0)
 
-    if HAS_TORCH and torch is not None:
-        try:
-            if torch.cuda.is_available():
-                device = torch.device("cuda:0")
-                torch.cuda.set_device(0)
-                evaluator = Evaluator().to(device).eval()
-                param_count = sum(p.numel() for p in evaluator.parameters())
-                model_mb = sum(p.numel() * p.element_size() for p in evaluator.parameters()) / (1024 * 1024)
-                use_gpu = True
-        except Exception as e:
-            print(f"⚠️ CẢNH BÁO: PyTorch/CUDA gặp sự cố ({e}) — Tự động chuyển sang Pure Python Search Engine!")
-            use_gpu = False
+    # Khởi tạo mô hình Evaluator Deep Residual 5M Params
+    evaluator = Evaluator().to(device).eval()
 
-    if not use_gpu:
-        print("ℹ️ Đang vận hành trên Pure Python Xiangqi Rule Engine (Zero Dependency Mode).")
+    param_count = sum(p.numel() for p in evaluator.parameters())
+    model_mb = sum(p.numel() * p.element_size() for p in evaluator.parameters()) / (1024 * 1024)
 
     import uuid
     node_id = uuid.uuid4().hex[:8]
@@ -1549,32 +1511,22 @@ def mine(target_games: int = 1000, depth: int = 12):
     dataset_repo = "hoduyquocbao/xiangqi-r1-nnue-dataset"
     last_push_time = time.time()
 
-    import platform
+    import psutil, platform
     cpu_count = os.cpu_count() or 1
-    try:
-        import psutil
-        ram_gb = psutil.virtual_memory().total / (1024 ** 3)
-    except Exception:
-        ram_gb = 12.0
+    ram_gb = psutil.virtual_memory().total / (1024 ** 3) if hasattr(psutil, 'virtual_memory') else 12.0
     python_ver = sys.version.split()[0]
     torch_ver = torch.__version__ if HAS_TORCH else "N/A"
-    vram_allocated = (torch.cuda.memory_allocated(0) / (1024 ** 3)) if (use_gpu and torch and torch.cuda.is_available()) else 0.0
-    vram_total = (torch.cuda.get_device_properties(0).total_memory / (1024 ** 3)) if (use_gpu and torch and torch.cuda.is_available()) else 0.0
+    vram_allocated = torch.cuda.memory_allocated(0) / (1024 ** 3) if HAS_TORCH else 0.0
+    vram_total = torch.cuda.get_device_properties(0).total_memory / (1024 ** 3) if HAS_TORCH else 0.0
 
     print("==================================================================", flush=True)
     print("📊 BÁO CÁO THÔNG SỐ CẤU HÌNH HỆ THỐNG — JRCP 5.0 ULTRA 32D REALTIME", flush=True)
     print("==================================================================", flush=True)
     print(f"🖥️ CPU Cores     : {cpu_count} vCPUs | Platform: {platform.system()} {platform.machine()}", flush=True)
     print(f"🧠 System RAM    : {ram_gb:.2f} GB RAM", flush=True)
-    if use_gpu and torch and torch.cuda.is_available():
-        vram_total = (torch.cuda.get_device_properties(0).total_memory / (1024 ** 3))
-        vram_allocated = (torch.cuda.memory_allocated(0) / (1024 ** 3))
-        vram_reserved = (torch.cuda.memory_reserved(0) / (1024 ** 3))
-        print(f"⚡ GPU Device    : {torch.cuda.get_device_name(0)} ({vram_total:.2f} GB VRAM | Reserved: {vram_reserved:.2f} GB | Active: {vram_allocated:.2f} GB)", flush=True)
-        print(f"🧰 Software Env  : Python {python_ver} | PyTorch {torch_ver} | CUDA {torch.version.cuda}", flush=True)
-    else:
-        print(f"⚡ Execution Mode: Pure Python / Rule Engine (Zero GPU/PyTorch Dependency)", flush=True)
-    print(f"🏷️ Engine Version : v11.1-jrcp5-bulletproof (Build 2026-08-10 02:30:00 ICT)", flush=True)
+    print(f"⚡ GPU Device    : {torch.cuda.get_device_name(0)} ({vram_total:.2f} GB VRAM | Allocated: {vram_allocated:.2f} GB)", flush=True)
+    print(f"🧰 Software Env  : Python {python_ver} | PyTorch {torch_ver} | CUDA {torch.version.cuda}", flush=True)
+    print(f"🏷️ Engine Version : v11.1-jrcp5-ultra-32d (Build 2026-08-10 02:40:00 ICT)", flush=True)
     print(f"🎮 Target Config  : {target_games:,} Games | Search Depth {depth}", flush=True)
     print(f"🆔 Unique Node ID : node_{node_id}", flush=True)
     print(f"📦 File Chunk Cap : 50 MB / Chunk (Active: Chunk #{chunk_idx:04d})", flush=True)
@@ -1649,8 +1601,8 @@ def mine(target_games: int = 1000, depth: int = 12):
 
             visited[s].add(fen)
 
-            # Temperature sampling khai cuộc hoặc fallback khi không dùng GPU
-            if (plies[s] < 10 and random.random() < 0.25) or not use_gpu:
+            # Temperature sampling khai cuộc
+            if plies[s] < 10 and random.random() < 0.25:
                 slot_info.append((s, legal, -1, 0, True))
             else:
                 offset = len(all_tensors)
@@ -1668,15 +1620,12 @@ def mine(target_games: int = 1000, depth: int = 12):
         # === GPU MEGA-BATCH EVALUATION (2000-4000 positions / batch) ===
         all_scores = None
         eval_start = time.time()
-        if use_gpu and all_tensors and evaluator is not None:
-            try:
-                mega_batch = torch.stack(all_tensors)
-                with torch.no_grad():
-                    with torch.amp.autocast('cuda'):
-                        all_scores = evaluator(mega_batch).squeeze(-1)
-                torch.cuda.synchronize()
-            except Exception as e:
-                all_scores = None
+        if all_tensors:
+            mega_batch = torch.stack(all_tensors)
+            with torch.no_grad():
+                with torch.amp.autocast('cuda'):
+                    all_scores = evaluator(mega_batch).squeeze(-1)
+            torch.cuda.synchronize()
         eval_ms = (time.time() - eval_start) * 1000.0
 
         # REAL-TIME HEARTBEAT PROGRESS LOGGING (Mỗi 3 giây NẢY SỐ MỘT LẦN)
@@ -1685,18 +1634,16 @@ def mine(target_games: int = 1000, depth: int = 12):
             last_heartbeat_time = now_time
             elapsed = max(0.001, now_time - start_time)
             fps = total_samples / elapsed
-            vram_res = (torch.cuda.memory_reserved(0) / (1024 ** 3)) if (use_gpu and torch and torch.cuda.is_available()) else 0.0
-            vram_act = (torch.cuda.memory_allocated(0) / (1024 ** 3)) if (use_gpu and torch and torch.cuda.is_available()) else 0.0
-            vram_str = f"{vram_act:.2f}/{vram_res:.2f}GB" if use_gpu else "0.00GB"
+            vram_curr = torch.cuda.memory_allocated(0) / (1024 ** 3)
             active_slots = sum(1 for s in range(PARALLEL) if slot_game[s] <= target_games)
             mega_size = len(all_tensors)
-            print(f"⚡ [HEARTBEAT | Step {step_counter:05d}] Active Slots: {active_slots}/64 | GPU Batch: {mega_size:,} FENs ({eval_ms:.1f}ms) | Total FENs: {total_samples:,} | Speed: {fps:,.1f} FEN/s | Games: {completed_games}/{target_games} | VRAM: {vram_str}", flush=True)
+            print(f"⚡ [HEARTBEAT | Step {step_counter:05d}] Active Slots: {active_slots}/64 | GPU Batch: {mega_size:,} FENs ({eval_ms:.1f}ms) | Total FENs: {total_samples:,} | Speed: {fps:,.1f} FEN/s | Games: {completed_games}/{target_games} | VRAM: {vram_curr:.2f}GB", flush=True)
 
         # Phân phối kết quả về từng slot
         for s, legal, offset, count, is_random in slot_info:
-            if is_random or not use_gpu or all_scores is None or count == 0:
+            if is_random:
                 best_move = random.choice(legal)
-                best_score = boards[s].material(boards[s].turn) - boards[s].material(1 - boards[s].turn)
+                best_score = 0
                 encoded_move = best_move.encode()
             else:
                 game_scores = all_scores[offset:offset + count]
@@ -1783,7 +1730,7 @@ def mine(target_games: int = 1000, depth: int = 12):
         except Exception as e:
             print(f"   ⚠️ Final push notice: {e}", flush=True)
 
-    final_vram = (torch.cuda.max_memory_allocated(0) / (1024 ** 3)) if (use_gpu and torch and torch.cuda.is_available()) else 0.0
+    final_vram = torch.cuda.max_memory_allocated(0) / (1024 ** 3)
     print("==================================================================")
     print(f"🎉 JRCP 5.0 ULTRA 32D MINING COMPLETED IN {(time.time() - start_time)/60:.2f} MINS!")
     print(f"📊 Total Unique FENs: {total_samples:,} | Sieve Dedup: {len(sieve_set):,} | Rejected: {rejected_count}")
