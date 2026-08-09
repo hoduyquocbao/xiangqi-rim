@@ -69,9 +69,9 @@ REPO = "hoduyquocbao/xiangqi-nnue-dataset"
 # ============================================================================
 # APPLICATION SEMANTIC VERSIONING & BUILD METADATA
 # ============================================================================
-APP_VERSION = "v5.6.1-production"
-APP_BUILD_STAMP = "2026-08-09 22:30:00 ICT"
-APP_RELEASE_NOTES = "Auto-rebuild Rust binaries on source code update & ensure 100% fresh compilation on Hugging Face Spaces"
+APP_VERSION = "v5.7.0-production"
+APP_BUILD_STAMP = "2026-08-09 22:35:00 ICT"
+APP_RELEASE_NOTES = "Target Depth-Centric Slider Auto-Update & Pure High-Performance Benchmark Analysis"
 
 # ============================================================================
 # PERSISTENT DISK LOGGING & TELEMETRY INFRASTRUCTURE
@@ -507,6 +507,8 @@ def run_hardware_benchmark(target_depth: int = 4, target_seconds: float = 1.0) -
             test_pairs.append((cpu_logical, d))
 
     best_score = -1.0
+    best_target_score = -1.0
+    best_target_config = None
     best_config = {"threads": cpu_logical, "depth": target_depth, "tt_mb": 512, "sieve_mb": 8192, "fen_s": 0.0, "samples": 0, "games": 0}
     benchmark_report_lines = []
     
@@ -605,43 +607,53 @@ def run_hardware_benchmark(target_depth: int = 4, target_seconds: float = 1.0) -
         
         is_target_marker = " 🎯 TARGET" if d == target_depth else ""
         is_best = f"🥇 OPTIMAL{is_target_marker}" if score > best_score else f"⚪ Normal{is_target_marker}"
+        
+        curr_cfg = {
+            "threads": t,
+            "depth": d,
+            "tt_mb": rec_tt,
+            "sieve_mb": rec_sieve,
+            "fen_s": fen_s,
+            "samples": samples,
+            "games": games_mined,
+            "score": score
+        }
+
+        if d == target_depth and score > best_target_score:
+            best_target_score = score
+            best_target_config = curr_cfg
+
         if score > best_score:
             best_score = score
-            best_config = {
-                "threads": t,
-                "depth": d,
-                "tt_mb": rec_tt,
-                "sieve_mb": rec_sieve,
-                "fen_s": fen_s,
-                "samples": samples,
-                "games": games_mined
-            }
+            best_config = curr_cfg
         
         benchmark_report_lines.append(
             f"| `{t} Cores` | `Depth {d}` | `{rec_tt} MB` | `{rec_sieve} MB` | `{games_mined} ván` | `{samples:,} FEN` | `{fen_s:.1f} FEN/s` | `{ram_used_pct:.0f}%` | `{score:.2f} Pts` | **{is_best}** |"
         )
 
+    final_cfg = best_target_config if best_target_config else best_config
+
     report_md = "\n".join(benchmark_report_lines)
     status_md = (
-        f"### ⚡ ĐÃ HOÀN TẤT BENCHMARK MA TRẬN TRỌNG SỐ (CPUs 4, 8, 12, 16 × Depth 1..12)\n"
-        f"- **Cấu Hình Nhanh Nhất Khuyên Dùng**: `{best_config['threads']} Cores` | `Depth {best_config['depth']}` | TT `{best_config['tt_mb']} MB` | Sieve `{best_config['sieve_mb']} MB`\n"
-        f"- **Vận Tốc Đo Đạc Thực Tế**: `{best_config['fen_s']:.1f} FEN/s` (~`{int(best_config['fen_s']*60):,}` FEN/phút)\n"
-        f"- **Tổng Mẫu FEN Thử Nghiệm**: `{best_config['samples']:,} FEN` từ `{best_config['games']}` ván\n"
-        f"- **Điểm Số Ma Trận Trọng Số**: `{best_score:.2f} Pts`\n"
+        f"### ⚡ ĐÃ HOÀN TẤT BENCHMARK DÀNH RIÊNG CHO TARGET SEARCH DEPTH `{final_cfg['depth']}`\n"
+        f"- **Cấu Hình Nhanh Nhất Khuyên Dùng**: `{final_cfg['threads']} Cores` | `Depth {final_cfg['depth']}` | TT `{final_cfg['tt_mb']} MB` | Sieve `{final_cfg['sieve_mb']} MB`\n"
+        f"- **Vận Tốc Đo Đạc Thực Tế**: `{final_cfg['fen_s']:.1f} FEN/s` (~`{int(final_cfg['fen_s']*60):,}` FEN/phút)\n"
+        f"- **Tổng Mẫu FEN Thử Nghiệm**: `{final_cfg['samples']:,} FEN` từ `{final_cfg['games']}` ván\n"
+        f"- **Điểm Số Ma Trận Trọng Số**: `{final_cfg['score']:.2f} Pts`\n"
         f"- **Hệ thống**: Đã tự động cập nhật các thanh trượt slider về cấu hình tối ưu này!"
     )
     metrics_md = (
-        f"| Chỉ Số Benchmark Thực Tế | Cấu Hình Tối Ưu |\n|---|---|\n"
-        f"| 🏆 **CPU Cores Tối Ưu** | `{best_config['threads']} Threads` |\n"
-        f"| 🧠 **Search Depth Tối Ưu** | `Depth {best_config['depth']}` |\n"
-        f"| ⚡ **Vận Tốc Khai Thác** | `{best_config['fen_s']:.1f} FEN/s` |\n"
-        f"| 🧩 **Số Mẫu POS / Ván** | `{best_config['samples']:,} FEN` |\n"
-        f"| 🧠 **TT RAM / Thread** | `{best_config['tt_mb']} MB` |\n"
-        f"| 🧬 **Sieve Bitset RAM** | `{best_config['sieve_mb']} MB` |\n"
-        f"| 🥇 **Điểm Trọng Số (Score)** | `{best_score:.2f} Pts` |"
+        f"| Chỉ Số Benchmark Thực Tế | Cấu Hình Tối Ưu Cho Depth {final_cfg['depth']} |\n|---|---|\n"
+        f"| 🏆 **CPU Cores Tối Ưu** | `{final_cfg['threads']} Threads` |\n"
+        f"| 🧠 **Search Depth Tối Ưu** | `Depth {final_cfg['depth']}` |\n"
+        f"| ⚡ **Vận Tốc Khai Thác** | `{final_cfg['fen_s']:.1f} FEN/s` |\n"
+        f"| 🧩 **Số Mẫu POS / Ván** | `{final_cfg['samples']:,} FEN` |\n"
+        f"| 🧠 **TT RAM / Thread** | `{final_cfg['tt_mb']} MB` |\n"
+        f"| 🧬 **Sieve Bitset RAM** | `{final_cfg['sieve_mb']} MB` |\n"
+        f"| 🥇 **Điểm Trọng Số (Score)** | `{final_cfg['score']:.2f} Pts` |"
     )
     
-    return report_md, status_md, metrics_md, best_config["threads"], best_config["tt_mb"], best_config["sieve_mb"]
+    return report_md, status_md, metrics_md, final_cfg["threads"], final_cfg["tt_mb"], final_cfg["sieve_mb"]
 
 def purge_current_output_file() -> tuple[str, str, str]:
     """Dừng tiến trình, xóa tệp output hiện tại và đưa toàn bộ log đĩa về trắng (blank)."""
