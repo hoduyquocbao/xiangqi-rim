@@ -6,6 +6,8 @@
 /web/node_modules/
 /web/dist/
 /web/.vite/
+*.wasm
+web/public/*.wasm
 
 # Data & Models
 /data/*.json
