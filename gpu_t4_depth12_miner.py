@@ -43,6 +43,8 @@ Nhiệm vụ của bạn là phân tích sâu sắc các vị trí cờ Tướng
 START_FEN = "r1bakab1r/9/1cn3nc1/p1p1p1p1p/9/9/P1P1P1P1P/1CN1C4/9/R1BAKABNR w - - 0 1"
 
 # 3. PYTORCH TENSOR CORE EVALUATION MODULE
+import torch.nn.functional as F
+
 class GpuXiangqiTensorEvaluator(nn.Module):
     def __init__(self):
         super().__init__()
@@ -61,8 +63,8 @@ class GpuXiangqiTensorEvaluator(nn.Module):
         h = self.act1(self.conv1(h))
         h = self.act2(self.conv2(h))
         h = self.pool(h).squeeze(-1)
-        h = torch.gelu(self.fc1(h))
-        h = torch.gelu(self.fc2(h))
+        h = F.gelu(self.fc1(h))
+        h = F.gelu(self.fc2(h))
         eval_score = self.head_eval(h) * 100.0
         return eval_score
 
