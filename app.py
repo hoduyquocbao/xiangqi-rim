@@ -69,9 +69,9 @@ REPO = "hoduyquocbao/xiangqi-nnue-dataset"
 # ============================================================================
 # APPLICATION SEMANTIC VERSIONING & BUILD METADATA
 # ============================================================================
-APP_VERSION = "v5.0.0-production"
-APP_BUILD_STAMP = "2026-08-09 22:05:00 ICT"
-APP_RELEASE_NOTES = "Release Comprehensive Multi-Dimensional Hardware Benchmark Matrix (CPUs 4, 8, 12, 16 x Depth 1-12 & Instant Benchmark Flush Engine)"
+APP_VERSION = "v5.1.0-production"
+APP_BUILD_STAMP = "2026-08-09 22:10:00 ICT"
+APP_RELEASE_NOTES = "Fix Benchmark Zero-FEN Bug & Enable Lightweight 64MB RAM Instant Startup Benchmark Mode"
 
 # ============================================================================
 # PERSISTENT DISK LOGGING & TELEMETRY INFRASTRUCTURE
@@ -452,14 +452,14 @@ def reset_logs_to_blank() -> tuple[str, str]:
         "🧹 Đã đưa tệp telemetry (logs/system_telemetry.jsonl) về mặc định trắng (blank) 100%!"
     )
 
-def run_hardware_benchmark(target_seconds: int = 5) -> tuple[str, str, str, int, int, int]:
+def run_hardware_benchmark(target_seconds: int = 2) -> tuple[str, str, str, int, int, int]:
     """
-    Khảo sát & Đo đạc đa chiều Ma Trận Trọng Số Vận Tốc phần cứng thực tế (CPU Cores: 4, 8, 12, 16 Cores × Search Depths 1-12).
+    Khảo sát & Đo đạc đa chiều Ma Trận Trọng Số Vận Tốc phần cứng thực tế (CPU Cores: 4, 8, 12, 16 Cores × Search Depths 1..12).
     """
     cpu_logical, cpu_physical, mem_total, mem_avail, raw_logical, cgroup_cpus = get_system_specs()
     
-    # 1. Các cấp CPU Cores kiểm thử (4, 8, 12, 16 Cores)
-    core_levels = [4, 8, 12, 16]
+    # 1. Các cấp CPU Cores kiểm thử (16, 12, 8, 4 Cores)
+    core_levels = [16, 12, 8, 4]
     core_candidates = [c for c in core_levels if c <= cpu_logical]
     if not core_candidates:
         core_candidates = [cpu_logical]
@@ -484,20 +484,22 @@ def run_hardware_benchmark(target_seconds: int = 5) -> tuple[str, str, str, int,
 
     for t in core_candidates:
         for d in depth_candidates:
-            tt_candidate = min(2048, max(256, int((mem_total * 1024 * 0.20) / max(1, t))))
-            sieve_candidate = min(32768, max(1024, prev_power_of_two(int(mem_total * 1024 * 0.25))))
+            # RAM khuyến nghị cấp phát khi khai thác chính thức
+            rec_tt = min(2048, max(256, int((mem_total * 1024 * 0.20) / max(1, t))))
+            rec_sieve = min(32768, max(1024, prev_power_of_two(int(mem_total * 1024 * 0.25))))
             
             bench_out = f"data/hf_space/bench_t{t}_d{d}.jsonl"
             if os.path.exists(bench_out):
                 try: os.remove(bench_out)
                 except Exception: pass
 
+            # Trong chế độ Benchmark: Cấp TT=64MB & SIEVE=64MB để nạp RAM siêu tốc (0.001s) khởi chạy lập tức
             env = os.environ.copy()
-            env["GAMES"] = "100"
+            env["GAMES"] = "500"
             env["DEPTH"] = str(d)
             env["THREADS"] = str(t)
-            env["TT_MB"] = str(tt_candidate)
-            env["SIEVE_MB"] = str(sieve_candidate)
+            env["TT_MB"] = "64"
+            env["SIEVE_MB"] = "64"
             env["SEED"] = "999"
             env["OUTPUT"] = bench_out
             env["BENCHMARK"] = "1"  # BẬT CHẾ ĐỘ BENCHMARK FLUSH TỨC THỜI 100%
@@ -506,7 +508,7 @@ def run_hardware_benchmark(target_seconds: int = 5) -> tuple[str, str, str, int,
             proc = subprocess.Popen([binary], env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
             time.sleep(target_seconds)
             
-            # Gửi tín hiệu ngắt nhẹ nhàng
+            # Gửi tín hiệu SIGTERM ngắt nhẹ nhàng
             try: proc.terminate()
             except Exception: pass
 
@@ -520,7 +522,7 @@ def run_hardware_benchmark(target_seconds: int = 5) -> tuple[str, str, str, int,
             elapsed = max(0.1, time.time() - t0)
             samples = 0
             
-            # 1. Đếm số mẫu FEN đã flush xuống đĩa
+            # 1. Đếm số mẫu FEN thực tế thu hoạch trên đĩa
             if os.path.exists(bench_out):
                 try:
                     with open(bench_out, "r", encoding="utf-8") as f:
@@ -529,7 +531,7 @@ def run_hardware_benchmark(target_seconds: int = 5) -> tuple[str, str, str, int,
                 except Exception:
                     pass
             
-            # 2. Nếu đĩa rỗng, đọc từ stdout log monitor
+            # 2. Đọc từ stdout log monitor nếu file bị ngắt nửa chừng
             if samples == 0 and out_text:
                 for line in out_text.splitlines():
                     if "Samples:" in line:
@@ -542,7 +544,14 @@ def run_hardware_benchmark(target_seconds: int = 5) -> tuple[str, str, str, int,
                             pass
 
             fen_s = samples / elapsed
-            games_mined = max(1, int(samples / 50)) if samples > 0 else 0
+            games_mined = max(1, int(samples / 48)) if samples > 0 else 0
+            
+            # RAM Used %
+            if HAS_PSUTIL:
+                ram_used_pct = psutil.virtual_memory().percent
+            else:
+                ram_used_pct = round(((mem_total - mem_avail) / max(1.0, mem_total)) * 100, 1)
+
             ram_eff = min(1.0, (mem_avail / max(1.0, mem_total)))
             scalability = min(1.0, fen_s / max(1.0, t * 150))
             
@@ -555,15 +564,15 @@ def run_hardware_benchmark(target_seconds: int = 5) -> tuple[str, str, str, int,
                 best_config = {
                     "threads": t,
                     "depth": d,
-                    "tt_mb": tt_candidate,
-                    "sieve_mb": sieve_candidate,
+                    "tt_mb": rec_tt,
+                    "sieve_mb": rec_sieve,
                     "fen_s": fen_s,
                     "samples": samples,
                     "games": games_mined
                 }
             
             benchmark_report_lines.append(
-                f"| `{t} Cores` | `Depth {d}` | `{tt_candidate} MB` | `{sieve_candidate} MB` | `{games_mined} ván` | `{samples:,} FEN` | `{fen_s:.1f} FEN/s` | `{ram_eff*100:.0f}%` | `{score:.2f} Pts` | **{is_best}** |"
+                f"| `{t} Cores` | `Depth {d}` | `{rec_tt} MB` | `{rec_sieve} MB` | `{games_mined} ván` | `{samples:,} FEN` | `{fen_s:.1f} FEN/s` | `{ram_used_pct:.0f}%` | `{score:.2f} Pts` | **{is_best}** |"
             )
 
     report_md = "\n".join(benchmark_report_lines)
