@@ -9,16 +9,17 @@ Toàn bộ các notebook đã được phân loại theo chỉ mục trực quan
 
 ```
 notebooks/
+├── colab_gpu_depth12_miner.ipynb   # ⭐ 1-CLICK T4 GPU MINER MASTER: Standalone Cell GPU Miner (v8.3.0, 100% Real Rules, 6 Unit Tests, JRCP 3.0)
 ├── 01_community_mining/            # Phase 1: Đóng góp Khai thác Dữ liệu cờ Tướng
-│   ├── 01_mine_jrcp3_depth12.ipynb  # 🔥 KHUYÊN DÙNG #1: Miner JRCP 3.0 Depth 12 (1-Click, Auto Push, SIGTERM, Checkpoint)
+│   ├── 01_mine_jrcp3_depth12.ipynb  # 🔥 Miner JRCP 3.0 Depth 12 (1-Click, Auto Push, SIGTERM, Checkpoint)
 │   └── 02_colab_mining_t4_fast.ipynb# GPU T4 Mining Siêu Tốc (Vectorized PyTorch Eval 200K pos/s)
 │
 ├── 02_community_training/          # Phase 2: Đóng góp Huấn luyện Mô hình LLM (GRPO)
-│   ├── 01_train_grpo_lora.ipynb     # 🔥 KHUYÊN DÙNG #2: GRPO Trainer Unsloth 4-bit LoRA (3 Rewards, Resume)
+│   ├── 01_train_grpo_lora.ipynb     # 🔥 GRPO Trainer Unsloth 4-bit LoRA (3 Rewards, Resume)
 │   └── 02_train_grpo_legacy.ipynb   # GRPO Trainer phiên bản cơ sở
 │
 ├── 03_nnue_training/               # Phase 3: Huấn luyện Mạng NNUE Nhị Phân cho Engine Rust
-│   ├── 01_train_nnue_xrnn.ipynb     # 🔥 KHUYÊN DÙNG #3: PyTorch EmbeddingBag NNUE Trainer (Xuất weights .bin 33.5MB)
+│   ├── 01_train_nnue_xrnn.ipynb     # 🔥 PyTorch EmbeddingBag NNUE Trainer (Xuất weights .bin 33.5MB)
 │   └── 02_gradio_miner_and_nnue.ipynb# Gradio Miner Web GUI & NNUE Trainer
 │
 └── 04_core_maintainer/             # Phase 4: Công cụ Dành cho Core Developers
