@@ -69,9 +69,9 @@ REPO = "hoduyquocbao/xiangqi-nnue-dataset"
 # ============================================================================
 # APPLICATION SEMANTIC VERSIONING & BUILD METADATA
 # ============================================================================
-APP_VERSION = "v3.5.0-production"
-APP_BUILD_STAMP = "2026-08-09 21:38:00 ICT"
-APP_RELEASE_NOTES = "Dynamic Microsecond Auto-Seed Randomization (100% Search Space Partitioning Across Nodes)"
+APP_VERSION = "v4.0.0-production"
+APP_BUILD_STAMP = "2026-08-09 21:42:00 ICT"
+APP_RELEASE_NOTES = "Release Hardware Auto-Benchmark Sweep Engine & Decision Weight Matrix Optimal Config Finder"
 
 # ============================================================================
 # PERSISTENT DISK LOGGING & TELEMETRY INFRASTRUCTURE
@@ -448,6 +448,99 @@ def reset_logs_to_blank() -> str:
     """Xóa sạch và đưa toàn bộ tệp log đĩa cứng & telemetry về mặc định trắng (blank)."""
     TelemetryLogger.clear_all_logs()
     return "🧹 Đã đưa toàn bộ tệp log đĩa cứng (logs/miner_stdout_stderr.log) và telemetry (logs/system_telemetry.jsonl) về mặc định trắng (blank) 100%!"
+
+def run_hardware_benchmark(target_seconds: int = 5) -> tuple[str, str, str, int, int, int]:
+    """Chạy thử nghiệm Micro-Benchmark đa luồng thực tế trong 5s để tự động chấm điểm Ma Trận Trọng Số và tìm ra Cấu hình Nhanh Nhất (FEN/s) trên phần cứng này."""
+    cpu_logical, cpu_physical, mem_total, mem_avail, raw_logical, cgroup_cpus = get_system_specs()
+    
+    # Quét các mức Threads đề xuất
+    thread_candidates = sorted(list(set([max(1, cpu_physical), max(1, cpu_logical // 2), cpu_logical])), reverse=True)
+    best_score = -1.0
+    best_config = {"threads": cpu_logical, "tt_mb": 512, "sieve_mb": 8192, "fen_s": 0.0}
+    benchmark_report_lines = []
+    
+    benchmark_report_lines.append(f"### 🧪 KẾT QUẢ BENCHMARK THEO MA TRẬN TRỌNG SỐ VẬN TỐC ({target_seconds}s Micro-Sweep)")
+    benchmark_report_lines.append(f"| Threads | TT MB | Sieve MB | FEN/s Thực Tế | RAM Used | Ma Trận Trọng Số (Score) | Trạng Thái |")
+    benchmark_report_lines.append(f"|---|---|---|---|---|---|---|")
+
+    binary_target = "23_jrcp3_ram64g_miner" if os.path.exists("examples/23_jrcp3_ram64g_miner.rs") else "21_ram64g_mine"
+    try:
+        binary = setup(binary_target)
+    except Exception as e:
+        return f"❌ Lỗi biên dịch benchmark engine: {e}", "", "", cpu_logical, 512, 8192
+
+    for t in thread_candidates:
+        tt_candidate = min(2048, max(256, int((mem_total * 1024 * 0.20) / max(1, t))))
+        sieve_candidate = min(32768, max(1024, prev_power_of_two(int(mem_total * 1024 * 0.25))))
+        
+        bench_out = f"data/hf_space/bench_t{t}.jsonl"
+        env = os.environ.copy()
+        env["GAMES"] = "50"
+        env["DEPTH"] = "3"
+        env["THREADS"] = str(t)
+        env["TT_MB"] = str(tt_candidate)
+        env["SIEVE_MB"] = str(sieve_candidate)
+        env["SEED"] = "999"
+        env["OUTPUT"] = bench_out
+        
+        t0 = time.time()
+        proc = subprocess.Popen([binary], env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        time.sleep(target_seconds)
+        proc.terminate()
+        try:
+            proc.wait(timeout=1)
+        except Exception:
+            proc.kill()
+        
+        elapsed = max(0.1, time.time() - t0)
+        samples = 0
+        if os.path.exists(bench_out):
+            try:
+                with open(bench_out, "r", encoding="utf-8") as f:
+                    samples = len(f.readlines())
+                os.remove(bench_out)
+            except Exception:
+                pass
+        
+        fen_s = samples / elapsed
+        ram_eff = min(1.0, (mem_avail / max(1.0, mem_total)))
+        scalability = min(1.0, fen_s / max(1.0, t * 150))
+        
+        # Ma trận trọng số: 50% FEN/s + 30% Scalability + 20% RAM Efficiency
+        score = (fen_s * 0.50) + (scalability * 100 * 0.30) + (ram_eff * 100 * 0.20)
+        
+        is_best = "🥇 OPTIMAL" if score > best_score else "⚪ Normal"
+        if score > best_score:
+            best_score = score
+            best_config = {
+                "threads": t,
+                "tt_mb": tt_candidate,
+                "sieve_mb": sieve_candidate,
+                "fen_s": fen_s
+            }
+        
+        benchmark_report_lines.append(
+            f"| `{t} Cores` | `{tt_candidate} MB` | `{sieve_candidate} MB` | `{fen_s:.1f} FEN/s` | `{ram_eff*100:.0f}%` | `{score:.2f} Pts` | **{is_best}** |"
+        )
+    
+    report_md = "\n".join(benchmark_report_lines)
+    status_md = (
+        f"### ⚡ ĐÃ TÌM THẤY CẤU HÌNH VẬN TỐC TỐI ƯU BẰNG BENCHMARK MA TRẬN TRỌNG SỐ\n"
+        f"- **Cấu Hình Nhanh Nhất Khuyên Dùng**: `{best_config['threads']} Cores` | TT `{best_config['tt_mb']} MB` | Sieve `{best_config['sieve_mb']} MB`\n"
+        f"- **Vận Tốc Đo Đạc Thực Tế**: `{best_config['fen_s']:.1f} FEN/s` (~`{int(best_config['fen_s']*60):,}` FEN/phút)\n"
+        f"- **Điểm Số Ma Trận Trọng Số**: `{best_score:.2f} Pts` (50% FEN/s + 30% Scalability + 20% RAM Eff)\n"
+        f"- **Hệ thống**: Đã tự động cập nhật các thanh trượt slider về cấu hình tối ưu này!"
+    )
+    metrics_md = (
+        f"| Chỉ Số Benchmark Thực Tế | Cấu Hình Tối Ưu |\n|---|---|\n"
+        f"| 🏆 **Cấu Hình Tối Ưu** | `{best_config['threads']} Threads` |\n"
+        f"| ⚡ **Vận Tốc Khai Thác** | `{best_config['fen_s']:.1f} FEN/s` |\n"
+        f"| 🧠 **TT RAM / Thread** | `{best_config['tt_mb']} MB` |\n"
+        f"| 🧬 **Sieve Bitset RAM** | `{best_config['sieve_mb']} MB` |\n"
+        f"| 🥇 **Điểm Trọng Số (Score)** | `{best_score:.2f} Pts` |"
+    )
+    
+    return report_md, status_md, metrics_md, best_config["threads"], best_config["tt_mb"], best_config["sieve_mb"]
 
 def purge_current_output_file() -> tuple[str, str, str]:
     """Dừng tiến trình, xóa tệp output hiện tại và đưa toàn bộ log đĩa về trắng (blank)."""
@@ -1103,6 +1196,11 @@ Vận hành **Native Rust Engine {APP_VERSION}** tự động scaling theo CPU Q
                         variant="primary",
                         size="lg"
                     )
+                    bench_btn = gr.Button(
+                        "⚡ BENCHMARK TÌM CẤU HÌNH NHANH NHẤT",
+                        variant="primary",
+                        size="lg"
+                    )
                     stop_btn = gr.Button(
                         "🛑 DỪNG KHAI THÁC",
                         variant="stop",
@@ -1166,6 +1264,12 @@ Vận hành **Native Rust Engine {APP_VERSION}** tự động scaling theo CPU Q
             fn=start_mining,
             inputs=[worker_input, games_slider, depth_slider, threads_slider, tt_mb_slider, sieve_mb_slider, seed_input, token_input, repo_input],
             outputs=[status_box, metrics_box, logs_box]
+        )
+
+        bench_btn.click(
+            fn=run_hardware_benchmark,
+            inputs=[],
+            outputs=[logs_box, status_box, metrics_box, threads_slider, tt_mb_slider, sieve_mb_slider]
         )
 
         stop_btn.click(

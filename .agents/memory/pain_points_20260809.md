@@ -234,3 +234,15 @@ $$\text{Điểm Chất Lượng Agent} = \text{Kế Hoạch Rõ Ràng} + \text{V
    - **Phân Tách 100% Không Gian Tìm Kiếm**: Đảm bảo 100% không bao giờ có 2 node nào sinh ra trùng PRNG Seed khai cuộc.
    - **Tự Động Kích Hoạt JRCP 3.0 Engine**: `app.py` ưu tiên tự động kích hoạt `23_jrcp3_ram64g_miner` làm engine đào mặc định.
    - **Nâng Cấp Phiên Bản Mới**: `v3.5.0-production` (Build `2026-08-09 21:38:00 ICT`).
+
+---
+
+### XVIII. PHÁT HÀNH PHIÊN BẢN v4.0.0-PRODUCTION HARDWARE AUTO-BENCHMARK SWEEP ENGINE (v4.0.0-production)
+
+1. **NGUYÊN NHÂN ANH HDQB TRUY VẤN VỀ THIỆN KIẾN NÂNG CẤP & CẤU HÌNH NHANH NHẤT**:
+   - Việc thiết lập tham số Cores/RAM theo cảm tính không chứng minh được đâu là cấu hình đạt FEN/s cao nhất trên phần cứng thực tế.
+
+2. **GIẢI PHÁP ĐÃ THỰC THI (Commit `v4.0.0-production`)**:
+   - **Hệ Thống Hardware Auto-Benchmark Sweep Engine (`run_hardware_benchmark`)**: Nhấn nút "⚡ BENCHMARK TÌM CẤU HÌNH NHANH NHẤT" trên Web UI sẽ thực hiện thử nghiệm Micro-Sweep (5 giây per candidate) đo đạc trực tiếp FEN/s thực tế trên CPU/RAM node này.
+   - **Ma Trận Trọng Số Bất Biến (Weighted Decision Matrix Score)**: Chấm điểm dựa trên 50% FEN/s + 30% Scalability + 20% RAM Efficiency. Tự động điền cấu hình chiến thắng vào các Slider trên UI!
+   - **Nâng Cấp Phiên Bản Mới**: `v4.0.0-production` (Build `2026-08-09 21:42:00 ICT`).
