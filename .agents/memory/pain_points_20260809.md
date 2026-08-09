@@ -139,3 +139,17 @@ $$\text{Điểm Chất Lượng Agent} = \text{Kế Hoạch Rõ Ràng} + \text{V
    - Mọi cập nhật bài học mới **BẮT BUỘC PHẢI ĐƯỢC NỐI VÀO CUỐI TỆP (APPEND-ONLY)**.
    - Nếu tệp bài học hiện tại vượt quá 15KB hoặc chứa nhiều chủ đề khác nhau, Agent **BẮT BUỘC phải tạo tệp mới mang dấu thời gian** (ví dụ: `pain_points_[YYYYMMDD_HHMM].md`) và đăng ký vào tệp mục lục [`INDEX.md`](file://.agents/memory/INDEX.md).
    - Bảo đảm 100% di sản tri thức của tất cả các thế hệ Agent được giữ lại nguyên vẹn không sứt móng nanh!
+
+---
+
+### XI. TỰ ĐỘNG KHÔI PHỤC VÀ HIỂN THỊ ACTIVE SESSION UI KHI RELOAD TRANG (v2.9.0-production)
+
+1. **NGUYÊN NHÂN GỐC RỄ CỦA LỖI UI RESET KHI RELOAD**:
+   - `get_running_miner_pids()` và `get_miner_process_details()` cũ trong `app.py` bị **khóa cứng chuỗi tìm kiếm** `if "21_ram64g_mine" in cmd_str:`.
+   - Khi ứng dụng chuyển sang biên dịch nhị phân `23_jrcp3_ram64g_miner`, tiến trình ngầm có `cmdline = ["target/release/examples/23_jrcp3_ram64g_miner"]`.
+   - Lời gọi `sync_on_load()` khi reload trang quét tìm `21_ram64g_mine` không thấy nên trả về danh sách `pids` rỗng `[]` và `proc_details` rỗng `[]`.
+   - `if proc_details or pids or running:` đánh giá thành `False`, đẩy giao diện về nhánh `else` hiển thị *"Sẵn sàng khai thác dữ liệu... Chờ khởi chạy..."*, làm người dùng lầm tưởng phiên ngầm bị mất!
+
+2. **GIẢI PHÁP ĐÃ XỬ LÝ NÂNG CẤP VÂN TỐC KHÔI PHỤC (Commit `v2.9.0-production`)**:
+   - **Thêm helper `is_miner_cmdline(cmdline)`**: Nhận diện tất cả các tên nhị phân Rust miner (`21_ram64g_mine`, `23_jrcp3_ram64g_miner`, `mine_dataset`, `xiangrust`, `target/release/examples`).
+   - **Bổ sung Kiểm Tra Tiến Trình Theo `saved_pid`**: Đọc `saved_pid` từ `data/active_session.json` và kiểm tra `saved_pid_alive` thông qua `psutil.pid_exists(saved_pid)` / `os.kill(saved_pid, 0)`. Nếu tiến trình ngầm vẫn sống trong OS, `sync_on_load()` 100% khôi phục lại trạng thái **ĐANG KHAI THÁC** cùng toàn bộ thông số FEN/s, dung lượng tệp, và tail logs live!

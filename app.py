@@ -57,9 +57,9 @@ REPO = "hoduyquocbao/xiangqi-nnue-dataset"
 # ============================================================================
 # APPLICATION SEMANTIC VERSIONING & BUILD METADATA
 # ============================================================================
-APP_VERSION = "v2.8.0-production"
-APP_BUILD_STAMP = "2026-08-09 21:12:00 ICT"
-APP_RELEASE_NOTES = "Silence Gradio Deprecation Warnings & Disable Node SSR Proxy Warnings"
+APP_VERSION = "v2.9.0-production"
+APP_BUILD_STAMP = "2026-08-09 21:18:00 ICT"
+APP_RELEASE_NOTES = "Fix Active Session UI Auto-Recovery on Reload (saved_pid_alive + multi-binary cmdline matching)"
 
 # ============================================================================
 # PERSISTENT DISK LOGGING & TELEMETRY INFRASTRUCTURE
@@ -271,6 +271,13 @@ def hardware() -> str:
 """
     return info
 
+def is_miner_cmdline(cmdline: list) -> bool:
+    """Nhận diện tất cả các tên nhị phân Rust Miner đang vận hành trong OS."""
+    cmd_str = " ".join(cmdline or []).lower()
+    return any(k in cmd_str for k in [
+        "21_ram64g_mine", "23_jrcp3_ram64g_miner", "mine_dataset", "xiangrust", "target/release/examples"
+    ])
+
 def get_running_miner_pids():
     """Tìm tất cả PID của tiến trình Rust Miner đang chạy ngầm trong OS."""
     pids = []
@@ -278,14 +285,13 @@ def get_running_miner_pids():
         for proc in psutil.process_iter(['pid', 'name', 'cmdline']):
             try:
                 cmdline = proc.info.get('cmdline') or []
-                cmd_str = " ".join(cmdline)
-                if "21_ram64g_mine" in cmd_str:
+                if is_miner_cmdline(cmdline):
                     pids.append(proc.info['pid'])
             except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
                 pass
     else:
         try:
-            res = subprocess.run(["pgrep", "-f", "21_ram64g_mine"], capture_output=True, text=True)
+            res = subprocess.run(["pgrep", "-f", "target/release/examples"], capture_output=True, text=True)
             if res.returncode == 0:
                 pids = [int(p) for p in res.stdout.strip().split() if p.isdigit()]
         except Exception:
@@ -339,11 +345,17 @@ def kill_all_miner_processes():
         process = None
 
     pids = get_running_miner_pids()
+    session = load_session_state()
+    saved_pid = session.get("pid")
+    if saved_pid and saved_pid not in pids:
+        pids.append(saved_pid)
+
     for pid in pids:
         try:
             if HAS_PSUTIL:
-                p = psutil.Process(pid)
-                p.kill()
+                if psutil.pid_exists(pid):
+                    p = psutil.Process(pid)
+                    p.kill()
             else:
                 os.kill(pid, signal.SIGKILL)
             killed_count += 1
@@ -378,8 +390,7 @@ def get_miner_process_details():
         for proc in psutil.process_iter(['pid', 'name', 'cmdline', 'create_time', 'memory_info', 'cpu_percent']):
             try:
                 cmdline = proc.info.get('cmdline') or []
-                cmd_str = " ".join(cmdline)
-                if "21_ram64g_mine" in cmd_str:
+                if is_miner_cmdline(cmdline):
                     pid = proc.info['pid']
                     mem_info = proc.info.get('memory_info')
                     rss_gb = (mem_info.rss / (1024 ** 3)) if mem_info else 0.0
@@ -389,7 +400,7 @@ def get_miner_process_details():
                     
                     details.append({
                         "pid": pid,
-                        "name": "21_ram64g_mine",
+                        "name": os.path.basename(cmdline[0]) if cmdline else "rust_miner",
                         "rss_gb": rss_gb,
                         "uptime_sec": uptime_sec,
                         "cpu_pct": cpu_pct
@@ -414,6 +425,18 @@ def sync_on_load():
     pids = [d["pid"] for d in proc_details] or get_running_miner_pids()
     session = load_session_state()
 
+    saved_pid = session.get("pid")
+    saved_pid_alive = False
+    if saved_pid:
+        try:
+            if HAS_PSUTIL:
+                saved_pid_alive = psutil.pid_exists(saved_pid)
+            else:
+                os.kill(saved_pid, 0)
+                saved_pid_alive = True
+        except Exception:
+            saved_pid_alive = False
+
     if session.get("status") == "CRASHED":
         exit_code = session.get("exit_code", -1)
         err_logs = session.get("last_logs", [])
@@ -435,7 +458,7 @@ def sync_on_load():
         log_text = f"❌ NHẬT KÝ CRASH TELEMETRY (Exit Code {exit_code}):\n" + "\n".join(err_logs[-30:])
         return status_md, metrics_md, log_text
 
-    if proc_details or pids or running:
+    if proc_details or pids or running or saved_pid_alive:
         worker = session.get("worker", f"worker_{cpu_logical}cpu_{int(mem_total)}g")
         games = session.get("games", 100000)
         depth = session.get("depth", 4)
