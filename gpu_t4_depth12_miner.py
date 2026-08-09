@@ -108,9 +108,9 @@ def run_gpu_t4_mining(target_games: int = 30000, target_depth: int = 12, batch_s
     total_samples = 0
     total_games_completed = 0
 
-    api = HfApi()
     token = os.environ.get("HF_TOKEN")
     dataset_repo = "hoduyquocbao/xiangqi-r1-nnue-dataset"
+    api = HfApi() if token else None
 
     with open(out_file, "w", encoding="utf-8") as f:
         step = 0
