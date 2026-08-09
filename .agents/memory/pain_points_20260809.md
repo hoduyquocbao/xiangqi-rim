@@ -615,3 +615,16 @@ $$\text{Điểm Chất Lượng Agent} = \text{Kế Hoạch Rõ Ràng} + \text{V
      8. `Thought Tag Integrity`: Bắt buộc chuỗi `<thought>` chứa đủ 14 thẻ phân tích `[1/14]` đến `[14/14]`.
    - **Cơ chế Xử Lý Sau Lọc**: Nếu phát hiện bất kỳ mẫu FEN nào vi phạm dù chỉ 1 tiêu chuẩn, mẫu đó sẽ **BỊ REJECT NGAY LẬP TỨC & HUỶ BỎ**, in cảnh báo ra log và **KHÔNG BAO GIỜ được ghi vào file dataset hay đẩy lên HuggingFace Hub**!
    - **Nâng Cấp Phiên Bản Mới**: `v8.5.0-gpu-strict-validator` (Build `2026-08-09 23:42:00 ICT`).
+
+---
+
+### XLIV. SỬA LỖI AUTO-PUSH 401 HUGGING FACE BẰNG TỰ ĐỘNG KHỞI TẠO DATASET REPOSITORY (`v8.6.0-hf-auto-create`)
+
+1. **NGUYÊN NHÂN GỐC RỄ LỖI 401 REPOSITORY NOT FOUND**:
+   - Khi gọi `api.upload_file()` lên dataset repo `hoduyquocbao/xiangqi-r1-nnue-dataset` chưa tồn tại sẵn hoặc khi Token chưa được khởi tạo repo trước đó, Hugging Face Hub API sẽ trả về lỗi `401 Client Error / 404 Repository Not Found`.
+
+2. **HÀNH ĐỘNG SỬA LỖI & NÂNG CẤP DỰ ÁN (Commit `c88f806`)**:
+   - **Nâng cấp gói thư viện**: Cập nhật lệnh `pip install -U huggingface_hub psutil torch` trong Cell 1.
+   - **Tự động khởi tạo Repo**: Thêm lệnh `api.create_repo(repo_id="hoduyquocbao/xiangqi-r1-nnue-dataset", repo_type="dataset", exist_ok=True, token=token)` ngay trong hàm khởi tạo và trước khi đẩy checkpoint trong `async_push()`.
+   - **Đảm bảo tính hợp lệ**: Khi repo đã tồn tại, `exist_ok=True` sẽ bỏ qua mà không bắn ngoại lệ; nếu repo chưa tồn tại, hệ thống tự động khởi tạo repo mới 100%.
+   - **Nâng Cấp Phiên Bản Mới**: `v8.6.0-hf-auto-create` (Build `2026-08-10 00:12:00 ICT`).
