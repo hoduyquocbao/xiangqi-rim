@@ -1,0 +1,12 @@
+# HuggingFace Space Ignore File (.hfignore)
+# Bỏ qua các tệp web UI frontend, wasm nhị phân và dữ liệu nặng không cần thiết cho app.py
+
+web/
+*.wasm
+*.bin
+*.jsonl
+data/*.bin
+data/*.jsonl
+target/
+.agents/
+.user_uploaded/
