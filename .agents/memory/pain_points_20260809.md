@@ -285,3 +285,15 @@ $$\text{Điểm Chất Lượng Agent} = \text{Kế Hoạch Rõ Ràng} + \text{V
    - **Tích hợp `free_port_if_occupied(port)` Zombie Socket Killer**: Quét bằng `psutil.process_iter()`, tìm tất cả tiến trình khác PID đang giữ socket INET port 7860 và gọi `proc.kill()` cưỡng chế giải phóng ngay lập tức trước và trong vòng lặp launch.
    - **Kết quả**: Cổng 7860 được giải phóng 100% sạch sẽ, Gradio server mở lại lập tức mà không kẹt 10/10 lần!
    - **Nâng Cấp Phiên Bản Mới**: `v4.3.0-production` (Build `2026-08-09 21:50:00 ICT`).
+
+---
+
+### XXII. LOẠI BỎ HÀM DIỆT PROCESS KHỎI APP.PY ĐỂ NHƯỜNG QUYỀN QUẢN LÝ CONTAINER CHO HUGGINGFACE SPACES (v4.4.0-production)
+
+1. **CHỈ THỊ THAY ĐỔI THEO YÊU CẦU CỦA ANH HDQB**:
+   - HuggingFace Spaces sở hữu môi trường runtime container riêng có sẵn cơ chế supervisor/container lifecycle management. Chúng ta không nên tự ý can thiệp vào các tiến trình hệ thống bằng `psutil.process_iter().kill()`.
+
+2. **GIẢI PHÁP ĐÃ THỰC THI (Commit `v4.4.0-production`)**:
+   - **Loại bỏ `free_port_if_occupied()` & vòng lặp custom retry**: Gỡ bỏ hoàn toàn logic diệt process và trả `app.py` về cơ chế khởi chạy Gradio tiêu chuẩn nguyên bản: `demo.launch(server_name="0.0.0.0", server_port=port)`.
+   - **Giao quyền quản lý container cho HF Spaces**: Tôn trọng ranh giới môi trường thực thi của HuggingFace Space.
+   - **Nâng Cấp Phiên Bản Mới**: `v4.4.0-production` (Build `2026-08-09 21:52:00 ICT`).
