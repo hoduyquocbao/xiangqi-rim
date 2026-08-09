@@ -63,3 +63,12 @@ $$\text{Điểm Chất Lượng Agent} = \text{Kế Hoạch Rõ Ràng} + \text{V
    - **Bọc `try ... finally`**: Đảm bảo dọn dẹp tiến trình an toàn khi bị ngắt kết nối WebSocket (`GeneratorExit`).
    - **Bổ sung Crash Telemetry Audit**: Kiểm tra `exit_code != 0`, đọc toàn bộ `stderr`/log dư thừa, nhận diện chính xác mã thoát `137` (cgroups OOM Killer) để đưa ra cảnh báo quá tải RAM trực quan.
    - **Nâng cấp `sync_on_load()`**: Khi phát hiện trạng thái `CRASHED`, hiển thị ngay **Crash Telemetry Banner** (Mã thoát OS, vết log báo lỗi cuối cùng) thay vì reset mờ ám!
+
+---
+
+### V. TẮT TỰ ĐỘNG CI/CD DEPLOY THEO YÊU CẦU ANH HDQB
+
+1. **QUYẾT ĐỊNH KỸ THUẬT**:
+   - Xóa tệp `.github/workflows/deploy.yml` trên GitHub Repository.
+   - Ngừng toàn bộ thông báo báo lỗi `HF_TOKEN` rác từ GitHub Actions.
+   - Agent không tự động gọi `deploy_space.py` sau các lệnh `git push` ngoại trừ khi người dùng cấp token Write mới và yêu cầu deploy thủ công.
