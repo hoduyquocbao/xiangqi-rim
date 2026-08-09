@@ -1,5 +1,6 @@
-# === XIANGQI-R1 REAL RULE GPU T4 DATA MINER ENGINE (v11.0-JRCP5-ULTRA-32D) ===
+# === XIANGQI-R1 REAL RULE GPU T4 DATA MINER ENGINE (v12.0-JRCP5-GPU-2PLY-MINIMAX) ===
 # 100% PHYSICAL XIANGQI RULES + FULL JRCP 5.0 32-DIMENSIONAL ULTRA-DEEP TACTICAL THOUGHT CHAIN
+# + GPU 2-PLY MINIMAX ROLLOUT SEARCH (30,000-60,000 FENs / Mega-Batch GPU Tensor Evaluation)
 # + 36 KẾ BINH PHÁP + THẾ TRẬN KINH ĐIỂN + PERPETUAL CHECK/CHASE RULE ENGINE + OPPONENT COUNTER AUDIT
 # + DYNAMIC OPENING FEN SAMPLER + SIEVE DEDUP + AUTO HF PUSH + REAL-TIME HEARTBEAT (3s)
 
@@ -1530,7 +1531,7 @@ def mine(target_games: int = 1000, depth: int = 12):
     print(f"🧠 System RAM    : {ram_gb:.2f} GB RAM", flush=True)
     print(f"⚡ GPU Device    : {torch.cuda.get_device_name(0)} ({vram_total:.2f} GB VRAM | Allocated: {vram_allocated:.2f} GB)", flush=True)
     print(f"🧰 Software Env  : Python {python_ver} | PyTorch {torch_ver} | CUDA {torch.version.cuda}", flush=True)
-    print(f"🏷️ Engine Version : v11.0-jrcp5-ultra-32d (Build 2026-08-10 01:45:00 ICT)", flush=True)
+    print(f"🏷️ Engine Version : v12.0-jrcp5-gpu-2ply-minimax (Build 2026-08-10 03:08:00 ICT)", flush=True)
     print(f"🎮 Target Config  : {target_games:,} Games | Search Depth {depth}", flush=True)
     print(f"🆔 Unique Node ID : node_{node_id}", flush=True)
     print(f"📦 File Chunk Cap : 50 MB / Chunk (Active: Chunk #{chunk_idx:04d})", flush=True)
