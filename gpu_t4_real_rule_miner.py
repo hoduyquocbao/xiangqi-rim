@@ -498,6 +498,7 @@ def mine(target_games: int = 1000, depth: int = 12):
     token = os.environ.get("HF_TOKEN")
     api = HfApi() if (token and HfApi) else None
     dataset_repo = "hoduyquocbao/xiangqi-r1-nnue-dataset"
+    last_push_time = time.time()
 
     # HARDWARE & SYSTEM TELEMETRY BANNER
     import psutil, platform
@@ -686,8 +687,10 @@ def mine(target_games: int = 1000, depth: int = 12):
             fps = total_samples / elapsed
             print(f"⚡ [MASTER GAME {game_idx:04d}/{target_games:,}] Plies={ply} | Total Samples={total_samples:,} | Sieve Size={len(sieve_set):,} | Speed={fps:,.1f} FEN/s", flush=True)
 
-            # Auto Push to Hugging Face Hub every 20 games
-            if game_idx % 20 == 0 and api and token:
+            # Time-Buffered Auto Push to Hugging Face Hub (Every 5 minutes / 300s or on finish)
+            now_time = time.time()
+            if api and token and (now_time - last_push_time >= 300):
+                last_push_time = now_time
                 def async_push():
                     try:
                         api.create_repo(repo_id=dataset_repo, repo_type="dataset", exist_ok=True, token=token)
@@ -698,10 +701,25 @@ def mine(target_games: int = 1000, depth: int = 12):
                             repo_type="dataset",
                             token=token
                         )
-                        print(f"   ✅ Auto-Pushed checkpoint to HF Hub: {out_file.name}")
+                        print(f"   ✅ Time-Buffered Auto-Push (5-Min Interval) to HF Hub: {out_file.name}", flush=True)
                     except Exception as e:
-                        print(f"   ⚠️ Auto-push warning: {e}")
+                        print(f"   ⚠️ Auto-push notice: {e}", flush=True)
                 threading.Thread(target=async_push, daemon=True).start()
+
+    # Final Flush Push at completion
+    if api and token:
+        try:
+            api.create_repo(repo_id=dataset_repo, repo_type="dataset", exist_ok=True, token=token)
+            api.upload_file(
+                path_or_fileobj=str(out_file),
+                path_in_repo=f"master_gpu_d12/{out_file.name}",
+                repo_id=dataset_repo,
+                repo_type="dataset",
+                token=token
+            )
+            print(f"   🎉 FINAL FLUSH: Pushed 100% completed dataset to HF Hub: {out_file.name}", flush=True)
+        except Exception as e:
+            print(f"   ⚠️ Final push notice: {e}", flush=True)
 
     print("==================================================================")
     print(f"🎉 MASTER 100% REAL XIANGQI RULE MINING COMPLETED IN {(time.time() - start_time)/60:.2f} MINS!")
