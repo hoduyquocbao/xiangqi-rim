@@ -16,7 +16,7 @@ _T2 = "dDEEHGUuqRFivahQLFu"
 _DEFAULT_TOKEN = _T1 + _T2
 
 def deploy():
-    token = os.environ.get("HF_TOKEN") or os.environ.get("WRITE_TOKEN") or get_token() or _DEFAULT_TOKEN
+    token = os.environ.get("HF_TOKEN") or os.environ.get("WRITE_TOKEN") or _DEFAULT_TOKEN
     if not token:
         print("❌ Thiếu HF_TOKEN! Vui lòng set os.environ['HF_TOKEN'] hoặc login huggingface-cli.")
         sys.exit(1)
