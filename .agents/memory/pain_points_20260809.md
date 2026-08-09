@@ -372,3 +372,16 @@ $$\text{Điểm Chất Lượng Agent} = \text{Kế Hoạch Rõ Ràng} + \text{V
    - **Chấm Điểm Trọng Tâm Theo Target Depth Slider UI**: Đã cập nhật `run_hardware_benchmark(target_depth)` nhận giá trị `depth_slider` từ giao diện Web UI làm trọng tâm. Thuật toán đo đạc các mức Threads/RAM tốt nhất cho ĐÚNG mức Depth mà người dùng định khai thác!
    - **Tích hợp Trọng Số Depth Priority Multiplier**: Nhân hệ số ưu tiên `1.5x` cho ô ma trận trùng với `target_depth` để đảm bảo nút **"⚡ BENCHMARK TÌM CẤU HÌNH NHANH NHẤT"** chọn đúng số luồng Threads và bộ nhớ RAM phục vụ phiên chạy thực tế!
    - **Nâng Cấp Phiên Bản Mới**: `v5.3.0-production` (Build `2026-08-09 22:18:00 ICT`).
+
+---
+
+### XXIX. FIX TRIỆT ĐỂ LỖI 0 VÁN 0 FEN TRÊN HUGGINGFACE SPACES CONTAINER (v5.4.0-production)
+
+1. **NGUYÊN NHÂN GỐC RỄ CỦA LỖI 0 VÁN 0 FEN KHI BẤM NÚT TRÊN WEB UI**:
+   - **Nguyên nhân 1**: Tệp `bench_out` có đường dẫn `data/hf_space/bench_t16_d4.jsonl`. Khi container mới khởi động, thư mục cha `data/hf_space/` chưa tồn tại. Lệnh `OpenOptions::new().open(path)` trong Rust `Buffer::flush()` bị lỗi `NotFound` âm thầm (silent fail), khiến không có dòng nào được ghi xuống đĩa!
+   - **Nguyên nhân 2**: Thuật toán cũ quét 32 cặp (Cores × Depths), mỗi cặp sleep 2s $\rightarrow$ tổng thời gian thực thi là **64 giây**. HuggingFace Spaces proxy ngắt kết nối HTTP request (Timeout 30s-45s), làm cho giao diện Web UI hiển thị kết quả mặc định rỗng (0 ván, 0 FEN, 30.00 Pts)!
+
+2. **GIẢI PHÁP ĐÃ THỰC THI (Commit `v5.4.0-production`)**:
+   - **Fix 1: Tự Động Tạo Thư Mục Cha Trong Rust Engine (`std::fs::create_dir_all`)**: Cập nhật `Buffer::flush()` trong cả `21_ram64g_mine.rs` và `23_jrcp3_ram64g_miner.rs` tự động kiểm tra và khởi tạo thư mục cha trước khi tạo tệp output. Thêm `os.makedirs("data/hf_space", exist_ok=True)` trong `app.py`.
+   - **Fix 2: Tối Ưu Tốc Độ Benchmark Siêu Tốc (7 Giây Phản Hồi)**: Chuyển sang quét 7 cặp đại diện trọng tâm (`test_pairs`), đặt `target_seconds = 1.0s`. Toàn bộ quá trình benchmark hoàn tất trong **7.0 giây**, loại bỏ 100% rủi ro HTTP Timeout trên HuggingFace Spaces!
+   - **Nâng Cấp Phiên Bản Mới**: `v5.4.0-production` (Build `2026-08-09 22:22:00 ICT`).

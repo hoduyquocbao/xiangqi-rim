@@ -69,9 +69,9 @@ REPO = "hoduyquocbao/xiangqi-nnue-dataset"
 # ============================================================================
 # APPLICATION SEMANTIC VERSIONING & BUILD METADATA
 # ============================================================================
-APP_VERSION = "v5.3.0-production"
-APP_BUILD_STAMP = "2026-08-09 22:18:00 ICT"
-APP_RELEASE_NOTES = "Release Target Depth-Centric Hardware Benchmark Engine & Dynamic Priority Weighted Matrix"
+APP_VERSION = "v5.4.0-production"
+APP_BUILD_STAMP = "2026-08-09 22:22:00 ICT"
+APP_RELEASE_NOTES = "Fix Zero-FEN Bug & Add Automatic Parent Directory Creation in Rust Buffer & Fast 7s Benchmark Sweep"
 
 # ============================================================================
 # PERSISTENT DISK LOGGING & TELEMETRY INFRASTRUCTURE
@@ -465,7 +465,7 @@ def reset_logs_to_blank() -> tuple[str, str]:
         "🧹 Đã đưa tệp telemetry (logs/system_telemetry.jsonl) về mặc định trắng (blank) 100%!"
     )
 
-def run_hardware_benchmark(target_depth: int = 4, target_seconds: int = 2) -> tuple[str, str, str, int, int, int]:
+def run_hardware_benchmark(target_depth: int = 4, target_seconds: float = 1.0) -> tuple[str, str, str, int, int, int]:
     """
     Khảo sát & Đo đạc đa chiều Ma Trận Trọng Số Vận Tốc phần cứng thực tế (CPU Cores: 4, 8, 12, 16 Cores × Search Depths 1..12).
     Đặc biệt tập trung tối ưu cho đúng mức Target Depth đang chọn trên slider UI.
@@ -480,8 +480,16 @@ def run_hardware_benchmark(target_depth: int = 4, target_seconds: int = 2) -> tu
         core_candidates = [cpu_logical]
     core_candidates = sorted(list(set(core_candidates)), reverse=True)
 
-    # 2. Các cấp Depth kiểm thử (Tập trung target_depth làm trọng tâm)
-    depth_candidates = sorted(list(set([target_depth, 1, 2, 4, 6, 8, 10, 12])))
+    # 2. Xây dựng danh sách cặp (Cores, Depth) tối ưu (< 8 giây tổng thời gian phản hồi)
+    test_pairs = []
+    # (a) Tất cả các mức Cores cho đúng mức target_depth đang chọn trên UI
+    for t in core_candidates:
+        test_pairs.append((t, target_depth))
+    
+    # (b) Các mức Depth khác trên CPU Cores cao nhất để tạo ma trận đa chiều
+    for d in [1, 2, 6, 8]:
+        if d != target_depth:
+            test_pairs.append((cpu_logical, d))
 
     best_score = -1.0
     best_config = {"threads": cpu_logical, "depth": target_depth, "tt_mb": 512, "sieve_mb": 8192, "fen_s": 0.0, "samples": 0, "games": 0}
@@ -492,22 +500,24 @@ def run_hardware_benchmark(target_depth: int = 4, target_seconds: int = 2) -> tu
     benchmark_report_lines.append(f"| Cores | Depth | TT RAM | Sieve RAM | Ván Mined | Mẫu FEN POS | Vận Tốc FEN/s | RAM Used | Ma Trận Trọng Số (Score) | Trạng Thái |")
     benchmark_report_lines.append(f"|---|---|---|---|---|---|---|---|---|---|")
 
+    # Đảm bảo thư mục lưu benchmark tồn tại 100%
+    os.makedirs("data/hf_space", exist_ok=True)
+
     binary_target = "21_ram64g_mine" if os.path.exists("examples/21_ram64g_mine.rs") else "23_jrcp3_ram64g_miner"
     try:
         binary = setup(binary_target)
     except Exception as e:
         return f"❌ Lỗi biên dịch benchmark engine: {e}", "", "", cpu_logical, 512, 8192
 
-    for d in [target_depth] + [dep for dep in depth_candidates if dep != target_depth]:
-        for t in core_candidates:
-            # RAM khuyến nghị cấp phát khi khai thác chính thức
-            rec_tt = min(2048, max(256, int((mem_total * 1024 * 0.20) / max(1, t))))
-            rec_sieve = min(32768, max(1024, prev_power_of_two(int(mem_total * 1024 * 0.25))))
-            
-            bench_out = f"data/hf_space/bench_t{t}_d{d}.jsonl"
-            if os.path.exists(bench_out):
-                try: os.remove(bench_out)
-                except Exception: pass
+    for t, d in test_pairs:
+        # RAM khuyến nghị cấp phát khi khai thác chính thức
+        rec_tt = min(2048, max(256, int((mem_total * 1024 * 0.20) / max(1, t))))
+        rec_sieve = min(32768, max(1024, prev_power_of_two(int(mem_total * 1024 * 0.25))))
+        
+        bench_out = f"data/hf_space/bench_t{t}_d{d}.jsonl"
+        if os.path.exists(bench_out):
+            try: os.remove(bench_out)
+            except Exception: pass
 
             # Trong chế độ Benchmark: Cấp TT=64MB & SIEVE=64MB để nạp RAM siêu tốc (0.001s) khởi chạy lập tức
             env = os.environ.copy()

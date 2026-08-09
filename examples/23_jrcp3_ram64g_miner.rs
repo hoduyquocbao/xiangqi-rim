@@ -335,6 +335,9 @@ impl Buffer {
 
         // Bước 2: Ghi đĩa NGOÀI critical section — không block workers
         // [FIX #4] Dùng BufWriter 8MB thay vì writeln!() từng dòng
+        if let Some(parent) = std::path::Path::new(path).parent() {
+            let _ = std::fs::create_dir_all(parent);
+        }
         if let Ok(file) = OpenOptions::new().create(true).append(true).open(path) {
             let mut writer = BufWriter::with_capacity(8 * 1024 * 1024, file);
             for line in &drained {
