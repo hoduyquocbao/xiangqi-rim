@@ -310,3 +310,16 @@ $$\text{Điểm Chất Lượng Agent} = \text{Kế Hoạch Rõ Ràng} + \text{V
    - **Vòng lặp chờ 45 giây xả sạch TIME_WAIT**: Thử lại 15 lần (`max_retries = 15`), mỗi lần nghỉ `time.sleep(3)` (tổng 45s). Tôn trọng 100% môi trường HuggingFace Space mà không can thiệp diệt process OS.
    - **Cơ chế**: Khi socket Kernel tự xả xong `TIME_WAIT` sau vài giây, `demo.launch()` mở cổng 7860 thành công 100%.
    - **Nâng Cấp Phiên Bản Mới**: `v4.5.0-production` (Build `2026-08-09 21:55:00 ICT`).
+
+---
+
+### XXIV. PHÁT HÀNH SCRIPT THỦ CÔNG DIỆT CHÍNH XÁC PID CHIẾM CỔNG PORT 7860 (v4.6.0-production)
+
+1. **CHỈ THỊ TỪ ANH HDQB VỀ XỬ LÝ THỦ CÔNG BẰNG SCRIPT**:
+   - Khi cần can thiệp giải phóng cổng thủ công trên máy local hoặc server, cần có 1 script CLI chuyên biệt diệt chính xác duy nhất PID đang chiếm socket port 7860, **tuyệt đối KHÔNG diệt `python` global** để không làm ảnh hưởng tới các dịch vụ Python khác đang chạy trên máy.
+
+2. **GIẢI PHÁP ĐÃ THỰC THI (Commit `v4.6.0-production`)**:
+   - **Tạo Script CLI `scripts/free_port.py`**: Sử dụng `psutil` (hoặc fallback `lsof`), lọc chính xác PID gắn với cổng TCP `7860` (hoặc cổng bất kỳ truyền vào), bỏ qua PID 1 và PID hiện tại, thực hiện `terminate()` hoặc `kill()` duy nhất PID đó.
+   - **Cách chạy thủ công**:
+     `python3 scripts/free_port.py --port 7860 --force`
+   - **Nâng Cấp Phiên Bản Mới**: `v4.6.0-production` (Build `2026-08-09 21:58:00 ICT`).

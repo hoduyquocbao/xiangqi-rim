@@ -69,9 +69,9 @@ REPO = "hoduyquocbao/xiangqi-nnue-dataset"
 # ============================================================================
 # APPLICATION SEMANTIC VERSIONING & BUILD METADATA
 # ============================================================================
-APP_VERSION = "v4.5.0-production"
-APP_BUILD_STAMP = "2026-08-09 21:55:00 ICT"
-APP_RELEASE_NOTES = "Add Extended 45s Socket TIME_WAIT Drain Loop for HuggingFace Space Clean Launch"
+APP_VERSION = "v4.6.0-production"
+APP_BUILD_STAMP = "2026-08-09 21:58:00 ICT"
+APP_RELEASE_NOTES = "Add Precise Standalone Manual CLI Port Killer Script (scripts/free_port.py)"
 
 # ============================================================================
 # PERSISTENT DISK LOGGING & TELEMETRY INFRASTRUCTURE
