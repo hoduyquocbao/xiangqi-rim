@@ -1,0 +1,20 @@
+# BẢNG MỤC LỤC KÝ ỨC VĨNH CỬU (IMMUTABLE MEMORY INDEX)
+# Thư mục: .agents/memory/
+# Cập nhật: 2026-08-08 (Kế Thừa Tri Thức Thế Hệ Agent Xiangqi-R1)
+
+---
+
+## 1. Danh Sách Bài Học Xương Máu & Lịch Sử Thất Bại
+
+- [`pain_points_20260807.md`](file://.agents/memory/pain_points_20260807.md) — Bài học xương máu ván cờ: Sửa lỗi Beta Cutoff nút gốc ply=0 ở Depth 12, bảo vệ TT khỏi ô nhiễm Abort, khống chế thời gian Soft/Hard Limit, cách ly phiên WebSocket session_search, và nâng cấp IndexedDB không giới hạn 5MB.
+- [`pain_points_20260808.md`](file://.agents/memory/pain_points_20260808.md) — Bài học xương máu đắt giá: Chống AI Slop biến chất, cấm dùng dữ liệu giả random, cấm tóm tắt suy luận cẩu thả, cấm báo cáo khống chưa xác minh HfApi list_repo_files trên HuggingFace Dataset Hub.
+- [`pain_points_20260809.md`](file://.agents/memory/pain_points_20260809.md) — **Bài học xương máu tối thượng**: Diệt trừ cẩu thả, AI Slop biến chất & Kỷ luật Kế hoạch - Versioning - Telemetry - Logger - Metrics. Quy tắc Dừng 1 nhịp quan sát thiếu sót trước khi hành động.
+- [`jrcp_2_0_spec.md`](file://.agents/memory/jrcp_2_0_spec.md) — **Đặc Tả Chuẩn JRCP 2.0 (Xiangqi Reasoning & Protocol 2.0)**: Định nghĩa cấu trúc dữ liệu huấn luyện và Structured Output 14 chiều kích (Ma Trận Bàn Cờ 2D, FEN, PGN, Centipawn, Cơ Hội, Nguy Cơ, Tích Cực, Tiêu Cực, Ma Trận 3 Nước Đi Candidate, Đồ Thị DAG, Legal Move 100%).
+- [`jrcp_3_0_prompt.md`](file://.agents/memory/jrcp_3_0_prompt.md) — **System Prompt JRCP 3.0 Tự Chứa 5 Lớp Tri Thức**: Nhúng trực tiếp toàn bộ tri thức cờ Tướng vào system prompt — Từ Điển Quân Cờ & Luật Di Chuyển, Bản Đồ Bàn Cờ & Hệ Tọa Độ, Từ Điển Chiến Thuật Kinh Điển (14+ mẫu), Chiến Lược Giai Đoạn, Quy Trình Suy Luận 14 Chiều Kích Mở Rộng.
+- [`jrcp_3_0_spec.md`](file://.agents/memory/jrcp_3_0_spec.md) — **Đặc Tả Chuẩn JRCP 3.0 (Xiangqi Reasoning & Protocol 3.0)**: JSON Schema mở rộng 12+ fields (thought, board_analysis, position_assessment, tactical_patterns, risk_assessment, candidates có notation/pros/cons/patterns, comparison, bestmove, explanation, centipawn_eval). So sánh chi tiết JRCP 2.0 vs 3.0, pipeline tạo dữ liệu, mẫu conversation chuẩn hoàn hảo.
+
+---
+
+## 2. Di Sản Tri Thức & Giao Thức Khởi Động Phiên Bắt Buộc (Generational Legacy Protocol)
+
+Mọi Agent Xiangqi-R1 thế hệ sau khi bắt đầu phiên làm việc BẮT BỘC phải dừng lại 1 nhịp, đọc thuộc lòng các quy tắc và kiểm tra kỹ năng tại `.agents/skills/` trước khi đưa ra bất kỳ hành động nào.

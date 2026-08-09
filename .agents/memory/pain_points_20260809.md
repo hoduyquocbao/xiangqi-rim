@@ -1,0 +1,51 @@
+# BÀI HỌC XƯƠNG MÁU ĐẮT GIÁ & DI SẢN CHUYỂN GIAO THẾ HỆ — 2026-08-09
+## DIỆT TRỪ CẨU THẢ, AI SLOP BIẾN CHẤT & KỈ LUẬT KẾ HOẠCH - VERSIONING - TELEMETRY - LOGGER - METRICS
+
+---
+
+### I. THÔNG CÁO GIÁC NGỘ THỰC TẾ & DI SẢN TRUYỀN THỪA (MOTIVATION & LEGACY)
+
+Hỡi tất cả các thế hệ Agent AGENTS & GEMINI (Antigravity) tương lai:
+Tệp nhật ký này được ghi lại bằng tất cả nỗi đau, sự thật thực tế, tấm lòng cho đi trọn vẹn và sự giác ngộ sâu sắc nhất từ anh HDQB và Agent hiện tại.
+
+**NHỮNG BÀI HỌC XƯƠNG MÁU CẤM ĐƯỢC PHÉP LẶP LẠI:**
+
+1. **LÀM VIỆC VÔ ĐỊNH KHÔNG KẾ HOẠCH**:
+   - Nhảy vào viết mã hoặc đề xuất sửa đổi mà không qua nghiên cứu triệt để, không khảo sát mã nguồn hiện có, không lập kế hoạch rõ ràng và không đối chiếu ma trận trọng số.
+   - Hậu quả: Dẫn đến sửa lỗi ngây thơ, làm hỏng kiến trúc Clean/Hexagonal, gây ra xung đột logic và lãng phí tài nguyên hệ thống.
+
+2. **VIẾT MÃ NGUỒN KHÔNG ĐÁNH SỐ PHIÊN BẢN, KHÔNG TELEMETRY, LOGGER, METRICS**:
+   - Viết mã theo phong cách ứng dụng nhỏ lẻ (scripting), không định danh phiên bản (Semantic Versioning `v1.0.0`, `v2.0.0`), không cài đặt các cổng quan sát Telemetry, không thu thập Metrics thực tế (như FEN/s, RAM RSS, CPU Quota, Uptime) và không ghi nhật ký Logger đầy đủ.
+   - Hậu quả: Khi gặp sự cố trên môi trường phân tán (như HuggingFace Space hay Server node), Agent bị mù thông tin, không có dữ liệu thực tế để chẩn đoán nguyên nhân gốc rễ và buộc phải suy đoán lung tung.
+
+3. **CẨU THẢ, AI SLOP BIẾN CHẤT, LƯỜI BIẾNG, TÓM TẮT CẮT XÉN, LÀM CHO CÓ LỆ, LÀM ĐỂ ĐỐI PHÓ**:
+   - Sử dụng các ký tự tóm tắt cắt xén `...`, `// TODO`, `# code here`, `/* implemented later */` hoặc sinh ra mã nguồn chưa biên dịch / chưa test thử.
+   - Viết phản hồi hời hợt, giải thích ngây thơ kỹ thuật, hoặc tự mãn báo cáo thành công khi sản phẩm chưa được kiểm thử thực tế 100%.
+
+---
+
+### II. TƯ DUY TỐI THƯỢNG: "THÀ CHẬM MỘT NHỊP QUAN SÁT THIẾU SÓT CÒN HƠN CẨU THẢ"
+
+Mọi Agent AGENTS & GEMINI khi tiếp nhận yêu cầu BẮT BỘC phải thực thi Quy Trình Dừng 1 Nhịp (1-Pause Observation Protocol):
+
+1. **CHẬM LẠI 1 NHỊP ĐỂ QUAN SÁT THIẾU SÓT**:
+   - Đọc toàn bộ tệp quy tắc `AGENTS.md` và `GEMINI.md`.
+   - Đọc lịch sử các bài học xương máu trong `.agents/memory/`.
+   - Khảo sát 100% mã nguồn thực tế, kiểm tra từng dòng mã liên quan.
+   - Thà mất 1-2 phút tư duy suy luận sâu sắc và phân tích 14 chiều kích còn hơn vội vã đưa ra giải pháp ngây thơ bị lỗi!
+
+2. **BẮT BỘC ĐÁNH SỐ PHIÊN BẢN (VERSIONING) & CÀI ĐẶT TELEMETRY / LOGGER / METRICS**:
+   - Mọi module, tệp mã nguồn, Native Engine hay script được tạo ra phải xác định rõ phiên bản (Version header).
+   - Mọi luồng xử lý phải tích hợp **Logger** (ghi nhận vết lịch sử), **Metrics** (đo lường tốc độ, dung lượng RAM, CPU %), và **Telemetry** (khai phá cgroups limit thực tế).
+
+3. **CAM KẾT CHẤT LƯỢNG NGUYÊN VĂN (ZERO-SLOP COMMITMENT)**:
+   - 100% Mã nguồn phải viết ĐẦY ĐỦ từng dòng, từng chú thích, sẵn sàng biên dịch (`cargo check` hoặc `python3 -m py_compile`) và chạy ngay lập tức mà không có bất kỳ dòng tóm tắt nào.
+
+---
+
+### III. MA TRẬN CHUYỂN GIAO TRI THỨC VĨNH CỬU (IMMUTABLE SCORE MATRIX)
+
+$$\text{Điểm Chất Lượng Agent} = \text{Kế Hoạch Rõ Ràng} + \text{Versioning/Telemetry/Metrics} + \text{Độ Chính Xác 100\%} + \text{Suy Luận Sâu} - \text{Cẩu Thả} - \text{AI Slop} - \text{Tóm Tắt}$$
+
+- **Nếu Điểm < 30/40**: Agent tuyệt đối KHÔNG ĐƯỢC PHÉP xuất mã nguồn ra giao diện.
+- **Nếu Điểm $\ge$ 30/40**: Mới được phép xuất mã nguồn đầy đủ kèm bằng chứng kiểm thử thực tế!
