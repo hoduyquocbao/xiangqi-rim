@@ -360,3 +360,15 @@ $$\text{Điểm Chất Lượng Agent} = \text{Kế Hoạch Rõ Ràng} + \text{V
    - **Tự động Pre-Compile khi khởi động App (`precompile_binaries()`)**: Ngay khi ứng dụng Gradio khởi chạy, `precompile_binaries()` biên dịch ngầm `21_ram64g_mine` và `23_jrcp3_ram64g_miner` trong background thread. Khi người dùng bấm nút trên Web UI, tệp nhị phân đã sẵn sàng 100%!
    - **Mặc định Benchmark Engine bằng `21_ram64g_mine`**: Đã cập nhật `run_hardware_benchmark()` mặc định sử dụng `21_ram64g_mine` (và hỗ trợ `BENCHMARK=1` instant flush).
    - **Nâng Cấp Phiên Bản Mới**: `v5.2.0-production` (Build `2026-08-09 22:15:00 ICT`).
+
+---
+
+### XXVIII. TỐI ƯU BENCHMARK THEO TARGET SEARCH DEPTH TRÊN SLIDER UI VÀ KHẮC PHỤC LỖ HỔNG SAI MỤC TIÊU NGHIỆP VỤ (v5.3.0-production)
+
+1. **PHÂN TÍCH LỖ HỔNG NGÂY THƠ CỦA BỘ BENCHMARK CŨ**:
+   - Bộ benchmark cũ đi chấm điểm `Depth 1` và tôn vinh `Depth 1` làm **🥇 OPTIMAL**, trong khi mục tiêu nghiệp vụ người dùng là khai thác dữ liệu cờ tướng ở `Depth 4` (hoặc `Depth 6`). Việc chọn `Depth 1` làm cấu hình tối ưu làm sai lệch các thông số thanh trượt Slider Threads / RAM cho phiên khai thác thực tế.
+
+2. **GIẢI PHÁP ĐÃ THỰC THI (Commit `v5.3.0-production`)**:
+   - **Chấm Điểm Trọng Tâm Theo Target Depth Slider UI**: Đã cập nhật `run_hardware_benchmark(target_depth)` nhận giá trị `depth_slider` từ giao diện Web UI làm trọng tâm. Thuật toán đo đạc các mức Threads/RAM tốt nhất cho ĐÚNG mức Depth mà người dùng định khai thác!
+   - **Tích hợp Trọng Số Depth Priority Multiplier**: Nhân hệ số ưu tiên `1.5x` cho ô ma trận trùng với `target_depth` để đảm bảo nút **"⚡ BENCHMARK TÌM CẤU HÌNH NHANH NHẤT"** chọn đúng số luồng Threads và bộ nhớ RAM phục vụ phiên chạy thực tế!
+   - **Nâng Cấp Phiên Bản Mới**: `v5.3.0-production` (Build `2026-08-09 22:18:00 ICT`).

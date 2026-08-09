@@ -69,9 +69,9 @@ REPO = "hoduyquocbao/xiangqi-nnue-dataset"
 # ============================================================================
 # APPLICATION SEMANTIC VERSIONING & BUILD METADATA
 # ============================================================================
-APP_VERSION = "v5.2.0-production"
-APP_BUILD_STAMP = "2026-08-09 22:15:00 ICT"
-APP_RELEASE_NOTES = "Default Hardware Benchmark to 21_ram64g_mine Pure Engine & Add Startup Pre-Compilation for HuggingFace Space"
+APP_VERSION = "v5.3.0-production"
+APP_BUILD_STAMP = "2026-08-09 22:18:00 ICT"
+APP_RELEASE_NOTES = "Release Target Depth-Centric Hardware Benchmark Engine & Dynamic Priority Weighted Matrix"
 
 # ============================================================================
 # PERSISTENT DISK LOGGING & TELEMETRY INFRASTRUCTURE
@@ -465,11 +465,13 @@ def reset_logs_to_blank() -> tuple[str, str]:
         "🧹 Đã đưa tệp telemetry (logs/system_telemetry.jsonl) về mặc định trắng (blank) 100%!"
     )
 
-def run_hardware_benchmark(target_seconds: int = 2) -> tuple[str, str, str, int, int, int]:
+def run_hardware_benchmark(target_depth: int = 4, target_seconds: int = 2) -> tuple[str, str, str, int, int, int]:
     """
     Khảo sát & Đo đạc đa chiều Ma Trận Trọng Số Vận Tốc phần cứng thực tế (CPU Cores: 4, 8, 12, 16 Cores × Search Depths 1..12).
+    Đặc biệt tập trung tối ưu cho đúng mức Target Depth đang chọn trên slider UI.
     """
     cpu_logical, cpu_physical, mem_total, mem_avail, raw_logical, cgroup_cpus = get_system_specs()
+    target_depth = int(target_depth or 4)
     
     # 1. Các cấp CPU Cores kiểm thử (16, 12, 8, 4 Cores)
     core_levels = [16, 12, 8, 4]
@@ -478,14 +480,15 @@ def run_hardware_benchmark(target_seconds: int = 2) -> tuple[str, str, str, int,
         core_candidates = [cpu_logical]
     core_candidates = sorted(list(set(core_candidates)), reverse=True)
 
-    # 2. Các cấp Depth kiểm thử (1, 2, 4, 6, 8, 10, 12)
-    depth_candidates = [1, 2, 4, 6, 8, 10, 12]
+    # 2. Các cấp Depth kiểm thử (Tập trung target_depth làm trọng tâm)
+    depth_candidates = sorted(list(set([target_depth, 1, 2, 4, 6, 8, 10, 12])))
 
     best_score = -1.0
-    best_config = {"threads": cpu_logical, "depth": 4, "tt_mb": 512, "sieve_mb": 8192, "fen_s": 0.0, "samples": 0, "games": 0}
+    best_config = {"threads": cpu_logical, "depth": target_depth, "tt_mb": 512, "sieve_mb": 8192, "fen_s": 0.0, "samples": 0, "games": 0}
     benchmark_report_lines = []
     
-    benchmark_report_lines.append(f"### 🧪 KẾT QUẢ BENCHMARK MULTI-DIMENSIONAL MATRIX (CPUs 4, 8, 12, 16 × Depth 1..12)")
+    benchmark_report_lines.append(f"### 🎯 KẾT QUẢ BENCHMARK DÀNH RIÊNG CHO TARGET SEARCH DEPTH `{target_depth}` (SLIDER UI)")
+    benchmark_report_lines.append(f"### 🧪 KẾT QUẢ BENCHMARK MULTI-DIMENSIONAL MATRIX (CPUs 4, 8, 12, 16 × Depths)")
     benchmark_report_lines.append(f"| Cores | Depth | TT RAM | Sieve RAM | Ván Mined | Mẫu FEN POS | Vận Tốc FEN/s | RAM Used | Ma Trận Trọng Số (Score) | Trạng Thái |")
     benchmark_report_lines.append(f"|---|---|---|---|---|---|---|---|---|---|")
 
@@ -495,8 +498,8 @@ def run_hardware_benchmark(target_seconds: int = 2) -> tuple[str, str, str, int,
     except Exception as e:
         return f"❌ Lỗi biên dịch benchmark engine: {e}", "", "", cpu_logical, 512, 8192
 
-    for t in core_candidates:
-        for d in depth_candidates:
+    for d in [target_depth] + [dep for dep in depth_candidates if dep != target_depth]:
+        for t in core_candidates:
             # RAM khuyến nghị cấp phát khi khai thác chính thức
             rec_tt = min(2048, max(256, int((mem_total * 1024 * 0.20) / max(1, t))))
             rec_sieve = min(32768, max(1024, prev_power_of_two(int(mem_total * 1024 * 0.25))))
@@ -568,10 +571,12 @@ def run_hardware_benchmark(target_seconds: int = 2) -> tuple[str, str, str, int,
             ram_eff = min(1.0, (mem_avail / max(1.0, mem_total)))
             scalability = min(1.0, fen_s / max(1.0, t * 150))
             
-            # Ma Trận Trọng Số: (FEN/s * 0.50) + (Scalability * 100 * 0.30) + (RAM_eff * 100 * 0.20)
-            score = (fen_s * 0.50) + (scalability * 100 * 0.30) + (ram_eff * 100 * 0.20)
+            # Ma Trận Trọng Số: Ưu tiên FEN/s thực tế ở d == target_depth
+            depth_priority_multiplier = 1.5 if d == target_depth else 1.0
+            score = ((fen_s * 0.50) + (scalability * 100 * 0.30) + (ram_eff * 100 * 0.20)) * depth_priority_multiplier
             
-            is_best = "🥇 OPTIMAL" if score > best_score else "⚪ Normal"
+            is_target_marker = " 🎯 TARGET" if d == target_depth else ""
+            is_best = f"🥇 OPTIMAL{is_target_marker}" if score > best_score else f"⚪ Normal{is_target_marker}"
             if score > best_score:
                 best_score = score
                 best_config = {
@@ -1340,7 +1345,7 @@ Vận hành **Native Rust Engine {APP_VERSION}** tự động scaling theo CPU Q
 
         bench_btn.click(
             fn=run_hardware_benchmark,
-            inputs=[],
+            inputs=[depth_slider],
             outputs=[benchmark_matrix_box, status_box, metrics_box, threads_slider, tt_mb_slider, sieve_mb_slider]
         )
 
