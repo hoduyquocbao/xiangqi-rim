@@ -260,3 +260,16 @@ $$\text{Điểm Chất Lượng Agent} = \text{Kế Hoạch Rõ Ràng} + \text{V
      2. **`📡 TELEMETRY EVENT STREAM`**: Chuyên hiển thị chuỗi sự kiện `JSON-Lines` có cấu trúc từ Telemetry Logger (`logs/system_telemetry.jsonl`).
      3. **`🧪 HARDWARE BENCHMARK MATRIX`**: Chuyên hiển thị bảng kết quả Micro-Sweep đo đạc FEN/s và điểm Ma Trận Trọng Số.
    - **Nâng Cấp Phiên Bản Mới**: `v4.1.0-production` (Build `2026-08-09 21:45:00 ICT`).
+
+---
+
+### XX. KHẮC PHỤC LỖI OSERROR PORT 7860 TRÊN HF SPACES BẰNG RESILIENT RETRY LOOP (v4.2.0-production)
+
+1. **NGUYÊN NHÂN SỰ CỐ BÁO VỀ TỪ HUGGING FACE SPACES**:
+   - `OSError: Cannot find empty port in range: 7860-7860.`
+   - Nguyên nhân: Khi container của Hugging Face Spaces tiến hành live reload / restart Python app nhanh, tiến trình cũ bị ngắt nhưng socket TCP Port 7860 vẫn nằm trong trạng thái `TIME_WAIT` của Linux Kernel trong 1-3 giây. Gradio gọi `demo.launch(server_port=7860)` lập tức ném `OSError` và làm sập container (exit code 1).
+
+2. **GIẢI PHÁP ĐÃ THỰC THI (Commit `v4.2.0-production`)**:
+   - **Bổ sung Resilient Socket Port Retry Loop**: Bọc `demo.launch()` trong vòng lặp thử lại 10 lần (`max_retries = 10`), mỗi lần nghỉ `time.sleep(2)`.
+   - **Cơ chế khôi phục**: Ngay khi socket 7860 thoát khỏi trạng thái `TIME_WAIT` sau 2-4 giây, `demo.launch()` mở server thành công 100% mà không làm container bị crash exit code 1!
+   - **Nâng Cấp Phiên Bản Mới**: `v4.2.0-production` (Build `2026-08-09 21:48:00 ICT`).

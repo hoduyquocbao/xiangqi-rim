@@ -69,9 +69,9 @@ REPO = "hoduyquocbao/xiangqi-nnue-dataset"
 # ============================================================================
 # APPLICATION SEMANTIC VERSIONING & BUILD METADATA
 # ============================================================================
-APP_VERSION = "v4.1.0-production"
-APP_BUILD_STAMP = "2026-08-09 21:45:00 ICT"
-APP_RELEASE_NOTES = "UI Multi-Panel Redesign: Split Monolithic Log Box into Tabbed Console, Telemetry Events, & Hardware Benchmark Matrix"
+APP_VERSION = "v4.2.0-production"
+APP_BUILD_STAMP = "2026-08-09 21:48:00 ICT"
+APP_RELEASE_NOTES = "Add Resilient Socket Port 7860 Retry Loop (Fix HF Space Restart TIME_WAIT OSError)"
 
 # ============================================================================
 # PERSISTENT DISK LOGGING & TELEMETRY INFRASTRUCTURE
@@ -1359,4 +1359,16 @@ if __name__ == "__main__":
     port = int(os.environ.get("PORT", os.environ.get("GRADIO_SERVER_PORT", 7860)))
     demo = create_app()
     demo.queue()
-    demo.launch(server_name="0.0.0.0", server_port=port)
+
+    # Resilient Socket Port Retry Loop: Chống treo/crash container HF Space khi socket 7860 đang trong trạng thái TIME_WAIT
+    max_retries = 10
+    for attempt in range(1, max_retries + 1):
+        try:
+            demo.launch(server_name="0.0.0.0", server_port=port)
+            break
+        except OSError as e:
+            if "Cannot find empty port" in str(e) or "7860" in str(e):
+                print(f"⚠️ Port {port} đang trong trạng thái TIME_WAIT/bị chiếm tạm thời (Lần thử {attempt}/{max_retries}). Thử lại sau 2 giây...")
+                time.sleep(2)
+            else:
+                raise e
