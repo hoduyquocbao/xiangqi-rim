@@ -628,3 +628,19 @@ $$\text{Điểm Chất Lượng Agent} = \text{Kế Hoạch Rõ Ràng} + \text{V
    - **Tự động khởi tạo Repo**: Thêm lệnh `api.create_repo(repo_id="hoduyquocbao/xiangqi-r1-nnue-dataset", repo_type="dataset", exist_ok=True, token=token)` ngay trong hàm khởi tạo và trước khi đẩy checkpoint trong `async_push()`.
    - **Đảm bảo tính hợp lệ**: Khi repo đã tồn tại, `exist_ok=True` sẽ bỏ qua mà không bắn ngoại lệ; nếu repo chưa tồn tại, hệ thống tự động khởi tạo repo mới 100%.
    - **Nâng Cấp Phiên Bản Mới**: `v8.6.0-hf-auto-create` (Build `2026-08-10 00:12:00 ICT`).
+
+---
+
+### XLV. TRIỆT XÓA 100% VĂN BẢN HARDCODE TRONG CHUỖI SUY TƯỞNG 14 CHIỀU KÍCH JRCP 3.0 (`v8.7.0-dynamic-thought`)
+
+1. **PHÁT HIỆN VÀ KHẮC PHỤC NGÂY THƠ KỸ THUẬT HARDCODE THẤT BẠI**:
+   - Theo phát giác đặc biệt từ anh HDQB: *"hardcode cài đặt cứng dữ liệu có nguy cơ agent xiangqi ảo giác ngây thơ lỗi"*.
+   - Trước đó, các dòng mô tả trong `<thought>` ở chiều kích `[4/14] Khống chế Trung Lộ`, `[5/14] Mẫu chiến thuật`, `[7/14] Phân tích Ưu thế`, `[8/14] Bất lợi`, `[11/14] Candidates` bị gán chuỗi văn bản tĩnh giả định (ví dụ: *"Phân tích vị trí Pháo/Xe kiểm soát Lộ 5"* thay vì đọc vị trí quân cờ thật).
+   - Nếu LLM học trên dữ liệu hardcode tĩnh này, nó sẽ phát sinh **Ảo giác ngây thơ (Hallucination)** khi suy luận bàn cờ thực tế!
+
+2. **TRIỂN KHAI PHÂN TÍCH ĐỘNG 100% THỜI GIAN THỰC (Commit `670e456`)**:
+   - **`board.center()`**: Đếm chính xác số lượng Xe/Pháo Đỏ và Đen đang chiếm giữ Lộ 5 (cột e), xuất câu phân tích trung lộ động.
+   - **`board.patterns()`**: Quét thời gian thực sự xuất hiện của Pháo Đầu Lộ 5, Mã vượt hà, Xe chiếm lộ mở không có Tốt cản.
+   - **`board.material()`**: Tính toán chênh lệch điểm Centipawn thật (`mat_diff`), động sinh ra mô tả Ưu thế / Bất lợi của hai bên.
+   - **`Candidates Dynamic Array`**: Trích xuất Top 3 nước đi hợp lệ vật lý hàng đầu (`legal_moves[:3]`), đánh dấu nước đi `BEST` được chọn.
+   - **Nâng Cấp Phiên Bản Mới**: `v8.7.0-dynamic-thought` (Build `2026-08-10 00:17:00 ICT`).
