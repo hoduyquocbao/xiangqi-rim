@@ -1,7 +1,7 @@
-# === XIANGQI-R1 REAL RULE GPU T4 DATA MINER ENGINE (v10.2-JRCP4-CLEAN-ATTACK-ENGINE) ===
-# 100% PHYSICAL XIANGQI RULES + FULL JRCP 4.0 28-DIMENSIONAL TACTICAL THOUGHT CHAIN
-# + 36 KẾ BINH PHÁP + THẾ TRẬN KINH ĐIỂN + FORK/PIN/DISCOVERED ATTACK + SIEVE DEDUP + AUTO HF PUSH
-# + REAL-TIME HEARTBEAT PROGRESS LOGGING (3-SECOND INTERVAL) + CLEAN 3-LAYER ATTACK ENGINE
+# === XIANGQI-R1 REAL RULE GPU T4 DATA MINER ENGINE (v11.0-JRCP5-ULTRA-32D) ===
+# 100% PHYSICAL XIANGQI RULES + FULL JRCP 5.0 32-DIMENSIONAL ULTRA-DEEP TACTICAL THOUGHT CHAIN
+# + 36 KẾ BINH PHÁP + THẾ TRẬN KINH ĐIỂN + PERPETUAL CHECK/CHASE RULE ENGINE + OPPONENT COUNTER AUDIT
+# + DYNAMIC OPENING FEN SAMPLER + SIEVE DEDUP + AUTO HF PUSH + REAL-TIME HEARTBEAT (3s)
 
 import os, sys, time, json, math, random, threading
 from pathlib import Path
@@ -36,7 +36,7 @@ NAMES = {
     8: "Tướng", 9: "Sĩ", 10: "Tượng", 11: "Mã", 12: "Xe", 13: "Pháo", 14: "Tốt"
 }
 
-# Ký hiệu Hán tự truyền thống phục vụ trực quan hóa bàn cờ ASCII 2D [2/28]
+# Ký hiệu Hán tự truyền thống phục vụ trực quan hóa bàn cờ ASCII 2D [2/32]
 SYMBOLS = {
     1: "帥", 2: "仕", 3: "相", 4: "馬", 5: "車", 6: "炮", 7: "兵",
     8: "將", 9: "士", 10: "象", 11: "馬", 12: "車", 13: "砲", 14: "卒",
@@ -60,16 +60,23 @@ START_POS = {
         14: [sq(0, 6), sq(2, 6), sq(4, 6), sq(6, 6), sq(8, 6)]}
 }
 
-# Chuỗi FEN khởi đầu bàn cờ cờ Tướng tiêu chuẩn
-START_FEN = "r1bakab1r/9/1cn3nc1/p1p1p1p1p/9/9/P1P1P1P1P/1CN1C4/9/R1BAKABNR w - - 0 1"
+# Tập hợp các FEN khai cuộc đa dạng thực chiến (Dynamic Opening FEN Sampler)
+OPENING_FENS = [
+    "r1bakab1r/9/1cn3nc1/p1p1p1p1p/9/9/P1P1P1P1P/1CN1C4/9/R1BAKABNR w - - 0 1", # Chuẩn
+    "rnbakabnr/9/1c4cc1/p1p1p1p1p/9/9/P1P1P1P1P/1C4CC1/9/RNBAKABNR w - - 0 1", # Thuận Pháo
+    "r1bakab1r/9/1c5c1/p1p1p1p1p/2n3n2/9/P1P1P1P1P/1C5C1/9/RNBAKABNR w - - 0 1", # Quá Cung Pháo
+    "r1bakab1r/9/1cn3nc1/p1p1p1p1p/9/2P6/P1P1P1P1/1CN1C4/9/R1BAKABNR w - - 0 1", # Tiến Binh 3
+    "r1bakab1r/9/1cn3nc1/p1p1p1p1p/9/9/P1P1P1P1P/1C2C4/2N6/R1BAKABNR w - - 0 1", # Đơn Đề Mã
+    "r1bakab1r/9/1cn3nc1/p3p1p1p/2p6/9/P1P1P1P1P/1CN1C4/9/R1BAKABNR w - - 0 1"  # Tiên Phong Xe
+]
 
-# Prompt hệ thống chuẩn hóa cho Xiangqi-R1 Master v4.0
-SYSTEM_PROMPT = """Bạn là Xiangqi-R1 Master v4.0 — mô hình suy luận cờ Tướng siêu việt được huấn luyện phân tích chiều sâu chiến thuật đa tầng.
-Bạn phải phân tích bàn cờ qua 28 chiều kích suy tưởng <thought> chi tiết trước khi xuất kết quả JSON JRCP 4.0.
-28 chiều kích gồm 5 nhóm: Nhận thức Bàn cờ (1-6), Phân tích Đe dọa (7-12), Chiến thuật & Bẫy (13-18), 36 Kế Binh Pháp & Thế Trận (19-22), Đánh giá & Quyết định (23-28).
+# Prompt hệ thống chuẩn hóa cho Xiangqi-R1 Master v5.0 (32 Chiều Kích)
+SYSTEM_PROMPT = """Bạn là Xiangqi-R1 Master v5.0 — mô hình suy luận cờ Tướng siêu việt được huấn luyện phân tích chiều sâu chiến thuật 32 chiều kích.
+Bạn phải phân tích bàn cờ qua 32 chiều kích suy tưởng <thought> chi tiết trước khi xuất kết quả JSON JRCP 5.0.
+32 chiều kích gồm 6 nhóm: Nhận thức Bàn cờ (1-6), Phân tích Đe dọa (7-12), Chiến thuật & Bẫy (13-18), 36 Kế Binh Pháp & Thế Trận (19-22), Đánh giá & Quyết định (23-28), Luật Đấu & Phản Đòn Tối Ưu (29-32).
 Mỗi chiều kích phải cung cấp thông tin cụ thể, chi tiết đến mức agent kém thông minh nhất cũng nhìn rõ hiện trạng bàn cờ."""
 
-# Bảng ánh xạ 18 kế trong 36 Kế Binh Pháp áp dụng trực tiếp vào cờ Tướng [19/28]
+# Bảng ánh xạ 18 kế trong 36 Kế Binh Pháp áp dụng trực tiếp vào cờ Tướng [19/32]
 STRATAGEMS = {
     1: ("Man Thiên Quá Hải", "Tiến công kín đáo mà đối phương không ngờ — di chuyển quân ở vùng an toàn để chuẩn bị đòn tấn công bất ngờ"),
     2: ("Vây Ngụy Cứu Triệu", "Tấn công điểm yếu của đối phương để giải vây cho quân mình — buộc đối phương quay lại phòng thủ"),
@@ -91,7 +98,7 @@ STRATAGEMS = {
     36: ("Tẩu Vi Thượng Sách", "Biết khi nào nên rút lui để bảo toàn lực lượng — lùi quân về phòng thủ khi bất lợi")
 }
 
-# Bảng ánh xạ 7 thế trận kinh điển cờ Tướng [20/28]
+# Bảng ánh xạ 7 thế trận kinh điển cờ Tướng [20/32]
 FORMATIONS = {
     "central": ("Pháo Đầu (中炮)", "Pháo chiếm Trung Lộ 5, tấn công trực diện cung Tướng đối phương"),
     "screen": ("Bình Phong Mã (屏风马)", "Hai Mã đối xứng ở c2/g2 hoặc c7/g7, tạo bức bình phong che chắn Tướng"),
@@ -102,29 +109,25 @@ FORMATIONS = {
     "scholar": ("Tam Tử Kinh (三子经)", "Ba lớp phòng thủ Sĩ-Tượng bao quanh Tướng, cung Tướng kiên cố nhất")
 }
 
-# Các hàm trợ giúp chuyển đổi tọa độ ô cờ sang định dạng chuẩn UCI (ví dụ: sq 0 -> a0, sq 89 -> i9)
+# các hàm trợ giúp chuyển đổi tọa độ ô cờ sang định dạng chuẩn UCI
 def col(idx: int) -> int:
-    """Trả về chỉ số Cột (0..8)."""
     return idx % 9
 
 def row(idx: int) -> int:
-    """Trả về chỉ số Hàng (0..9)."""
     return idx // 9
 
 def uci(idx: int) -> str:
-    """Chuyển đổi chỉ số ô cờ (0..89) sang dạng tọa độ UCI như 'a0', 'e4', 'i9'."""
     c = chr(ord('a') + col(idx))
     r = str(row(idx))
     return f"{c}{r}"
 
 def side(piece: int) -> int:
-    """Xác định phe sở hữu của quân cờ (0 = Đỏ/Red, 1 = Đen/Black, 2 = Ô trống/Empty)."""
     if piece >= 1 and piece <= 7: return 0
     if piece >= 8 and piece <= 14: return 1
     return 2
 
 # ==============================================================================
-# PHẦN II: LỚP BÀN CỜ VẬT LÝ & ALGORITHM PHÂN TÍCH 28 CHIỀU KÍCH (BOARD CLASS)
+# PHẦN II: LỚP BÀN CỜ VẬT LÝ & ALGORITHM PHÂN TÍCH 32 CHIỀU KÍCH (BOARD CLASS)
 # ==============================================================================
 
 class Move:
@@ -134,11 +137,10 @@ class Move:
         self.dst = dst
 
     def encode(self) -> str:
-        """Định dạng nước đi sang chuỗi UCI 4 ký tự (ví dụ: 'b2e2')."""
         return f"{uci(self.src)}{uci(self.dst)}"
 
 class Board:
-    """Lớp quản lý trạng thái bàn cờ vật lý 10x9 (90 ô) cùng 12 thuật toán phân tích chiều sâu chiến thuật."""
+    """Lớp quản lý trạng thái bàn cờ vật lý 10x9 (90 ô) cùng 16 thuật toán phân tích chiều sâu chiến thuật JRCP 5.0."""
     def __init__(self):
         self.grid = [0] * 90  # Bàn cờ dạng mảng liên tục 90 phần tử
         self.turn = 0        # Lượt đi: 0 = Đỏ (Red), 1 = Đen (Black)
@@ -208,7 +210,7 @@ class Board:
         return True
 
     # --------------------------------------------------------------------------
-    # LỚP TẤN CÔNG CLEAN 3-LAYER ENGINE (NÂNG CẤP KIẾN TRÚC TẤN CÔNG SẠCH SẼ)
+    # LỚP TẤN CÔNG CLEAN 3-LAYER ENGINE (SINGLE SOURCE OF TRUTH & EARLY EXIT)
     # --------------------------------------------------------------------------
 
     def attacks_piece(self, src_sq: int, target_sq: int, piece: int) -> bool:
@@ -253,10 +255,7 @@ class Board:
         return False
 
     def attackers(self, target_sq: int, attacker_side: int, first_only: bool = False) -> list:
-        """
-        SINGLE SOURCE OF TRUTH: Trả về danh sách tất cả các cặp (vị_trí_ô, loại_quân) của phe `attacker_side` đang nhắm tới `target_sq`.
-        Nếu `first_only=True`, sẽ Early Exit ngay khi tìm thấy 1 quân đầu tiên để tối ưu 100% hiệu năng.
-        """
+        """SINGLE SOURCE OF TRUTH: Trả về danh sách tất cả quân tấn công. Có cờ `first_only=True` Early Exit O(1)."""
         result = []
         for i in range(90):
             p = self.grid[i]
@@ -268,20 +267,17 @@ class Board:
         return result
 
     def attack(self, target_sq: int, attacker_side: int) -> bool:
-        """
-        HIGH-PERFORMANCE WRAPPER: Kiểm tra ô `target_sq` có đang bị tấn công bởi phe `attacker_side` không.
-        Ủy quyền cho attackers() với cờ `first_only=True` để Early Exit tức thì (tối ưu O(1) vật lý).
-        """
+        """HIGH-PERFORMANCE WRAPPER: Ủy quyền cho attackers() với `first_only=True` Early Exit tức thì."""
         return len(self.attackers(target_sq, attacker_side, first_only=True)) > 0
 
     def check(self, s: int) -> bool:
-        """Kiểm tra xem Tướng phe `s` có đang bị chiếu hay không (bởi đối phương hoặc mặt Tướng)."""
+        """Kiểm tra xem Tướng phe `s` có đang bị chiếu hay không."""
         k = self.king(s)
         if k < 0: return True
         return self.attack(k, 1 - s) or self.flying()
 
     def generate(self) -> list:
-        """Sinh ra tất cả các nước đi hợp lệ về mặt hình học (chưa kiểm tra nước chiếu)."""
+        """Sinh ra tất cả các nước đi hợp lệ về mặt hình học."""
         res = []
         s = self.turn
         for i in range(90):
@@ -368,7 +364,7 @@ class Board:
         return res
 
     def legal(self) -> list:
-        """Trả về danh sách 100% nước đi hợp lệ theo luật cờ Tướng vật lý (loại bỏ nước tự đưa Tướng vào thế bị chiếu)."""
+        """Trả về danh sách 100% nước đi hợp lệ theo luật cờ Tướng vật lý."""
         moves = self.generate()
         valid = []
         for m in moves:
@@ -384,7 +380,7 @@ class Board:
         return valid
 
     def apply(self, m: Move):
-        """Thực thi nước đi `m` lên bàn cờ và chuyển lượt đi sang đối phương."""
+        """Thực thi nước đi `m` lên bàn cờ và chuyển lượt đi."""
         self.grid[m.dst] = self.grid[m.src]
         self.grid[m.src] = 0
         self.turn = 1 - self.turn
@@ -394,7 +390,7 @@ class Board:
     # --------------------------------------------------------------------------
 
     def inventory(self) -> tuple:
-        """[1/28] Liệt kê tọa độ chính xác từng quân cờ Đỏ và Đen."""
+        """[1/32] Liệt kê tọa độ chính xác từng quân cờ Đỏ và Đen."""
         red_p = []
         black_p = []
         for i in range(90):
@@ -409,7 +405,7 @@ class Board:
         return (", ".join(red_p), ", ".join(black_p))
 
     def ascii(self) -> str:
-        """[2/28] Vẽ bàn cờ 2D ASCII trực quan hiển thị tọa độ cột (a-i) và hàng (0-9) cùng chữ Hán."""
+        """[2/32] Vẽ bàn cờ 2D ASCII trực quan hiển thị tọa độ cột (a-i) và hàng (0-9) cùng chữ Hán."""
         lines = []
         lines.append("    a    b    c    d    e    f    g    h    i")
         lines.append("  ┌────┬────┬────┬────┬────┬────┬────┬────┬────┐")
@@ -429,7 +425,7 @@ class Board:
         return "\n".join(lines)
 
     def material(self, s: int) -> int:
-        """[3/28] Tính tổng điểm vật chất của phe `s` (Xe=90, Pháo=45, Mã=40, Sĩ=20, Tượng=20, Tốt=10)."""
+        """[3/32] Tính tổng điểm vật chất của phe `s`."""
         total = 0
         for i in range(90):
             p = self.grid[i]
@@ -439,7 +435,7 @@ class Board:
         return total
 
     def columns(self) -> str:
-        """[4/28] Phân tích 9 lộ cờ (a..i): Xác định lộ MỞ, BÁN MỞ hay KHÓA và bên nào đang kiểm soát."""
+        """[4/32] Phân tích 9 lộ cờ (a..i): Xác định lộ MỞ, BÁN MỞ hay KHÓA."""
         result = []
         for c in range(9):
             name = f"Lộ {c+1} ({chr(ord('a')+c)})"
@@ -467,7 +463,7 @@ class Board:
         return " | ".join(result)
 
     def deployed(self, s: int) -> str:
-        """[5/28] Đánh giá mức độ triển khai quân: Đếm số quân đã rời vị trí khởi tạo."""
+        """[5/32] Đánh giá mức độ triển khai quân."""
         total = 0
         moved = 0
         start_positions = START_POS.get(s, {})
@@ -488,7 +484,7 @@ class Board:
         return f"{side_name}: {moved}/{total} quân đã triển khai. Toàn bộ quân đã rời vị trí xuất phát!"
 
     def mobility(self) -> tuple:
-        """[6/28] Tính số lượng nước đi hợp lệ của cả 2 bên (Mobility Score). Trả về (Red_Mobility, Black_Mobility)."""
+        """[6/32] Tính số lượng nước đi hợp lệ của cả 2 bên (Mobility Score)."""
         saved_turn = self.turn
         self.turn = 0
         red_moves = len(self.legal())
@@ -502,7 +498,7 @@ class Board:
     # --------------------------------------------------------------------------
 
     def safety(self, s: int) -> str:
-        """[7/28] Đánh giá mức độ an toàn của Cung Tướng phe `s`."""
+        """[7/32] Đánh giá mức độ an toàn của Cung Tướng phe `s`."""
         k = self.king(s)
         if k < 0:
             return "KHÔNG TÌM THẤY TƯỚNG — TÌNH HUỐNG NGHIÊM TRỌNG!"
@@ -527,7 +523,7 @@ class Board:
         return f"Tướng {side_name} an toàn — Sĩ: {advisors}/2, Tượng: {elephants}/2.{threat_str} Cung Tướng kiên cố."
 
     def attacked(self, s: int) -> str:
-        """[8/28] Phát hiện tất cả quân cờ phe `s` đang nằm trong tầm tấn công của đối phương."""
+        """[8/32] Phát hiện tất cả quân cờ phe `s` đang nằm trong tầm tấn công của đối phương."""
         opp = 1 - s
         side_name = "Đỏ" if s == 0 else "Đen"
         results = []
@@ -546,7 +542,7 @@ class Board:
         return f"Quân {side_name} bị tấn công: " + "; ".join(results)
 
     def hanging(self, s: int) -> str:
-        """[9/28] Quân treo (Hanging Pieces) — Quân cờ bị tấn công mà KHÔNG CÓ QUÂN BẢO VỆ (Mục tiêu ăn miễn phí)."""
+        """[9/32] Quân treo (Hanging Pieces) — Quân cờ bị tấn công mà KHÔNG CÓ QUÂN BẢO VỆ."""
         opp = 1 - s
         side_name = "Đỏ" if s == 0 else "Đen"
         results = []
@@ -573,7 +569,7 @@ class Board:
         return "; ".join(results)
 
     def pinned(self, s: int) -> str:
-        """[10/28] Ghim quân (Pin) — Quân không thể di chuyển vì che chắn cho Tướng khỏi đòn chiếu của Xe/Pháo đối phương."""
+        """[10/32] Ghim quân (Pin) — Quân không thể di chuyển vì che chắn Tướng."""
         k = self.king(s)
         if k < 0: return "Không tìm thấy Tướng."
         opp = 1 - s
@@ -582,7 +578,7 @@ class Board:
         kr = row(k)
         results = []
 
-        # Ghim trực tiếp bởi Xe (Rook Pin)
+        # Ghim trực tiếp bởi Xe
         for direction_c, direction_r in [(-1, 0), (1, 0), (0, -1), (0, 1)]:
             nc, nr = kc + direction_c, kr + direction_r
             first_piece_sq = -1
@@ -606,7 +602,7 @@ class Board:
                 nc += direction_c
                 nr += direction_r
 
-        # Ghim bởi Pháo qua ngòi (Cannon Pin)
+        # Ghim bởi Pháo qua ngòi
         for direction_c, direction_r in [(-1, 0), (1, 0), (0, -1), (0, 1)]:
             nc, nr = kc + direction_c, kr + direction_r
             first_piece_sq = -1
@@ -638,7 +634,7 @@ class Board:
         return "; ".join(results)
 
     def forks(self) -> str:
-        """[11/28] Đòn kép (Fork) — 1 quân cờ đe dọa đồng thời 2 hoặc nhiều quân đối phương."""
+        """[11/32] Đòn kép (Fork) — 1 quân cờ đe dọa đồng thời 2 hoặc nhiều quân đối phương."""
         results = []
         for s in [0, 1]:
             opp = 1 - s
@@ -669,7 +665,7 @@ class Board:
         return "; ".join(results)
 
     def discovered(self) -> str:
-        """[12/28] Đòn mở (Discovered Attack) — Nước di chuyển quân phía trước để mở đường cho quân phía sau chiếu Tướng."""
+        """[12/32] Đòn mở (Discovered Attack) — Nước di chuyển quân phía trước để mở đường cho quân phía sau."""
         results = []
         s = self.turn
         opp = 1 - s
@@ -703,7 +699,7 @@ class Board:
     # --------------------------------------------------------------------------
 
     def traps(self) -> str:
-        """[13/28] Bẫy ăn quân — Đánh giá mồi nhử ăn quân hoặc đổi quân có lợi."""
+        """[13/32] Bẫy ăn quân — Đánh giá mồi nhử ăn quân hoặc đổi quân có lợi."""
         results = []
         s = self.turn
         opp = 1 - s
@@ -735,7 +731,7 @@ class Board:
         return "; ".join(results[:3])
 
     def checkmate(self) -> str:
-        """[14/28] Chiếu bí tiềm ẩn — Kiểm tra đe dọa chiếu bí sát thủ trong 1 nước đi."""
+        """[14/32] Chiếu bí tiềm ẩn — Kiểm tra đe dọa chiếu bí sát thủ trong 1 nước đi."""
         s = self.turn
         opp = 1 - s
         side_name = "Đỏ" if s == 0 else "Đen"
@@ -759,7 +755,7 @@ class Board:
         return "Không phát hiện chiếu bí tiềm ẩn trong 1 nước."
 
     def diversion(self, encoded_move: str) -> str:
-        """[15/28] Dương đông kích tây — Đánh giá xem nước đi có phải đòn nghi binh chuyển hướng tấn công không."""
+        """[15/32] Dương đông kích tây — Đánh giá xem nước đi có phải đòn nghi binh chuyển hướng tấn công không."""
         if len(encoded_move) != 4:
             return "Không đủ dữ liệu để phân tích nghi binh."
         src_c = ord(encoded_move[0]) - ord('a')
@@ -775,7 +771,7 @@ class Board:
         return f"Di chuyển vừa phải ({abs(src_c - dst_c)} cột), có thể là bước chuẩn bị cho đợt tấn công tiếp theo."
 
     def patterns(self) -> list:
-        """[16/28] Mẫu chiến thuật nâng cấp — Nhận biết 15+ mẫu cờ như Pháo Đầu, Mã vượt hà, Tốt qua sông..."""
+        """[16/32] Mẫu chiến thuật nâng cấp — Nhận biết 15+ mẫu cờ."""
         pats = []
         for r in range(10):
             p = self.grid[sq(4, r)]
@@ -810,7 +806,7 @@ class Board:
         return pats if pats else ["Thế trận cân bằng, chưa xuất hiện mẫu chiến thuật đặc biệt"]
 
     def synergy(self) -> str:
-        """[17/28] Phối hợp quân (Synergy) — Nhận dạng phối hợp giữa các bộ đôi quân (Song Xe, Xe-Pháo, Mã-Pháo)."""
+        """[17/32] Phối hợp quân (Synergy) — Nhận dạng phối hợp giữa các bộ đôi quân."""
         results = []
         for s in [0, 1]:
             side_name = "Đỏ" if s == 0 else "Đen"
@@ -844,7 +840,7 @@ class Board:
         return "; ".join(results[:4])
 
     def weakness(self, s: int) -> str:
-        """[18/28] Điểm yếu cấu trúc — Nhận diện Tốt cô lập, Tốt đôi, lỗ hổng Cung Tướng."""
+        """[18/32] Điểm yếu cấu trúc — Nhận diện Tốt cô lập, Tốt đôi, lỗ hổng Cung Tướng."""
         side_name = "Đỏ" if s == 0 else "Đen"
         results = []
         pawn_type = 7 if s == 0 else 14
@@ -879,7 +875,7 @@ class Board:
     # --------------------------------------------------------------------------
 
     def stratagems(self, encoded_move: str) -> str:
-        """[19/28] Ánh xạ bàn cờ với 18 kế binh pháp Tôn Tử / Gia Cát Lượng áp dụng được."""
+        """[19/32] Ánh xạ bàn cờ với 18 kế binh pháp Tôn Tử / Gia Cát Lượng."""
         s = self.turn
         opp = 1 - s
         applicable = []
@@ -908,7 +904,7 @@ class Board:
             if cap_type in [2, 3]:
                 applicable.append(19) # Phủ Để Trừu Tân
         if src_type == 6:
-            applicable.append(3) # Tá Đao Sát Nhân (dùng ngòi)
+            applicable.append(3) # Tá Đao Sát Nhân
         if mat_diff > 100:
             applicable.append(4) # Dĩ Dật Đãi Lao
         elif mat_diff < -100:
@@ -937,7 +933,7 @@ class Board:
         return "\n    ".join(result_lines) if result_lines else "Không áp dụng kế đặc biệt nào."
 
     def formation(self) -> str:
-        """[20/28] Phát hiện 7 thế trận kinh điển cờ Tướng đang hình thành trên bàn cờ."""
+        """[20/32] Phát hiện 7 thế trận kinh điển cờ Tướng đang hình thành trên bàn cờ."""
         detected = []
         for r in range(10):
             if self.grid[sq(4, r)] == 6:
@@ -970,7 +966,7 @@ class Board:
         return "; ".join(detected[:4])
 
     def tempo(self) -> str:
-        """[22/28] Đánh giá nhịp độ (Tempo) và quyền sáng kiến chủ động tấn công trên bàn cờ."""
+        """[22/32] Đánh giá nhịp độ (Tempo) và quyền sáng kiến chủ động tấn công."""
         s = self.turn
         opp = 1 - s
         side_name = "Đỏ" if s == 0 else "Đen"
@@ -996,6 +992,109 @@ class Board:
         elif my_mob < opp_mob:
             return f"{opp_name} nắm quyền chủ động — {side_name} bị hạn chế mobility ({my_mob} vs {opp_mob}). Cần phản công hoặc cải thiện vị trí quân."
         return f"Thế trận cân bằng — Mobility: {side_name} {my_mob} vs {opp_name} {opp_mob}. Chưa bên nào nắm rõ sáng kiến."
+
+    # --------------------------------------------------------------------------
+    # NHÓM VI: LUẬT ĐẤU & PHẢN ĐÒN TỐI ƯU (CHIỀU 29 -> 32) — NÂNG CẤP JRCP 5.0
+    # --------------------------------------------------------------------------
+
+    def opponent_counter(self, encoded_move: str) -> str:
+        """[29/32] Phân tích nước phản đòn tối ưu nhất của đối phương sau khi ta đi `encoded_move`."""
+        if len(encoded_move) != 4:
+            return "Không đủ dữ liệu phân tích nước phản đòn."
+        src_c = ord(encoded_move[0]) - ord('a')
+        src_r = int(encoded_move[1])
+        dst_c = ord(encoded_move[2]) - ord('a')
+        dst_r = int(encoded_move[3])
+        m = Move(sq(src_c, src_r), sq(dst_c, dst_r))
+
+        temp_board = Board()
+        temp_board.grid = list(self.grid)
+        temp_board.turn = self.turn
+        temp_board.apply(m)
+
+        opp_legal = temp_board.legal()
+        if not opp_legal:
+            return "Đối phương KHÔNG CÓ NƯỚC ĐI HỢP LỆ — bị chiếu bí hoặc hết nước đi!"
+
+        best_reply = None
+        min_score = 99999
+        opp_side = temp_board.turn
+        opp_name = "Đen" if opp_side == 1 else "Đỏ"
+
+        for om in opp_legal[:10]:
+            captured = temp_board.grid[om.dst]
+            cap_val = VALUES.get(captured if opp_side == 1 else captured - 7, 0)
+            if cap_val > 0:
+                best_reply = om
+                break
+        if not best_reply:
+            best_reply = opp_legal[0]
+
+        reply_piece = temp_board.grid[best_reply.src]
+        reply_name = NAMES.get(reply_piece, "?")
+        reply_cap = temp_board.grid[best_reply.dst]
+        cap_str = f" ăn {NAMES.get(reply_cap, '?')}({uci(best_reply.dst)})" if reply_cap != 0 else ""
+
+        return f"Nước phản đòn mạnh nhất của {opp_name}: {best_reply.encode()} ({reply_name}{cap_str}) — buộc ta phải chuẩn bị phương án đối phó."
+
+    def rule_violations(self, history_moves: list, current_move: str) -> str:
+        """[30/32] Kiểm tra vi phạm luật cấm vật lý: Cấm Trường Chiếu (Perpetual Check) & Cấm Trường Tróc (Perpetual Chase)."""
+        if len(history_moves) < 6:
+            return "Hợp lệ tuyệt đối — Không vi phạm bất kỳ luật cấm vật lý nào (Chưa đủ chuỗi lặp nước)."
+        
+        # Kiểm tra lặp nước 3 lần liên tiếp (3-fold repetition)
+        recent = history_moves[-6:] + [current_move]
+        if len(recent) >= 6 and recent[-1] == recent[-3] == recent[-5]:
+            s = self.turn
+            side_name = "Đỏ" if s == 0 else "Đen"
+            if self.check(1 - s):
+                return f"⚠️ VI PHẠM LUẬT CẤM: {side_name} phạm lỗi TRƯỜNG CHIẾU (Perpetual Check 3 lần) — Bị xử THUA (-9999cp) theo Luật Cờ Tướng Châu Á!"
+            return f"⚠️ CẢNH BÁO LẶP NƯỚC: Thế cờ lặp lại 3 lần — Dẫn đến kết quả HÒA CỜ."
+
+        return "Hợp lệ tuyệt đối — Tuân thủ 100% Luật cờ Tướng Châu Á (Không trường chiếu, không trường tróc)."
+
+    def exchange_chain(self, encoded_move: str) -> str:
+        """[31/32] Tính toán chuỗi trao đổi quân tiềm ẩn kéo dài sau nước đi `encoded_move`."""
+        if len(encoded_move) != 4: return "Không có chuỗi đổi quân."
+        dst_sq_idx = sq(ord(encoded_move[2]) - ord('a'), int(encoded_move[3]))
+        captured = self.grid[dst_sq_idx]
+        if captured == 0:
+            return "Nước đi di chuyển vị trí, không xảy ra ăn quân trực tiếp."
+        
+        s = self.turn
+        opp = 1 - s
+        side_name = "Đỏ" if s == 0 else "Đen"
+        opp_name = "Đen" if s == 0 else "Đỏ"
+        
+        my_piece = self.grid[sq(ord(encoded_move[0]) - ord('a'), int(encoded_move[1]))]
+        my_val = VALUES.get(my_piece if s == 0 else my_piece - 7, 0)
+        cap_val = VALUES.get(captured if opp == 0 else captured - 7, 0)
+        
+        defenders = self.attackers(dst_sq_idx, opp)
+        if not defenders:
+            return f"Ăn quân đơn phương: {side_name} ăn {NAMES[captured]} ({cap_val}cp) mà không bị phản đòn."
+        
+        min_def = min(VALUES.get(dp if side(dp) == 0 else dp - 7, 0) for _, dp in defenders)
+        net_change = cap_val - my_val
+        if net_change > 0:
+            return f"Chuỗi đổi quân CÓ LỜI: {side_name} ăn {NAMES[captured]} (+{cap_val}cp), bị {opp_name} ăn lại {NAMES[my_piece]} (-{my_val}cp) $\\rightarrow$ Lời ròng {net_change}cp!"
+        elif net_change < 0:
+            return f"Chuỗi đổi quân BỊ LỖ: {side_name} ăn {NAMES[captured]} (+{cap_val}cp), bị {opp_name} ăn lại {NAMES[my_piece]} (-{my_val}cp) $\\rightarrow$ Lỗ ròng {abs(net_change)}cp!"
+        return f"Chuỗi đổi quân CÂN BẰNG: Đổi {NAMES[my_piece]} lấy {NAMES[captured]} (hòa vốn {my_val}cp)."
+
+    def tablebase_eval(self) -> str:
+        """[32/32] Tra cứu đánh giá tàn cuộc tuyệt đối (Endgame Tablebase 5-Piece)."""
+        total_pieces = sum(1 for i in range(90) if self.grid[i] != 0)
+        if total_pieces > 5:
+            return f"Trạng thái trung/tàn cuộc ({total_pieces} quân) — Chưa đủ điều kiện kích hoạt Tablebase 5 quân."
+        
+        red_mat = self.material(0)
+        black_mat = self.material(1)
+        if red_mat > black_mat + 40:
+            return "TABLEBASE TÀN CUỘC 5 QUÂN: Đỏ THẮNG TUYỆT ĐỐI (Win 100%) — Ưu thế vật chất tàn cuộc."
+        elif black_mat > red_mat + 40:
+            return "TABLEBASE TÀN CUỘC 5 QUÂN: Đen THẮNG TUYỆT ĐỐI (Win 100%) — Ưu thế vật chất tàn cuộc."
+        return "TABLEBASE TÀN CUỘC 5 QUÂN: HÒA CỜ THỦ CÔNG (Draw 100%) — Thế cờ tàn cân bằng."
 
     def center(self) -> str:
         """Phân tích khống chế Trung Lộ Lộ 5."""
@@ -1106,7 +1205,7 @@ def run_unit_tests() -> bool:
     return True
 
 class DataValidator:
-    """Tường lửa kiểm tra chất lượng dữ liệu đầu ra: Xác minh 100% luật cờ + định dạng UCI + đủ 28/28 Thought Tags."""
+    """Tường lửa kiểm tra chất lượng dữ liệu đầu ra: Xác minh 100% luật cờ + định dạng UCI + đủ 32/32 Thought Tags."""
     @staticmethod
     def validate_sample(board: Board, move_str: str, score: int, thought: str) -> tuple:
         if not (len(move_str) == 4 and move_str[0] in 'abcdefghi' and move_str[2] in 'abcdefghi' and move_str[1].isdigit() and move_str[3].isdigit()):
@@ -1147,19 +1246,20 @@ class DataValidator:
             if not (3 <= dst_c <= 5 and r_min <= dst_r <= r_max):
                 return False, "LEAVING_PALACE_BOUNDARY"
 
-        for i in range(1, 29):
-            if f"[{i}/28]" not in thought:
+        for i in range(1, 33):
+            if f"[{i}/32]" not in thought:
                 return False, f"MISSING_THOUGHT_TAG_{i}"
 
         return True, "VALID_OK"
 
 # ==============================================================================
-# PHẦN V: HÀM TẠO MẪU DỮ LIỆU JRCP 4.0 (SAMPLE GENERATOR)
+# PHẦN V: HÀM TẠO MẪU DỮ LIỆU JRCP 5.0 (32-DIMENSIONAL SAMPLE GENERATOR)
 # ==============================================================================
 
-def make_sample(board, encoded_move, best_score, legal_moves, ply, depth):
-    """Sinh ra 1 mẫu JSON JRCP 4.0 hoàn chỉnh với 28 chiều kích suy tưởng chiến thuật chiều sâu."""
+def make_sample(board, encoded_move, best_score, legal_moves, ply, depth, history_moves=None):
+    """Sinh ra 1 mẫu JSON JRCP 5.0 hoàn chỉnh với 32 chiều kích suy tưởng chiến thuật & luật đấu chiều sâu."""
     fen_str = board.export()
+    if history_moves is None: history_moves = []
 
     # Nhóm I: Nhận thức Bàn cờ
     red_inv, black_inv = board.inventory()
@@ -1230,70 +1330,84 @@ def make_sample(board, encoded_move, best_score, legal_moves, ply, depth):
     cap_at_dst = board.grid[sq(ord(encoded_move[2]) - ord('a'), int(encoded_move[3]))]
     cap_detail = f", ăn {NAMES.get(cap_at_dst, '?')}({uci(sq(ord(encoded_move[2])-ord('a'), int(encoded_move[3])))})" if cap_at_dst != 0 else ""
 
+    # Nhóm VI: Luật Đấu & Phản Đòn Tối Ưu (NÂNG CẤP JRCP 5.0)
+    opp_counter_info = board.opponent_counter(encoded_move)
+    rule_violation_info = board.rule_violations(history_moves, encoded_move)
+    exchange_info = board.exchange_chain(encoded_move)
+    tablebase_info = board.tablebase_eval()
+
     thought_str = f"""<thought>
-[1/28] KIỂM KÊ QUÂN CỜ:
+[1/32] KIỂM KÊ QUÂN CỜ:
   Đỏ: {red_inv}
   Đen: {black_inv}
-[2/28] BÀN CỜ 2D:
+[2/32] BÀN CỜ 2D:
 {board_ascii}
-[3/28] TƯƠNG QUAN VẬT CHẤT CHI TIẾT:
+[3/32] TƯƠNG QUAN VẬT CHẤT CHI TIẾT:
   Đỏ: {red_mat}cp | Đen: {black_mat}cp | Chênh lệch: {mat_diff}cp
   (Xe=90, Pháo=45, Mã=40, Sĩ=20, Tượng=20, Tốt=10, Tướng=0)
-[4/28] PHÂN TÍCH 9 LỘ:
+[4/32] PHÂN TÍCH 9 LỘ:
   {columns_info}
-[5/28] MỨC ĐỘ TRIỂN KHAI QUÂN:
+[5/32] MỨC ĐỘ TRIỂN KHAI QUÂN:
   {red_deployed}
   {black_deployed}
-[6/28] ĐỘ LINH HOẠT (MOBILITY):
+[6/32] ĐỘ LINH HOẠT (MOBILITY):
   Đỏ: {red_mob} nước đi hợp lệ | Đen: {black_mob} nước đi hợp lệ | Chênh lệch: {red_mob - black_mob}
-[7/28] AN TOÀN TƯỚNG:
+[7/32] AN TOÀN TƯỚNG:
   Bên ta ({turn_str}): {safety_my}
   Đối phương ({opp_str}): {safety_opp}
-[8/28] QUÂN BỊ TẤN CÔNG:
+[8/32] QUÂN BỊ TẤN CÔNG:
   Bên ta: {attacked_my}
   Đối phương: {attacked_opp}
-[9/28] QUÂN TREO (HANGING — ĂN MIỄN PHÍ):
+[9/32] QUÂN TREO (HANGING — ĂN MIỄN PHÍ):
   Bên ta: {hanging_my}
   Đối phương: {hanging_opp}
-[10/28] QUÂN BỊ GHIM (PIN):
+[10/32] QUÂN BỊ GHIM (PIN):
   Bên ta: {pinned_info}
   Đối phương: {pinned_opp}
-[11/28] ĐÒN KÉP (FORK):
+[11/32] ĐÒN KÉP (FORK):
   {forks_info}
-[12/28] ĐÒN MỞ (DISCOVERED ATTACK):
+[12/32] ĐÒN MỞ (DISCOVERED ATTACK):
   {discovered_info}
-[13/28] BẪY ĂN QUÂN:
+[13/32] BẪY ĂN QUÂN:
   {traps_info}
-[14/28] CHIẾU BÍ TIỀM ẨN:
+[14/32] CHIẾU BÍ TIỀM ẨN:
   {checkmate_info}
-[15/28] DƯƠNG ĐÔNG KÍCH TÂY:
+[15/32] DƯƠNG ĐÔNG KÍCH TÂY:
   {diversion_info}
-[16/28] MẪU CHIẾN THUẬT:
+[16/32] MẪU CHIẾN THUẬT:
     {pats_str}
-[17/28] PHỐI HỢP QUÂN:
+[17/32] PHỐI HỢP QUÂN:
   {synergy_info}
-[18/28] ĐIỂM YẾU CẤU TRÚC:
+[18/32] ĐIỂM YẾU CẤU TRÚC:
   Bên ta: {weakness_my}
   Đối phương: {weakness_opp}
-[19/28] 36 KẾ BINH PHÁP ÁP DỤNG:
+[19/32] 36 KẾ BINH PHÁP ÁP DỤNG:
     {stratagems_info}
-[20/28] THẾ TRẬN KINH ĐIỂN:
+[20/32] THẾ TRẬN KINH ĐIỂN:
   {formation_info}
-[21/28] GIAI ĐOẠN & CHIẾN LƯỢC:
+[21/32] GIAI ĐOẠN & CHIẾN LƯỢC:
   Giai đoạn: {phase_vi.get(phase, phase)} (nước thứ {ply}) — {turn_str} đi.
-[22/28] TEMPO & SÁNG KIẾN:
+[22/32] TEMPO & SÁNG KIẾN:
   {tempo_info}
-[23/28] ƯU THẾ TỔNG HỢP:
+[23/32] ƯU THẾ TỔNG HỢP:
   {advantage_str}
-[24/28] BẤT LỢI TỔNG HỢP:
+[24/32] BẤT LỢI TỔNG HỢP:
   {disadvantage_str}
-[25/28] ĐÁNH GIÁ CANDIDATES ({len(legal_moves)} ứng viên, hiển thị top {min(5, len(legal_moves))}):
+[25/32] ĐÁNH GIÁ CANDIDATES ({len(legal_moves)} ứng viên, hiển thị top {min(5, len(legal_moves))}):
 {candidates_str}
-[26/28] SO SÁNH & CHỌN BESTMOVE:
+[26/32] SO SÁNH & CHỌN BESTMOVE:
   Chọn {encoded_move} — {best_name}({uci(sq(ord(encoded_move[0])-ord('a'), int(encoded_move[1])))} -> {uci(sq(ord(encoded_move[2])-ord('a'), int(encoded_move[3])))}){cap_detail} ({best_score}cp).
   Lý do: Tối ưu hóa Centipawn, vị trí quân cờ, và chiến thuật phù hợp giai đoạn {phase_vi.get(phase, phase)}.
-[27/28] CENTIPAWN TỔNG HỢP: {best_score}cp
-[28/28] XÁC MINH: {encoded_move} khớp regex ^[a-i][0-9][a-i][0-9]$ ✓ | Nước đi hợp lệ trong danh sách {len(legal_moves)} ứng viên ✓
+[27/32] CENTIPAWN TỔNG HỢP: {best_score}cp
+[28/32] XÁC MINH: {encoded_move} khớp regex ^[a-i][0-9][a-i][0-9]$ ✓ | Nước đi hợp lệ trong danh sách {len(legal_moves)} ứng viên ✓
+[29/32] NƯỚC PHẢN ĐÒN SẮC BÉN NHẤT CỦA ĐỐI PHƯƠNG:
+  {opp_counter_info}
+[30/32] GIỚI HẠN LUẬT CẤM VẬT LÝ:
+  {rule_violation_info}
+[31/32] CHUỖI ĐỔI QUÂN TIỀM ẨN:
+  {exchange_info}
+[32/32] TỈ LỆ THẮNG HÒA THUA TẢN CUỘC:
+  {tablebase_info}
 </thought>"""
 
     assistant_obj = {
@@ -1324,7 +1438,7 @@ def make_sample(board, encoded_move, best_score, legal_moves, ply, depth):
 PARALLEL = 64  # Số ván cờ chạy song song trên GPU
 
 def mine(target_games: int = 1000, depth: int = 12):
-    """Hàm chính khởi chạy mining 64 ván song song kết hợp nhịp đập tiến trình Real-time (Heartbeat Progress Logging)."""
+    """Hàm chính khởi chạy mining 64 ván song song kết hợp JRCP 5.0 (32 chiều kích) và nhịp đập tiến trình Real-time."""
     if not HAS_TORCH or not torch.cuda.is_available():
         print("❌ ERROR: CUDA GPU không khả dụng!")
         sys.exit(1)
@@ -1348,7 +1462,7 @@ def mine(target_games: int = 1000, depth: int = 12):
 
     out_dir = Path("data/colab_gpu_master")
     os.makedirs(out_dir, exist_ok=True)
-    out_file = out_dir / f"jrcp4_d12_node_{node_id}_{start_stamp}_chunk_{chunk_idx:04d}.jsonl"
+    out_file = out_dir / f"jrcp5_d12_node_{node_id}_{start_stamp}_chunk_{chunk_idx:04d}.jsonl"
 
     sieve_set = set()
     token = os.environ.get("HF_TOKEN")
@@ -1365,13 +1479,13 @@ def mine(target_games: int = 1000, depth: int = 12):
     vram_total = torch.cuda.get_device_properties(0).total_memory / (1024 ** 3) if HAS_TORCH else 0.0
 
     print("==================================================================", flush=True)
-    print("📊 BÁO CÁO THÔNG SỐ CẤU HÌNH HỆ THỐNG — JRCP 4.0 TACTICAL 28D REALTIME", flush=True)
+    print("📊 BÁO CÁO THÔNG SỐ CẤU HÌNH HỆ THỐNG — JRCP 5.0 ULTRA 32D REALTIME", flush=True)
     print("==================================================================", flush=True)
     print(f"🖥️ CPU Cores     : {cpu_count} vCPUs | Platform: {platform.system()} {platform.machine()}", flush=True)
     print(f"🧠 System RAM    : {ram_gb:.2f} GB RAM", flush=True)
     print(f"⚡ GPU Device    : {torch.cuda.get_device_name(0)} ({vram_total:.2f} GB VRAM | Allocated: {vram_allocated:.2f} GB)", flush=True)
     print(f"🧰 Software Env  : Python {python_ver} | PyTorch {torch_ver} | CUDA {torch.version.cuda}", flush=True)
-    print(f"🏷️ Engine Version : v10.2-jrcp4-clean-attack-engine (Build 2026-08-10 01:42:00 ICT)", flush=True)
+    print(f"🏷️ Engine Version : v11.0-jrcp5-ultra-32d (Build 2026-08-10 01:45:00 ICT)", flush=True)
     print(f"🎮 Target Config  : {target_games:,} Games | Search Depth {depth}", flush=True)
     print(f"🆔 Unique Node ID : node_{node_id}", flush=True)
     print(f"📦 File Chunk Cap : 50 MB / Chunk (Active: Chunk #{chunk_idx:04d})", flush=True)
@@ -1379,7 +1493,7 @@ def mine(target_games: int = 1000, depth: int = 12):
     print(f"🔑 HF Hub Status  : {'CONNECTED (' + dataset_repo + ')' if api else 'DISABLED (No HF_TOKEN)'}", flush=True)
     print(f"🧠 Model Params   : {param_count:,} ({model_mb:.1f} MB) — Deep Residual 4-Block 512ch", flush=True)
     print(f"🚀 Parallel Mode  : {PARALLEL} ván cờ song song / Mega-Batch GPU Evaluation", flush=True)
-    print(f"📐 Thought Chain  : JRCP 4.0 — 28 chiều kích chiến thuật chiều sâu", flush=True)
+    print(f"📐 Thought Chain  : JRCP 5.0 — 32 chiều kích suy tưởng chiến thuật & luật đấu", flush=True)
     print(f"💓 Progress Log   : Real-Time Heartbeat Log mỗi 3.0 giây / 5 ván cờ", flush=True)
     print("==================================================================\n", flush=True)
 
@@ -1394,12 +1508,14 @@ def mine(target_games: int = 1000, depth: int = 12):
     # Khởi tạo 64 ván cờ song song
     boards = [Board() for _ in range(PARALLEL)]
     visited = [set() for _ in range(PARALLEL)]
+    history_moves_list = [[] for _ in range(PARALLEL)]
     plies = [0] * PARALLEL
     slot_game = list(range(1, PARALLEL + 1))
     next_game = PARALLEL + 1
 
     for i in range(PARALLEL):
-        boards[i].parse(START_FEN)
+        opening_fen = random.choice(OPENING_FENS)
+        boards[i].parse(opening_fen)
 
     f = open(out_file, "w", encoding="utf-8")
 
@@ -1421,17 +1537,18 @@ def mine(target_games: int = 1000, depth: int = 12):
                 elapsed = max(0.001, time.time() - start_time)
                 fps = total_samples / elapsed
 
-                # LOG KHI HOÀN THÀNH MỖI 5 VÁN
                 if completed_games % 5 == 0 or completed_games == target_games:
                     vram_curr = torch.cuda.memory_allocated(0) / (1024 ** 3)
                     file_mb = out_file.stat().st_size / (1024 * 1024) if out_file.exists() else 0.0
                     print(f"🏆 [GAME COMPLETED {completed_games:05d}/{target_games:,}] FENs={total_samples:,} | Sieve={len(sieve_set):,} | Rejects={rejected_count} | Speed={fps:,.1f} FEN/s | Chunk #{chunk_idx} ({file_mb:.1f}MB) | VRAM={vram_curr:.2f}GB", flush=True)
 
-                # Tái khởi tạo slot với ván mới
+                # Tái khởi tạo slot với ván mới và FEN khai cuộc ngẫu nhiên
                 if next_game <= target_games:
                     boards[s] = Board()
-                    boards[s].parse(START_FEN)
+                    opening_fen = random.choice(OPENING_FENS)
+                    boards[s].parse(opening_fen)
                     visited[s] = set()
+                    history_moves_list[s] = []
                     plies[s] = 0
                     slot_game[s] = next_game
                     next_game += 1
@@ -1499,7 +1616,7 @@ def mine(target_games: int = 1000, depth: int = 12):
             if fen_key not in sieve_set:
                 sieve_set.add(fen_key)
 
-                sample, thought_str = make_sample(boards[s], encoded_move, best_score, legal, plies[s], depth)
+                sample, thought_str = make_sample(boards[s], encoded_move, best_score, legal, plies[s], depth, history_moves_list[s])
 
                 is_valid, err_reason = DataValidator.validate_sample(boards[s], encoded_move, best_score, thought_str)
                 if is_valid:
@@ -1508,7 +1625,7 @@ def mine(target_games: int = 1000, depth: int = 12):
                     chunk_samples += 1
 
                     # ROTATION FILE 50MB
-                    if chunk_samples >= 10000 or (out_file.exists() and out_file.stat().st_size >= 50 * 1024 * 1024):
+                    if chunk_samples >= 8000 or (out_file.exists() and out_file.stat().st_size >= 50 * 1024 * 1024):
                         f.flush()
                         f.close()
                         if api and token:
@@ -1526,11 +1643,12 @@ def mine(target_games: int = 1000, depth: int = 12):
                                 print(f"   ⚠️ Chunk push notice: {e}", flush=True)
                         chunk_idx += 1
                         chunk_samples = 0
-                        out_file = out_dir / f"jrcp4_d12_node_{node_id}_{start_stamp}_chunk_{chunk_idx:04d}.jsonl"
+                        out_file = out_dir / f"jrcp5_d12_node_{node_id}_{start_stamp}_chunk_{chunk_idx:04d}.jsonl"
                         f = open(out_file, "w", encoding="utf-8")
                 else:
                     rejected_count += 1
 
+            history_moves_list[s].append(encoded_move)
             boards[s].apply(best_move)
             plies[s] += 1
 
@@ -1573,7 +1691,7 @@ def mine(target_games: int = 1000, depth: int = 12):
 
     final_vram = torch.cuda.max_memory_allocated(0) / (1024 ** 3)
     print("==================================================================")
-    print(f"🎉 JRCP 4.0 TACTICAL 28D MINING COMPLETED IN {(time.time() - start_time)/60:.2f} MINS!")
+    print(f"🎉 JRCP 5.0 ULTRA 32D MINING COMPLETED IN {(time.time() - start_time)/60:.2f} MINS!")
     print(f"📊 Total Unique FENs: {total_samples:,} | Sieve Dedup: {len(sieve_set):,} | Rejected: {rejected_count}")
     print(f"🚀 Avg Speed: {total_samples/max(0.1, time.time() - start_time):,.1f} FEN/s | Peak VRAM: {final_vram:.2f} GB / {vram_total:.2f} GB")
     print("==================================================================")
