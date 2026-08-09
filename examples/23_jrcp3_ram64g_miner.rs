@@ -306,6 +306,11 @@ impl Buffer {
         guard.extend(chunk);
         drop(guard); // Giải phóng Mutex ngay lập tức
         self.count.fetch_add(added, Ordering::Relaxed);
+
+        if std::env::var("BENCHMARK").is_ok() {
+            let path = std::env::var("OUTPUT").unwrap_or_else(|_| "data/output.jsonl".to_string());
+            self.flush(&path);
+        }
     }
 
     /// [FIX #3] Flush RAM buffer xuống đĩa với swap-and-drain pattern:
@@ -1092,7 +1097,8 @@ fn main() {
                         local_buffer.push(sample);
                         local_count += 1;
 
-                        if local_buffer.len() >= 500 {
+                        let batch_limit = if std::env::var("BENCHMARK").is_ok() { 1 } else { 500 };
+                        if local_buffer.len() >= batch_limit {
                             thread_buffer.push(std::mem::take(&mut local_buffer));
                             local_buffer = Vec::with_capacity(2000);
                             samples_counter.fetch_add(local_count, Ordering::Relaxed);

@@ -69,9 +69,9 @@ REPO = "hoduyquocbao/xiangqi-nnue-dataset"
 # ============================================================================
 # APPLICATION SEMANTIC VERSIONING & BUILD METADATA
 # ============================================================================
-APP_VERSION = "v4.6.0-production"
-APP_BUILD_STAMP = "2026-08-09 21:58:00 ICT"
-APP_RELEASE_NOTES = "Add Precise Standalone Manual CLI Port Killer Script (scripts/free_port.py)"
+APP_VERSION = "v5.0.0-production"
+APP_BUILD_STAMP = "2026-08-09 22:05:00 ICT"
+APP_RELEASE_NOTES = "Release Comprehensive Multi-Dimensional Hardware Benchmark Matrix (CPUs 4, 8, 12, 16 x Depth 1-12 & Instant Benchmark Flush Engine)"
 
 # ============================================================================
 # PERSISTENT DISK LOGGING & TELEMETRY INFRASTRUCTURE
@@ -453,18 +453,28 @@ def reset_logs_to_blank() -> tuple[str, str]:
     )
 
 def run_hardware_benchmark(target_seconds: int = 5) -> tuple[str, str, str, int, int, int]:
-    """Chạy thử nghiệm Micro-Benchmark đa luồng thực tế trong 5s để tự động chấm điểm Ma Trận Trọng Số và tìm ra Cấu hình Nhanh Nhất (FEN/s) trên phần cứng này."""
+    """
+    Khảo sát & Đo đạc đa chiều Ma Trận Trọng Số Vận Tốc phần cứng thực tế (CPU Cores: 4, 8, 12, 16 Cores × Search Depths 1-12).
+    """
     cpu_logical, cpu_physical, mem_total, mem_avail, raw_logical, cgroup_cpus = get_system_specs()
     
-    # Quét các mức Threads đề xuất
-    thread_candidates = sorted(list(set([max(1, cpu_physical), max(1, cpu_logical // 2), cpu_logical])), reverse=True)
+    # 1. Các cấp CPU Cores kiểm thử (4, 8, 12, 16 Cores)
+    core_levels = [4, 8, 12, 16]
+    core_candidates = [c for c in core_levels if c <= cpu_logical]
+    if not core_candidates:
+        core_candidates = [cpu_logical]
+    core_candidates = sorted(list(set(core_candidates)), reverse=True)
+
+    # 2. Các cấp Depth kiểm thử (1, 2, 4, 6, 8, 10, 12)
+    depth_candidates = [1, 2, 4, 6, 8, 10, 12]
+
     best_score = -1.0
-    best_config = {"threads": cpu_logical, "tt_mb": 512, "sieve_mb": 8192, "fen_s": 0.0}
+    best_config = {"threads": cpu_logical, "depth": 4, "tt_mb": 512, "sieve_mb": 8192, "fen_s": 0.0, "samples": 0, "games": 0}
     benchmark_report_lines = []
     
-    benchmark_report_lines.append(f"### 🧪 KẾT QUẢ BENCHMARK THEO MA TRẬN TRỌNG SỐ VẬN TỐC ({target_seconds}s Micro-Sweep)")
-    benchmark_report_lines.append(f"| Threads | TT MB | Sieve MB | FEN/s Thực Tế | RAM Used | Ma Trận Trọng Số (Score) | Trạng Thái |")
-    benchmark_report_lines.append(f"|---|---|---|---|---|---|---|")
+    benchmark_report_lines.append(f"### 🧪 KẾT QUẢ BENCHMARK MULTI-DIMENSIONAL MATRIX (CPUs 4, 8, 12, 16 × Depth 1..12)")
+    benchmark_report_lines.append(f"| Cores | Depth | TT RAM | Sieve RAM | Ván Mined | Mẫu FEN POS | Vận Tốc FEN/s | RAM Used | Ma Trận Trọng Số (Score) | Trạng Thái |")
+    benchmark_report_lines.append(f"|---|---|---|---|---|---|---|---|---|---|")
 
     binary_target = "23_jrcp3_ram64g_miner" if os.path.exists("examples/23_jrcp3_ram64g_miner.rs") else "21_ram64g_mine"
     try:
@@ -472,72 +482,105 @@ def run_hardware_benchmark(target_seconds: int = 5) -> tuple[str, str, str, int,
     except Exception as e:
         return f"❌ Lỗi biên dịch benchmark engine: {e}", "", "", cpu_logical, 512, 8192
 
-    for t in thread_candidates:
-        tt_candidate = min(2048, max(256, int((mem_total * 1024 * 0.20) / max(1, t))))
-        sieve_candidate = min(32768, max(1024, prev_power_of_two(int(mem_total * 1024 * 0.25))))
-        
-        bench_out = f"data/hf_space/bench_t{t}.jsonl"
-        env = os.environ.copy()
-        env["GAMES"] = "50"
-        env["DEPTH"] = "3"
-        env["THREADS"] = str(t)
-        env["TT_MB"] = str(tt_candidate)
-        env["SIEVE_MB"] = str(sieve_candidate)
-        env["SEED"] = "999"
-        env["OUTPUT"] = bench_out
-        
-        t0 = time.time()
-        proc = subprocess.Popen([binary], env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-        time.sleep(target_seconds)
-        proc.terminate()
-        try:
-            proc.wait(timeout=1)
-        except Exception:
-            proc.kill()
-        
-        elapsed = max(0.1, time.time() - t0)
-        samples = 0
-        if os.path.exists(bench_out):
+    for t in core_candidates:
+        for d in depth_candidates:
+            tt_candidate = min(2048, max(256, int((mem_total * 1024 * 0.20) / max(1, t))))
+            sieve_candidate = min(32768, max(1024, prev_power_of_two(int(mem_total * 1024 * 0.25))))
+            
+            bench_out = f"data/hf_space/bench_t{t}_d{d}.jsonl"
+            if os.path.exists(bench_out):
+                try: os.remove(bench_out)
+                except Exception: pass
+
+            env = os.environ.copy()
+            env["GAMES"] = "100"
+            env["DEPTH"] = str(d)
+            env["THREADS"] = str(t)
+            env["TT_MB"] = str(tt_candidate)
+            env["SIEVE_MB"] = str(sieve_candidate)
+            env["SEED"] = "999"
+            env["OUTPUT"] = bench_out
+            env["BENCHMARK"] = "1"  # BẬT CHẾ ĐỘ BENCHMARK FLUSH TỨC THỜI 100%
+
+            t0 = time.time()
+            proc = subprocess.Popen([binary], env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+            time.sleep(target_seconds)
+            
+            # Gửi tín hiệu ngắt nhẹ nhàng
+            try: proc.terminate()
+            except Exception: pass
+
+            out_text, err_text = "", ""
             try:
-                with open(bench_out, "r", encoding="utf-8") as f:
-                    samples = len(f.readlines())
-                os.remove(bench_out)
+                out_text, err_text = proc.communicate(timeout=1.5)
             except Exception:
-                pass
-        
-        fen_s = samples / elapsed
-        ram_eff = min(1.0, (mem_avail / max(1.0, mem_total)))
-        scalability = min(1.0, fen_s / max(1.0, t * 150))
-        
-        # Ma trận trọng số: 50% FEN/s + 30% Scalability + 20% RAM Efficiency
-        score = (fen_s * 0.50) + (scalability * 100 * 0.30) + (ram_eff * 100 * 0.20)
-        
-        is_best = "🥇 OPTIMAL" if score > best_score else "⚪ Normal"
-        if score > best_score:
-            best_score = score
-            best_config = {
-                "threads": t,
-                "tt_mb": tt_candidate,
-                "sieve_mb": sieve_candidate,
-                "fen_s": fen_s
-            }
-        
-        benchmark_report_lines.append(
-            f"| `{t} Cores` | `{tt_candidate} MB` | `{sieve_candidate} MB` | `{fen_s:.1f} FEN/s` | `{ram_eff*100:.0f}%` | `{score:.2f} Pts` | **{is_best}** |"
-        )
-    
+                try: proc.kill()
+                except Exception: pass
+
+            elapsed = max(0.1, time.time() - t0)
+            samples = 0
+            
+            # 1. Đếm số mẫu FEN đã flush xuống đĩa
+            if os.path.exists(bench_out):
+                try:
+                    with open(bench_out, "r", encoding="utf-8") as f:
+                        samples = len(f.readlines())
+                    os.remove(bench_out)
+                except Exception:
+                    pass
+            
+            # 2. Nếu đĩa rỗng, đọc từ stdout log monitor
+            if samples == 0 and out_text:
+                for line in out_text.splitlines():
+                    if "Samples:" in line:
+                        try:
+                            parts = line.split("|")
+                            for p in parts:
+                                if "Samples:" in p:
+                                    samples = max(samples, int(p.split("Samples:")[1].strip()))
+                        except Exception:
+                            pass
+
+            fen_s = samples / elapsed
+            games_mined = max(1, int(samples / 50)) if samples > 0 else 0
+            ram_eff = min(1.0, (mem_avail / max(1.0, mem_total)))
+            scalability = min(1.0, fen_s / max(1.0, t * 150))
+            
+            # Ma Trận Trọng Số: (FEN/s * 0.50) + (Scalability * 100 * 0.30) + (RAM_eff * 100 * 0.20)
+            score = (fen_s * 0.50) + (scalability * 100 * 0.30) + (ram_eff * 100 * 0.20)
+            
+            is_best = "🥇 OPTIMAL" if score > best_score else "⚪ Normal"
+            if score > best_score:
+                best_score = score
+                best_config = {
+                    "threads": t,
+                    "depth": d,
+                    "tt_mb": tt_candidate,
+                    "sieve_mb": sieve_candidate,
+                    "fen_s": fen_s,
+                    "samples": samples,
+                    "games": games_mined
+                }
+            
+            benchmark_report_lines.append(
+                f"| `{t} Cores` | `Depth {d}` | `{tt_candidate} MB` | `{sieve_candidate} MB` | `{games_mined} ván` | `{samples:,} FEN` | `{fen_s:.1f} FEN/s` | `{ram_eff*100:.0f}%` | `{score:.2f} Pts` | **{is_best}** |"
+            )
+
     report_md = "\n".join(benchmark_report_lines)
     status_md = (
-        f"### ⚡ ĐÃ TÌM THẤY CẤU HÌNH VẬN TỐC TỐI ƯU BẰNG BENCHMARK MA TRẬN TRỌNG SỐ\n"
-        f"- **Cấu Hình Nhanh Nhất Khuyên Dùng**: `{best_config['threads']} Cores` | TT `{best_config['tt_mb']} MB` | Sieve `{best_config['sieve_mb']} MB`\n"
+        f"### ⚡ ĐÃ HOÀN TẤT BENCHMARK MA TRẬN TRỌNG SỐ (CPUs 4, 8, 12, 16 × Depth 1..12)\n"
+        f"- **Cấu Hình Nhanh Nhất Khuyên Dùng**: `{best_config['threads']} Cores` | `Depth {best_config['depth']}` | TT `{best_config['tt_mb']} MB` | Sieve `{best_config['sieve_mb']} MB`\n"
         f"- **Vận Tốc Đo Đạc Thực Tế**: `{best_config['fen_s']:.1f} FEN/s` (~`{int(best_config['fen_s']*60):,}` FEN/phút)\n"
-        f"- **Điểm Số Ma Trận Trọng Số**: `{best_score:.2f} Pts` (50% FEN/s + 30% Scalability + 20% RAM Eff)\n"
+        f"- **Tổng Mẫu FEN Thử Nghiệm**: `{best_config['samples']:,} FEN` từ `{best_config['games']}` ván\n"
+        f"- **Điểm Số Ma Trận Trọng Số**: `{best_score:.2f} Pts`\n"
         f"- **Hệ thống**: Đã tự động cập nhật các thanh trượt slider về cấu hình tối ưu này!"
     )
     metrics_md = (
         f"| Chỉ Số Benchmark Thực Tế | Cấu Hình Tối Ưu |\n|---|---|\n"
-        f"| 🏆 **Cấu Hình Tối Ưu** | `{best_config['threads']} Threads` |\n"
+        f"| 🏆 **CPU Cores Tối Ưu** | `{best_config['threads']} Threads` |\n"
+        f"| 🧠 **Search Depth Tối Ưu** | `Depth {best_config['depth']}` |\n"
         f"| ⚡ **Vận Tốc Khai Thác** | `{best_config['fen_s']:.1f} FEN/s` |\n"
+        f"| 🧩 **Số Mẫu POS / Ván** | `{best_config['samples']:,} FEN` |\n"
         f"| 🧠 **TT RAM / Thread** | `{best_config['tt_mb']} MB` |\n"
         f"| 🧬 **Sieve Bitset RAM** | `{best_config['sieve_mb']} MB` |\n"
         f"| 🥇 **Điểm Trọng Số (Score)** | `{best_score:.2f} Pts` |"

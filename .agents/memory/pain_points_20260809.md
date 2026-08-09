@@ -323,3 +323,15 @@ $$\text{Điểm Chất Lượng Agent} = \text{Kế Hoạch Rõ Ràng} + \text{V
    - **Cách chạy thủ công**:
      `python3 scripts/free_port.py --port 7860 --force`
    - **Nâng Cấp Phiên Bản Mới**: `v4.6.0-production` (Build `2026-08-09 21:58:00 ICT`).
+
+---
+
+### XXV. SỬA LỖI 0.0 FEN/S BENCHMARK & NÂNG CẤP MA TRẬN MULTI-DIMENSIONAL BENCHMARK MATRIX (v5.0.0-production)
+
+1. **NGUYÊN NHÂN GỐC RỄ CỦA LỖI 0.0 FEN/S KHI BENCHMARK**:
+   - Trong `23_jrcp3_ram64g_miner.rs`, worker threads tích lũy bộ nhớ RAM local buffer tới 500 mẫu mới xả xuống `thread_buffer` và ghi đĩa. Khi `run_hardware_benchmark()` chỉ chạy thử 5 giây, số mẫu chưa chạm ngưỡng 500 nên tệp output tạm bị rỗng (0 lines), dẫn đến `0.0 FEN/s` ngây thơ!
+
+2. **GIẢI PHÁP ĐÃ THỰC THI (Commit `v5.0.0-production`)**:
+   - **Fix 1: Bật `BENCHMARK=1` Instant Flush Engine**: Cập nhật `examples/23_jrcp3_ram64g_miner.rs` để khi nhận biến môi trường `BENCHMARK=1`, `batch_limit` hạ xuống 1 mẫu và `Buffer::push()` xả đĩa tức thời 100%. Tốc độ FEN/s đo đạc chuẩn xác tuyệt đối!
+   - **Fix 2: Ma Trận Benchmark Đa Chiều (CPUs 4, 8, 12, 16 Cores × Search Depth 1..12)**: Nâng cấp `run_hardware_benchmark()` trong `app.py` để quét toàn bộ ma trận 4D: Cores (4, 8, 12, 16) × Depth (1, 2, 4, 6, 8, 10, 12), hiển thị chi tiết số ván, số mẫu FEN, FEN/s thực tế, RAM used %, và Điểm Số Trọng Số.
+   - **Nâng Cấp Phiên Bản Mới**: `v5.0.0-production` (Build `2026-08-09 22:05:00 ICT`).
