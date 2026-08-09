@@ -1607,21 +1607,39 @@ def mine(target_games: int = 1000, depth: int = 12):
 
             # Temperature sampling khai cuộc
             if plies[s] < 10 and random.random() < 0.25:
-                slot_info.append((s, legal, -1, 0, True))
+                slot_info.append((s, legal, [], True))
             else:
-                offset = len(all_tensors)
-                for m in legal:
-                    tb = Board()
-                    tb.grid = list(boards[s].grid)
-                    tb.turn = boards[s].turn
-                    tb.apply(m)
-                    all_tensors.append(board_to_tensor(tb, device))
-                slot_info.append((s, legal, offset, len(all_tensors) - offset, False))
+                # ── GPU 2-PLY MINIMAX ROLLOUT SEARCH TENSOR GENERATION ──
+                # Với mỗi nước đi 1-Ply của bên ta, sinh tất cả nước phản đòn 2-Ply của đối phương
+                move_tree_map = []
+                for m1 in legal:
+                    tb1 = Board()
+                    tb1.grid = list(boards[s].grid)
+                    tb1.turn = boards[s].turn
+                    tb1.apply(m1)
+                    
+                    legal_2ply = tb1.legal()
+                    offset_2ply = len(all_tensors)
+                    
+                    if legal_2ply:
+                        for m2 in legal_2ply:
+                            tb2 = Board()
+                            tb2.grid = list(tb1.grid)
+                            tb2.turn = tb1.turn
+                            tb2.apply(m2)
+                            all_tensors.append(board_to_tensor(tb2, device))
+                        move_tree_map.append((m1, offset_2ply, len(legal_2ply)))
+                    else:
+                        # Nếu không có nước phản đòn (bí/chiếu bí)
+                        all_tensors.append(board_to_tensor(tb1, device))
+                        move_tree_map.append((m1, offset_2ply, 1))
+
+                slot_info.append((s, legal, move_tree_map, False))
 
         if not slot_info:
             break
 
-        # === GPU MEGA-BATCH EVALUATION (2000-4000 positions / batch) ===
+        # === GPU MEGA-BATCH EVALUATION (30,000 - 60,000 2-Ply FENs / batch) ===
         all_scores = None
         eval_start = time.time()
         if all_tensors:
@@ -1641,19 +1659,41 @@ def mine(target_games: int = 1000, depth: int = 12):
             vram_curr = torch.cuda.memory_allocated(0) / (1024 ** 3)
             active_slots = sum(1 for s in range(PARALLEL) if slot_game[s] <= target_games)
             mega_size = len(all_tensors)
-            print(f"⚡ [HEARTBEAT | Step {step_counter:05d}] Active Slots: {active_slots}/64 | GPU Batch: {mega_size:,} FENs ({eval_ms:.1f}ms) | Total FENs: {total_samples:,} | Speed: {fps:,.1f} FEN/s | Games: {completed_games}/{target_games} | VRAM: {vram_curr:.2f}GB", flush=True)
+            print(f"⚡ [HEARTBEAT | Step {step_counter:05d}] Active Slots: {active_slots}/64 | GPU 2-Ply Batch: {mega_size:,} FENs ({eval_ms:.1f}ms) | Total FENs: {total_samples:,} | Speed: {fps:,.1f} FEN/s | Games: {completed_games}/{target_games} | VRAM: {vram_curr:.2f}GB", flush=True)
 
-        # Phân phối kết quả về từng slot
-        for s, legal, offset, count, is_random in slot_info:
+        # Phân phối kết quả Minimax 2-Ply về từng slot
+        for s, legal, move_tree_map, is_random in slot_info:
             if is_random:
                 best_move = random.choice(legal)
                 best_score = 0
                 encoded_move = best_move.encode()
             else:
-                game_scores = all_scores[offset:offset + count]
-                best_idx = torch.argmax(game_scores).item() if boards[s].turn == 0 else torch.argmin(game_scores).item()
-                best_move = legal[best_idx]
-                best_score = int(game_scores[best_idx].item())
+                # Thuật toán 2-Ply Minimax Reduction
+                # Đỏ (turn 0) chọn MAX(worst_opponent_min), Đen (turn 1) chọn MIN(worst_opponent_max)
+                best_move = None
+                best_minimax_score = -999999 if boards[s].turn == 0 else 999999
+
+                for m1, off_2p, count_2p in move_tree_map:
+                    scores_2p = all_scores[off_2p : off_2p + count_2p]
+                    # Đối phương ở 2-Ply sẽ phản đòn bằng nước gây hại nhất cho ta
+                    # Nếu lượt ta là Đỏ (0), đối phương Đen (1) sẽ chọn MIN score
+                    # Nếu lượt ta là Đen (1), đối phương Đỏ (0) sẽ chọn MAX score
+                    if boards[s].turn == 0:
+                        minimax_score_m1 = torch.min(scores_2p).item()
+                        if minimax_score_m1 > best_minimax_score:
+                            best_minimax_score = minimax_score_m1
+                            best_move = m1
+                    else:
+                        minimax_score_m1 = torch.max(scores_2p).item()
+                        if minimax_score_m1 < best_minimax_score:
+                            best_minimax_score = minimax_score_m1
+                            best_move = m1
+
+                if best_move is None:
+                    best_move = legal[0]
+                    best_score = 0
+                else:
+                    best_score = int(best_minimax_score)
                 encoded_move = best_move.encode()
 
             fen_str = boards[s].export()
