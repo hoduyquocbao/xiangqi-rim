@@ -181,3 +181,15 @@ $$\text{Điểm Chất Lượng Agent} = \text{Kế Hoạch Rõ Ràng} + \text{V
 2. **GIẢI PHÁP ĐÃ THỰC THI (Commit `v3.1.0-production`)**:
    - **Tự Động Nạp Log Đĩa Trong Nhánh Idle**: Trong nhánh `else` của `sync_on_load()`, thay vì trả về chuỗi tĩnh rỗng nghĩa, `sync_on_load()` chủ động gọi `TelemetryLogger.read_tail_telemetry_events(10)` và `read_tail_disk_logs(25)` để liên tục giữ vết log đĩa & telemetry events trên giao diện.
    - **Trải Nghiệm Đọc Log Liên Tục**: Người dùng có thể xem log đĩa mọi lúc, kể cả khi hệ thống idle hay đang chạy ngầm, mà KHÔNG BAO GIỜ bị đè chữ `"Hệ thống sẵn sàng."` lên nữa!
+
+---
+
+### XIV. CHẶN TUYỆT ĐỐI THƯ MỤC LOGS/ TRONG .GITIGNORE CHỐNG COMMIT RÁC LÊN HUB (v3.2.0-production)
+
+1. **NGUYÊN NHÂN ANH HDQB PHÁT HIỆN SỰ CỐ**:
+   - Thư mục `logs/` (chứa `logs/system_telemetry.jsonl` và `logs/miner_stdout_stderr.log`) là nơi lưu trữ các tệp telemetry runtime cục bộ.
+   - Do `.gitignore` cũ chỉ có `*.log` mà không khai báo tường minh `logs/`, việc chạy `git add .` có nguy cơ đưa toàn bộ các tệp telemetry rác này lên GitHub repository!
+
+2. **GIẢI PHÁP ĐÃ THỰC THI (Commit `v3.2.0-production`)**:
+   - **Bổ sung `logs/` vào `.gitignore`**: Đảm bảo toàn bộ thư mục `logs/` bị chặn tuyệt đối ở mức Git, không bao giờ xuất hiện trong git status hay commit history.
+   - **Nâng Cấp Phiên Bản Mới**: `v3.2.0-production` (Build `2026-08-09 21:24:00 ICT`).

@@ -68,9 +68,9 @@ REPO = "hoduyquocbao/xiangqi-nnue-dataset"
 # ============================================================================
 # APPLICATION SEMANTIC VERSIONING & BUILD METADATA
 # ============================================================================
-APP_VERSION = "v3.1.0-production"
-APP_BUILD_STAMP = "2026-08-09 21:22:00 ICT"
-APP_RELEASE_NOTES = "Fix Telemetry Log View Overwrite Bug (Idle Sync Shows Persistent Disk Logs)"
+APP_VERSION = "v3.2.0-production"
+APP_BUILD_STAMP = "2026-08-09 21:24:00 ICT"
+APP_RELEASE_NOTES = "Add logs/ to .gitignore to prevent committing runtime logs to Git"
 
 # ============================================================================
 # PERSISTENT DISK LOGGING & TELEMETRY INFRASTRUCTURE

@@ -40,6 +40,7 @@ reports/
 .idea/
 
 # Logs & Temporary Task Outputs
+logs/
 *.log
 .system_generated/
 
