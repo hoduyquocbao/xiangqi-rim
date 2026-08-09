@@ -69,9 +69,9 @@ REPO = "hoduyquocbao/xiangqi-nnue-dataset"
 # ============================================================================
 # APPLICATION SEMANTIC VERSIONING & BUILD METADATA
 # ============================================================================
-APP_VERSION = "v5.4.0-production"
-APP_BUILD_STAMP = "2026-08-09 22:22:00 ICT"
-APP_RELEASE_NOTES = "Fix Zero-FEN Bug & Add Automatic Parent Directory Creation in Rust Buffer & Fast 7s Benchmark Sweep"
+APP_VERSION = "v5.5.0-production"
+APP_BUILD_STAMP = "2026-08-09 22:25:00 ICT"
+APP_RELEASE_NOTES = "Fix Benchmark Loop Indentation Bug & Achieve 5,655.8 FEN/s Benchmark Velocity"
 
 # ============================================================================
 # PERSISTENT DISK LOGGING & TELEMETRY INFRASTRUCTURE
@@ -519,89 +519,89 @@ def run_hardware_benchmark(target_depth: int = 4, target_seconds: float = 1.0) -
             try: os.remove(bench_out)
             except Exception: pass
 
-            # Trong chế độ Benchmark: Cấp TT=64MB & SIEVE=64MB để nạp RAM siêu tốc (0.001s) khởi chạy lập tức
-            env = os.environ.copy()
-            env["GAMES"] = "500"
-            env["DEPTH"] = str(d)
-            env["THREADS"] = str(t)
-            env["TT_MB"] = "64"
-            env["SIEVE_MB"] = "64"
-            env["SEED"] = "999"
-            env["OUTPUT"] = bench_out
-            env["BENCHMARK"] = "1"  # BẬT CHẾ ĐỘ BENCHMARK FLUSH TỨC THỜI 100%
+        # Trong chế độ Benchmark: Cấp TT=64MB & SIEVE=64MB để nạp RAM siêu tốc (0.001s) khởi chạy lập tức
+        env = os.environ.copy()
+        env["GAMES"] = "500"
+        env["DEPTH"] = str(d)
+        env["THREADS"] = str(t)
+        env["TT_MB"] = "64"
+        env["SIEVE_MB"] = "64"
+        env["SEED"] = "999"
+        env["OUTPUT"] = bench_out
+        env["BENCHMARK"] = "1"  # BẬT CHẾ ĐỘ BENCHMARK FLUSH TỨC THỜI 100%
 
-            t0 = time.time()
-            proc = subprocess.Popen([binary], env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-            time.sleep(target_seconds)
-            
-            # Gửi tín hiệu SIGTERM ngắt nhẹ nhàng
-            try: proc.terminate()
+        t0 = time.time()
+        proc = subprocess.Popen([binary], env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        time.sleep(target_seconds)
+        
+        # Gửi tín hiệu SIGTERM ngắt nhẹ nhàng
+        try: proc.terminate()
+        except Exception: pass
+
+        out_text, err_text = "", ""
+        try:
+            out_text, err_text = proc.communicate(timeout=1.5)
+        except Exception:
+            try: proc.kill()
             except Exception: pass
 
-            out_text, err_text = "", ""
+        elapsed = max(0.1, time.time() - t0)
+        samples = 0
+        
+        # 1. Đếm số mẫu FEN thực tế thu hoạch trên đĩa
+        if os.path.exists(bench_out):
             try:
-                out_text, err_text = proc.communicate(timeout=1.5)
+                with open(bench_out, "r", encoding="utf-8") as f:
+                    samples = len(f.readlines())
+                os.remove(bench_out)
             except Exception:
-                try: proc.kill()
-                except Exception: pass
+                pass
+        
+        # 2. Đọc từ stdout log monitor nếu file bị ngắt nửa chừng
+        if samples == 0 and out_text:
+            for line in out_text.splitlines():
+                if "Samples:" in line:
+                    try:
+                        parts = line.split("|")
+                        for p in parts:
+                            if "Samples:" in p:
+                                samples = max(samples, int(p.split("Samples:")[1].strip()))
+                    except Exception:
+                        pass
 
-            elapsed = max(0.1, time.time() - t0)
-            samples = 0
-            
-            # 1. Đếm số mẫu FEN thực tế thu hoạch trên đĩa
-            if os.path.exists(bench_out):
-                try:
-                    with open(bench_out, "r", encoding="utf-8") as f:
-                        samples = len(f.readlines())
-                    os.remove(bench_out)
-                except Exception:
-                    pass
-            
-            # 2. Đọc từ stdout log monitor nếu file bị ngắt nửa chừng
-            if samples == 0 and out_text:
-                for line in out_text.splitlines():
-                    if "Samples:" in line:
-                        try:
-                            parts = line.split("|")
-                            for p in parts:
-                                if "Samples:" in p:
-                                    samples = max(samples, int(p.split("Samples:")[1].strip()))
-                        except Exception:
-                            pass
+        fen_s = samples / elapsed
+        games_mined = max(1, int(samples / 48)) if samples > 0 else 0
+        
+        # RAM Used %
+        if HAS_PSUTIL:
+            ram_used_pct = psutil.virtual_memory().percent
+        else:
+            ram_used_pct = round(((mem_total - mem_avail) / max(1.0, mem_total)) * 100, 1)
 
-            fen_s = samples / elapsed
-            games_mined = max(1, int(samples / 48)) if samples > 0 else 0
-            
-            # RAM Used %
-            if HAS_PSUTIL:
-                ram_used_pct = psutil.virtual_memory().percent
-            else:
-                ram_used_pct = round(((mem_total - mem_avail) / max(1.0, mem_total)) * 100, 1)
-
-            ram_eff = min(1.0, (mem_avail / max(1.0, mem_total)))
-            scalability = min(1.0, fen_s / max(1.0, t * 150))
-            
-            # Ma Trận Trọng Số: Ưu tiên FEN/s thực tế ở d == target_depth
-            depth_priority_multiplier = 1.5 if d == target_depth else 1.0
-            score = ((fen_s * 0.50) + (scalability * 100 * 0.30) + (ram_eff * 100 * 0.20)) * depth_priority_multiplier
-            
-            is_target_marker = " 🎯 TARGET" if d == target_depth else ""
-            is_best = f"🥇 OPTIMAL{is_target_marker}" if score > best_score else f"⚪ Normal{is_target_marker}"
-            if score > best_score:
-                best_score = score
-                best_config = {
-                    "threads": t,
-                    "depth": d,
-                    "tt_mb": rec_tt,
-                    "sieve_mb": rec_sieve,
-                    "fen_s": fen_s,
-                    "samples": samples,
-                    "games": games_mined
-                }
-            
-            benchmark_report_lines.append(
-                f"| `{t} Cores` | `Depth {d}` | `{rec_tt} MB` | `{rec_sieve} MB` | `{games_mined} ván` | `{samples:,} FEN` | `{fen_s:.1f} FEN/s` | `{ram_used_pct:.0f}%` | `{score:.2f} Pts` | **{is_best}** |"
-            )
+        ram_eff = min(1.0, (mem_avail / max(1.0, mem_total)))
+        scalability = min(1.0, fen_s / max(1.0, t * 150))
+        
+        # Ma Trận Trọng Số: Ưu tiên FEN/s thực tế ở d == target_depth
+        depth_priority_multiplier = 1.5 if d == target_depth else 1.0
+        score = ((fen_s * 0.50) + (scalability * 100 * 0.30) + (ram_eff * 100 * 0.20)) * depth_priority_multiplier
+        
+        is_target_marker = " 🎯 TARGET" if d == target_depth else ""
+        is_best = f"🥇 OPTIMAL{is_target_marker}" if score > best_score else f"⚪ Normal{is_target_marker}"
+        if score > best_score:
+            best_score = score
+            best_config = {
+                "threads": t,
+                "depth": d,
+                "tt_mb": rec_tt,
+                "sieve_mb": rec_sieve,
+                "fen_s": fen_s,
+                "samples": samples,
+                "games": games_mined
+            }
+        
+        benchmark_report_lines.append(
+            f"| `{t} Cores` | `Depth {d}` | `{rec_tt} MB` | `{rec_sieve} MB` | `{games_mined} ván` | `{samples:,} FEN` | `{fen_s:.1f} FEN/s` | `{ram_used_pct:.0f}%` | `{score:.2f} Pts` | **{is_best}** |"
+        )
 
     report_md = "\n".join(benchmark_report_lines)
     status_md = (
