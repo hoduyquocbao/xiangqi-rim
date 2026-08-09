@@ -13,7 +13,7 @@ try:
     import torch.nn.functional as F
     from huggingface_hub import HfApi
     HAS_TORCH = True
-except ImportError:
+except Exception:
     HAS_TORCH = False
     torch = None
     nn = None
