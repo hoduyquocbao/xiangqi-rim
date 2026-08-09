@@ -593,3 +593,25 @@ $$\text{Điểm Chất Lượng Agent} = \text{Kế Hoạch Rõ Ràng} + \text{V
    - Chuẩn hóa chỉ mục toàn bộ hệ thống notebooks trong tệp [`notebooks/README.md`](file:///Users/hdqb/workspaces/xiangqi-rim/notebooks/README.md).
    - Đảm bảo gốc dự án 100% sạch sẽ, chuẩn chỉ mục repository cấp doanh nghiệp.
    - **Nâng Cấp Phiên Bản Mới**: `v8.4.0-production` (Build `2026-08-09 23:37:00 ICT`).
+
+---
+
+### XLIII. TÍCH HỢP BỘ LỌC KIỂM CHẤM NGHÊM NGẶT DỮ LIỆU ĐẦU RA (STRICT DATA VALIDATOR & INTEGRITY AUDIT FILTER) (`v8.5.0-gpu-strict-validator`)
+
+1. **PHÒNG NGỪA NGUY CƠ RỦI RO "GARBAGE IN = GARBAGE OUT"**:
+   - Theo cảnh báo đặc biệt nguy hiểm từ anh HDQB: *"Nó và các file ipynb... nếu tào lao ba trợn sinh FEN lỗi địa điểm vật lý tràn ngoài bàn cờ hoặc đi giữa sông tốt không qua sông được đi ngang chân mã chân tượng ngòi pháo sĩ đi chéo trong cung sẽ làm hỏng mô hình agent xiangqi chúng ta"*.
+   - Nếu dữ liệu tự sinh từ GPU bị lọt dù chỉ 1% nước đi sai luật hoặc FEN lỗi, các mô hình LLM (như Qwen/DeepSeek) khi Fine-tune / GRPO sẽ học thuộc lòng các luật ảo diệu hallucinated, dẫn đến nát mô hình AI Agent trong production.
+
+2. **TRIỂN KHAI BỘ LỌC `DataValidator` 8 TIÊU CHUẨN VẬT LÝ KHẮT KHE (Commit `fcf161c`)**:
+   - Đã xây dựng và nhúng bộ lọc `DataValidator.validate_sample()` vào cả script [`gpu_t4_real_rule_miner.py`](file:///Users/hdqb/workspaces/xiangqi-rim/gpu_t4_real_rule_miner.py) và notebook [`notebooks/colab_gpu_depth12_miner.ipynb`](file:///Users/hdqb/workspaces/xiangqi-rim/notebooks/colab_gpu_depth12_miner.ipynb).
+   - **8 Chốt Chặn Kiểm Chấm Bắt Bộc (Strict Audit Verification Rules)**:
+     1. `UCI Regex Check`: Bắt buộc nước đi khớp chuẩn `^[a-i][0-9][a-i][0-9]$`.
+     2. `Board Boundary Lock`: Tọa độ xuất phát `src` và đích `dst` nằm đúng trong 90 ô bàn cờ (0..89).
+     3. `Piece Ownership Check`: Quân cờ tại ô xuất phát phải thuộc đúng phe đang đi.
+     4. `Physical Legal List Lock`: Nước đi bắt buộc phải nằm trong danh sách nước đi hợp lệ vật lý `board.legal()`.
+     5. `Pawn River Boundary`: Tốt chưa qua sông (Đỏ row < 5, Đen row > 4) **CẤM TUYỆT ĐỐI đi ngang**.
+     6. `Elephant River Lock`: Tượng **CẤM TUYỆT ĐỐI qua sông** (Đỏ row 0..4, Đen row 5..9).
+     7. `Palace Boundary Lock`: Sĩ và Tướng **CẤM TUYỆT ĐỐI ra khỏi Cung 3x3** (cols 3..5, rows 0..2 / 7..9).
+     8. `Thought Tag Integrity`: Bắt buộc chuỗi `<thought>` chứa đủ 14 thẻ phân tích `[1/14]` đến `[14/14]`.
+   - **Cơ chế Xử Lý Sau Lọc**: Nếu phát hiện bất kỳ mẫu FEN nào vi phạm dù chỉ 1 tiêu chuẩn, mẫu đó sẽ **BỊ REJECT NGAY LẬP TỨC & HUỶ BỎ**, in cảnh báo ra log và **KHÔNG BAO GIỜ được ghi vào file dataset hay đẩy lên HuggingFace Hub**!
+   - **Nâng Cấp Phiên Bản Mới**: `v8.5.0-gpu-strict-validator` (Build `2026-08-09 23:42:00 ICT`).
