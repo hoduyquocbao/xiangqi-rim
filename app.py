@@ -16,6 +16,7 @@ import signal
 import gc
 import atexit
 import threading
+import subprocess
 try:
     import psutil
     HAS_PSUTIL = True
@@ -338,21 +339,27 @@ def sync_on_load():
 
         elapsed = max(0.1, time.time() - start_time)
 
-        current_samples = saved_samples
+        current_samples = 0
         file_size_mb = 0.0
+        tail_log_lines = []
         if os.path.exists(out_file):
             try:
                 file_size_mb = os.path.getsize(out_file) / (1024 * 1024)
-                if current_samples == 0:
-                    with open(out_file, "r", encoding="utf-8") as f:
-                        current_samples = sum(1 for _ in f)
+                with open(out_file, "r", encoding="utf-8") as f:
+                    lines = f.readlines()
+                    current_samples = len(lines)
+                    if lines:
+                        tail_log_lines = [l.strip() for l in lines[-20:] if l.strip()]
             except Exception:
                 pass
+
+        if current_samples == 0:
+            current_samples = saved_samples
 
         speed = current_samples / elapsed
         current_games = saved_games if saved_games > 0 else int(current_samples / 50)
         pct = min(100, int(current_games / max(1, games) * 100))
-        eta_sec = (games - current_games) / (current_games / elapsed) if current_games > 0 else 0
+        eta_sec = (games - current_games) / (current_games / elapsed) if current_games > 0 and speed > 0 else 0
 
         total_tt_gb = (tt_mb * threads) / 1024.0
         sieve_gb = sieve_mb / 1024.0
@@ -393,9 +400,10 @@ def sync_on_load():
             f"| ⛔ **Khóa Chạy Mới** | `ĐÃ KHÓA (Phiên PID {pids} đang active)` |"
         )
 
-        last_logs = session.get("last_logs", [])
-        if last_logs:
-            log_text = "📜 Nhật ký khôi phục từ phiên đang chạy ngầm:\n" + "\n".join(last_logs[-25:])
+        if tail_log_lines:
+            log_text = f"📜 Nhật ký Real-Time ({current_samples:,} mẫu FEN | {file_size_mb:.2f} MB):\n" + "\n".join(tail_log_lines)
+        elif session.get("last_logs"):
+            log_text = "📜 Nhật ký khôi phục từ phiên đang chạy ngầm:\n" + "\n".join(session["last_logs"][-25:])
         else:
             log_text = (
                 f"📊 ĐÃ KHÔI PHỤC TRẠNG THÁI PHIÊN KHAI THÁC CHẠY NGẦM:\n"
@@ -786,6 +794,13 @@ Vận hành **Native Rust Engine v2.0** tự động scaling theo CPU Quota th�
         )
 
         app.load(
+            fn=sync_on_load,
+            inputs=[],
+            outputs=[status_box, metrics_box, logs_box]
+        )
+
+        timer = gr.Timer(3.0)
+        timer.tick(
             fn=sync_on_load,
             inputs=[],
             outputs=[status_box, metrics_box, logs_box]
