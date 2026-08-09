@@ -16,7 +16,12 @@ import signal
 import gc
 import atexit
 import threading
-import subprocess
+try:
+    import psutil
+    HAS_PSUTIL = True
+except ImportError:
+    HAS_PSUTIL = False
+
 # Monkey-patch HfFolder phòng ngự chống lỗi ImportError từ huggingface_hub v0.25+
 import huggingface_hub
 if not hasattr(huggingface_hub, "HfFolder"):
