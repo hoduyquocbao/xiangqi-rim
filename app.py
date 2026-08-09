@@ -336,6 +336,27 @@ def sync_on_load():
     pids = [d["pid"] for d in proc_details] or get_running_miner_pids()
     session = load_session_state()
 
+    if session.get("status") == "CRASHED":
+        exit_code = session.get("exit_code", -1)
+        err_logs = session.get("last_logs", [])
+        oom_msg = " (🚨 Bị Linux cgroups OOM Killer ngắt do quá RAM!)" if exit_code in [137, -9] else ""
+        status_md = (
+            f"### ❌ TELEMETRY: PHIÊN KHAI THÁC TRƯỚC BỊ THÓAT ĐỘT NGỘT (Exit Code: `{exit_code}`{oom_msg})\n"
+            f"- **Trạng thái**: CRASHED / Bị ngắt bởi hệ thống\n"
+            f"- **Tệp xuất**: `{session.get('out_file', 'unknown')}`\n"
+            f"- **Lý do**: Xem nhật ký báo lỗi bên dưới để điều chỉnh lại TT_MB / Sieve_MB hoặc kiểm tra lỗi biên dịch.\n"
+            f"- Vui lòng bấm **'🧹 GIẢI PHÓNG RAM'** để xóa trạng thái báo lỗi và bắt đầu phiên mới."
+        )
+        metrics_md = (
+            f"| Chỉ Số Telemetry Sự Cố | Giá Trị Thực Tế |\n|---|---|\n"
+            f"| 🚨 **Trạng Thái Session** | `CRASHED` |\n"
+            f"| 🔢 **Exit Code OS** | `{exit_code}`{oom_msg} |\n"
+            f"| 🧩 **Mẫu Đã Ghi** | `{session.get('current_samples', 0):,}` mẫu |\n"
+            f"| 📁 **Tệp Dữ Liệu** | `{session.get('out_file', 'unknown')}` |"
+        )
+        log_text = f"❌ NHẬT KÝ CRASH TELEMETRY (Exit Code {exit_code}):\n" + "\n".join(err_logs[-30:])
+        return status_md, metrics_md, log_text
+
     if proc_details or pids or running:
         worker = session.get("worker", f"worker_{cpu_logical}cpu_{int(mem_total)}g")
         games = session.get("games", 100000)
@@ -535,57 +556,58 @@ def start_mining(worker, games, depth, threads, tt_mb, sieve_mb, seed, token, re
     current_samples = 0
     current_games = 0
 
-    while running and process.poll() is None:
-        line = process.stdout.readline()
-        if not line:
-            time.sleep(0.1)
-            continue
+    try:
+        while running and process.poll() is None:
+            line = process.stdout.readline()
+            if not line:
+                time.sleep(0.1)
+                continue
 
-        line_clean = line.strip()
-        if line_clean:
-            logs.append(line_clean)
-            if len(logs) > 100:
-                logs.pop(0)
+            line_clean = line.strip()
+            if line_clean:
+                logs.append(line_clean)
+                if len(logs) > 100:
+                    logs.pop(0)
 
-            if "Samples:" in line_clean:
-                try:
-                    parts = line_clean.split("|")
-                    for p in parts:
-                        if "STREAMING" in p:
-                            g_str = p.split("STREAMING")[1].split("]")[0].strip()
-                            current_games = int(g_str.split("/")[0])
-                        elif "Samples:" in p:
-                            current_samples = int(p.split("Samples:")[1].strip())
-                except Exception:
-                    pass
+                if "Samples:" in line_clean:
+                    try:
+                        parts = line_clean.split("|")
+                        for p in parts:
+                            if "STREAMING" in p:
+                                g_str = p.split("STREAMING")[1].split("]")[0].strip()
+                                current_games = int(g_str.split("/")[0])
+                            elif "Samples:" in p:
+                                current_samples = int(p.split("Samples:")[1].strip())
+                    except Exception:
+                        pass
 
-        session_info["current_samples"] = current_samples
-        session_info["current_games"] = current_games
-        session_info["last_logs"] = logs[-25:]
-        save_session_state(session_info)
+            session_info["current_samples"] = current_samples
+            session_info["current_games"] = current_games
+            session_info["last_logs"] = logs[-25:]
+            save_session_state(session_info)
 
-        elapsed = time.time() - start_time
-        speed = current_samples / max(0.1, elapsed)
-        pct = int(current_games / max(1, games) * 100)
-        eta_sec = (games - current_games) / (current_games / max(0.1, elapsed)) if current_games > 0 else 0
+            elapsed = time.time() - start_time
+            speed = current_samples / max(0.1, elapsed)
+            pct = int(current_games / max(1, games) * 100)
+            eta_sec = (games - current_games) / (current_games / max(0.1, elapsed)) if current_games > 0 else 0
 
-        if HAS_PSUTIL:
-            mem_used = psutil.virtual_memory().used / (1024 ** 3)
-            cpu_percent = psutil.cpu_percent(interval=None)
-            mem_str = f"`{mem_used:.2f} GB` / `{mem_total:.1f} GB`"
-            cpu_str = f"`{cpu_percent:.1f}%` (trên `{threads}`/{cpu_logical} vCPUs)"
-        else:
-            mem_str = f"`~{total_ram_gb:.1f} GB` (High RAM Active)"
-            cpu_str = f"`100%` (trên `{threads}`/{cpu_logical} vCPUs)"
+            if HAS_PSUTIL:
+                mem_used = psutil.virtual_memory().used / (1024 ** 3)
+                cpu_percent = psutil.cpu_percent(interval=None)
+                mem_str = f"`{mem_used:.2f} GB` / `{mem_total:.1f} GB`"
+                cpu_str = f"`{cpu_percent:.1f}%` (trên `{threads}`/{cpu_logical} vCPUs)"
+            else:
+                mem_str = f"`~{total_ram_gb:.1f} GB` (High RAM Active)"
+                cpu_str = f"`100%` (trên `{threads}`/{cpu_logical} vCPUs)"
 
-        status_md = f"""### ⚡ TIẾN TRÌNH KHAI THÁC MULTI-CORE REAL-TIME STREAMING
+            status_md = f"""### ⚡ TIẾN TRÌNH KHAI THÁC MULTI-CORE REAL-TIME STREAMING (`{APP_VERSION}`)
 - **Worker**: `{worker}` | **Seed**: `{seed}`
 - **Tiến độ ván cờ**: `{current_games:,} / {games:,}` ván (`{pct}%`)
 - **Số mẫu FEN chuẩn luật**: `{current_samples:,}` mẫu
 - **Vận tốc khai thác**: `{speed:.1f}` mẫu/s (`{int(speed * 60):,}` mẫu/phút)
 - **Thời gian đã chạy**: `{elapsed:.1f}`s | **ETA**: `{eta_sec / 60:.1f}` phút
 """
-        metrics_md = f"""| Chỉ Số Phần Cứng Thực Tế & Dữ Liệu | Giá Trị Thực Tế |
+            metrics_md = f"""| Chỉ Số Phần Cứng Thực Tế & Dữ Liệu | Giá Trị Thực Tế |
 |---|---|
 | 🎮 **Ván Cờ Mined** | `{current_games:,}` / `{games:,}` |
 | 🧩 **Mẫu FEN Độc Nhất** | `{current_samples:,}` mẫu |
@@ -596,15 +618,53 @@ def start_mining(worker, games, depth, threads, tt_mb, sieve_mb, seed, token, re
 | 💻 **CPU Usage** | {cpu_str} |
 | ⏱️ **ETA Dự Kiến** | `{eta_sec / 60:.1f}` phút |
 """
-        log_text = "\n".join(logs[-30:])
-        yield (status_md, metrics_md, log_text)
+            log_text = "\n".join(logs[-30:])
+            yield (status_md, metrics_md, log_text)
 
-    if process.poll() is None:
-        process.terminate()
-        process.wait()
+    finally:
+        if process and process.poll() is None:
+            try:
+                process.terminate()
+                process.wait(timeout=2)
+            except Exception:
+                try:
+                    process.kill()
+                except Exception:
+                    pass
 
-    running = False
-    total_elapsed = time.time() - start_time
+        running = False
+        exit_code = process.poll() if process else -1
+        total_elapsed = time.time() - start_time
+
+    # AUDIT MÃ THOÁT OS (TELEMETRY CRASH AUDIT)
+    if exit_code is not None and exit_code != 0:
+        oom_warning = ""
+        if exit_code in [137, -9]:
+            oom_warning = "\n🚨 **NGUYÊN NHÂN**: Tiến trình bị Linux kernel OOM Killer ngắt do CẤP PHÁT VƯỢT QUÁ RAM CONTAINER! Vui lòng giảm TT_MB hoặc Sieve_MB."
+
+        crash_status = f"""### ❌ PHIÊN KHAI THÁC BỊ NGẮT ĐỘT NGỘT (CRASH TELEMETRY)
+- **Mã Thoát (Exit Code)**: `{exit_code}`{oom_warning}
+- **Worker Node**: `{worker}`
+- **Số mẫu FEN đã lưu**: `{current_samples:,}` mẫu
+- **Tệp xuất**: `{out_file}`
+- **Thời gian chạy trước crash**: `{total_elapsed:.1f}`s
+"""
+        crash_metrics = f"""| Chỉ Số Telemetry Sự Cố | Chi Tiết |
+|---|---|
+| 🚨 **Trạng Thái Session** | `CRASHED` |
+| 🔢 **Exit Code OS** | `{exit_code}`{oom_msg if 'oom_msg' in locals() else ''} |
+| 🧩 **Mẫu Đã Ghi** | `{current_samples:,}` mẫu |
+| 📁 **Tệp Dữ Liệu** | `{out_file}` |
+"""
+        crash_logs = "\n".join(logs[-35:]) + f"\n\n❌ PHIÊN BỊ NGẮT VỚI EXIT CODE {exit_code}!"
+
+        session_info["status"] = "CRASHED"
+        session_info["exit_code"] = exit_code
+        session_info["last_logs"] = logs[-35:]
+        save_session_state(session_info)
+
+        yield (crash_status, crash_metrics, crash_logs)
+        return
 
     # Upload dữ liệu lên HuggingFace Hub
     yield (
