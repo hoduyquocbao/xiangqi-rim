@@ -1,7 +1,7 @@
-# === XIANGQI-R1 REAL RULE GPU T4 DATA MINER ENGINE (v12.4-JRCP5-TURBO-13GB-MINIMAX) ===
+# === XIANGQI-R1 REAL RULE GPU T4 DATA MINER ENGINE (v13.0-JRCP5-3PLY-MINIMAX) ===
 # 100% PHYSICAL XIANGQI RULES + FULL JRCP 5.0 32-DIMENSIONAL ULTRA-DEEP TACTICAL THOUGHT CHAIN
-# + 28,672 SUB-BATCH GPU CHUNKING (Targeting ~12.5GB - 13.8GB Peak VRAM on Tesla T4)
-# + IN-PLACE GRID ROLLBACK 2-PLY GENERATION + PEAK VRAM LOGGING (max_memory_allocated)
+# + GPU 3-PLY TOP-K MINIMAX SEARCH (6x4x4 Tree Expansion & 3-Ply Look-Ahead Minimax Reduction)
+# + IN-PLACE GRID ROLLBACK 3-PLY GENERATION (Fast Execution & Zero CPU Memory Overhead)
 # + 36 KẾ BINH PHÁP + THẾ TRẬN KINH ĐIỂN + PERPETUAL CHECK/CHASE RULE ENGINE + OPPONENT COUNTER AUDIT
 # + DYNAMIC OPENING FEN SAMPLER + SIEVE DEDUP + AUTO HF PUSH + REAL-TIME HEARTBEAT (3s)
 
@@ -1532,14 +1532,14 @@ def mine(target_games: int = 1000, depth: int = 12):
     print(f"🧠 System RAM    : {ram_gb:.2f} GB RAM", flush=True)
     print(f"⚡ GPU Device    : {torch.cuda.get_device_name(0)} ({vram_total:.2f} GB VRAM | Allocated: {vram_allocated:.2f} GB)", flush=True)
     print(f"🧰 Software Env  : Python {python_ver} | PyTorch {torch_ver} | CUDA {torch.version.cuda}", flush=True)
-    print(f"🏷️ Engine Version : v12.4-jrcp5-turbo-13gb-minimax (Build 2026-08-10 03:33:00 ICT)", flush=True)
+    print(f"🏷️ Engine Version : v13.0-jrcp5-3ply-minimax (Build 2026-08-10 04:00:00 ICT)", flush=True)
     print(f"🎮 Target Config  : {target_games:,} Games | Search Depth {depth}", flush=True)
     print(f"🆔 Unique Node ID : node_{node_id}", flush=True)
     print(f"📦 File Chunk Cap : 50 MB / Chunk (Active: Chunk #{chunk_idx:04d})", flush=True)
     print(f"💾 Active Output  : {out_file}", flush=True)
     print(f"🔑 HF Hub Status  : {'CONNECTED (' + dataset_repo + ')' if api else 'DISABLED (No HF_TOKEN)'}", flush=True)
     print(f"🧠 Model Params   : {param_count:,} ({model_mb:.1f} MB) — Deep Residual 4-Block 512ch", flush=True)
-    print(f"🚀 Parallel Mode  : {PARALLEL} ván cờ song song / 28,672 Sub-Batch (Peak VRAM Target ~12.5GB - 13.8GB)", flush=True)
+    print(f"🚀 Parallel Mode  : {PARALLEL} ván cờ song song / GPU 3-Ply Top-K Minimax Search (6x4x4 Tree)", flush=True)
     print(f"📐 Thought Chain  : JRCP 5.0 — 32 chiều kích suy tưởng chiến thuật & luật đấu", flush=True)
     print(f"💓 Progress Log   : Real-Time Heartbeat Log mỗi 3.0 giây / 5 ván cờ", flush=True)
     print("==================================================================\n", flush=True)
@@ -1611,44 +1611,72 @@ def mine(target_games: int = 1000, depth: int = 12):
             if plies[s] < 10 and random.random() < 0.25:
                 slot_info.append((s, legal, [], True))
             else:
-                # ── GPU 2-PLY MINIMAX IN-PLACE GRID ROLLBACK TENSOR GENERATION ──
-                move_tree_map = []
-                for m1 in legal:
+                # ── GPU 3-PLY TOP-K MINIMAX TREE EXPANSION (6x4x4 = 96 FENs / slot) ──
+                move_tree_map_3ply = []
+                legal_1ply_sorted = sorted(legal, key=lambda m: (1000 if boards[s].grid[m.dst] != 0 else 0), reverse=True)
+                top_m1_list = legal_1ply_sorted[:6]
+
+                for m1 in top_m1_list:
                     tb1 = Board()
                     tb1.grid = list(boards[s].grid)
                     tb1.turn = boards[s].turn
                     tb1.apply(m1)
-                    
-                    legal_2ply = tb1.legal()
-                    offset_2ply = len(all_tensors)
-                    
-                    if legal_2ply:
-                        for m2 in legal_2ply:
-                            # In-place move & rollback trên tb1.grid (Zero Board Object Overhead)
-                            saved_dst2 = tb1.grid[m2.dst]
-                            tb1.grid[m2.dst] = tb1.grid[m2.src]
-                            tb1.grid[m2.src] = 0
-                            
-                            all_tensors.append(list(tb1.grid))
-                            
-                            tb1.grid[m2.src] = tb1.grid[m2.dst]
-                            tb1.grid[m2.dst] = saved_dst2
-                            
-                        move_tree_map.append((m1, offset_2ply, len(legal_2ply)))
-                    else:
-                        all_tensors.append(list(tb1.grid))
-                        move_tree_map.append((m1, offset_2ply, 1))
 
-                slot_info.append((s, legal, move_tree_map, False))
+                    legal_2ply = tb1.legal()
+                    if not legal_2ply:
+                        offset_3p = len(all_tensors)
+                        all_tensors.append(list(tb1.grid))
+                        move_tree_map_3ply.append((m1, [(None, offset_3p, 1)]))
+                        continue
+
+                    legal_2ply_sorted = sorted(legal_2ply, key=lambda m: (1000 if tb1.grid[m.dst] != 0 else 0), reverse=True)
+                    top_m2_list = legal_2ply_sorted[:4]
+
+                    m2_tree_list = []
+                    for m2 in top_m2_list:
+                        saved_dst2 = tb1.grid[m2.dst]
+                        tb1.grid[m2.dst] = tb1.grid[m2.src]
+                        tb1.grid[m2.src] = 0
+                        tb1.turn = 1 - tb1.turn
+
+                        legal_3ply = tb1.legal()
+                        offset_3p = len(all_tensors)
+
+                        if legal_3ply:
+                            legal_3ply_sorted = sorted(legal_3ply, key=lambda m: (1000 if tb1.grid[m.dst] != 0 else 0), reverse=True)
+                            top_m3_list = legal_3ply_sorted[:4]
+
+                            for m3 in top_m3_list:
+                                saved_dst3 = tb1.grid[m3.dst]
+                                tb1.grid[m3.dst] = tb1.grid[m3.src]
+                                tb1.grid[m3.src] = 0
+
+                                all_tensors.append(list(tb1.grid))
+
+                                tb1.grid[m3.src] = tb1.grid[m3.dst]
+                                tb1.grid[m3.dst] = saved_dst3
+
+                            m2_tree_list.append((m2, offset_3p, len(top_m3_list)))
+                        else:
+                            all_tensors.append(list(tb1.grid))
+                            m2_tree_list.append((m2, offset_3p, 1))
+
+                        tb1.turn = 1 - tb1.turn
+                        tb1.grid[m2.src] = tb1.grid[m2.dst]
+                        tb1.grid[m2.dst] = saved_dst2
+
+                    move_tree_map_3ply.append((m1, m2_tree_list))
+
+                slot_info.append((s, legal, move_tree_map_3ply, False))
 
         if not slot_info:
             break
 
-        # === FAST VECTORIZED CUDA TRANSFER & SUB-BATCH CHUNKING (28,672 TENSORS / CHUNK — TARGET ~13.5GB VRAM) ===
+        # === FAST VECTORIZED CUDA TRANSFER & SUB-BATCH CHUNKING (28,672 TENSORS / CHUNK) ===
         all_scores = None
         eval_start = time.time()
         if all_tensors:
-            SUB_BATCH_SIZE = 28672  # Nâng sub-batch lên 28.6k để vắt kiệt ~12.5GB - 13.8GB VRAM trên Tesla T4 16GB
+            SUB_BATCH_SIZE = 28672
             score_list = []
             
             for i in range(0, len(all_tensors), SUB_BATCH_SIZE):
@@ -1673,34 +1701,44 @@ def mine(target_games: int = 1000, depth: int = 12):
             torch.cuda.reset_peak_memory_stats(0)
             active_slots = sum(1 for s in range(PARALLEL) if slot_game[s] <= target_games)
             mega_size = len(all_tensors)
-            print(f"⚡ [HEARTBEAT | Step {step_counter:05d}] Active Slots: {active_slots}/64 | GPU 2-Ply Batch: {mega_size:,} FENs ({eval_ms:.1f}ms) | Total FENs: {total_samples:,} | Speed: {fps:,.1f} FEN/s | Games: {completed_games}/{target_games} | Peak VRAM: {vram_peak:.2f}GB", flush=True)
+            print(f"⚡ [HEARTBEAT | Step {step_counter:05d}] Active Slots: {active_slots}/64 | GPU 3-Ply Batch: {mega_size:,} FENs ({eval_ms:.1f}ms) | Total FENs: {total_samples:,} | Speed: {fps:,.1f} FEN/s | Games: {completed_games}/{target_games} | Peak VRAM: {vram_peak:.2f}GB", flush=True)
 
-        # Phân phối kết quả Minimax 2-Ply về từng slot
-        for s, legal, move_tree_map, is_random in slot_info:
+        # Phân phối kết quả Minimax 3-Ply về từng slot
+        for s, legal, move_tree_map_3ply, is_random in slot_info:
             if is_random:
                 best_move = random.choice(legal)
                 best_score = 0
                 encoded_move = best_move.encode()
             else:
-                # Thuật toán 2-Ply Minimax Reduction
-                # Đỏ (turn 0) chọn MAX(worst_opponent_min), Đen (turn 1) chọn MIN(worst_opponent_max)
+                # ── THUẬT TOÁN 3-PLY MINIMAX REDUCTION (Max-Min-Max) ──
                 best_move = None
                 best_minimax_score = -999999 if boards[s].turn == 0 else 999999
 
-                for m1, off_2p, count_2p in move_tree_map:
-                    scores_2p = all_scores[off_2p : off_2p + count_2p]
-                    # Đối phương ở 2-Ply sẽ phản đòn bằng nước gây hại nhất cho ta
-                    # Nếu lượt ta là Đỏ (0), đối phương Đen (1) sẽ chọn MIN score
-                    # Nếu lượt ta là Đen (1), đối phương Đỏ (0) sẽ chọn MAX score
+                for m1, m2_tree_list in move_tree_map_3ply:
+                    m2_scores = []
+                    for m2, off_3p, count_3p in m2_tree_list:
+                        scores_3p = all_scores[off_3p : off_3p + count_3p]
+                        if boards[s].turn == 0:
+                            s3_best = torch.max(scores_3p).item()
+                        else:
+                            s3_best = torch.min(scores_3p).item()
+                        m2_scores.append(s3_best)
+
+                    if m2_scores:
+                        if boards[s].turn == 0:
+                            s2_worst = min(m2_scores)
+                        else:
+                            s2_worst = max(m2_scores)
+                    else:
+                        s2_worst = 0
+
                     if boards[s].turn == 0:
-                        minimax_score_m1 = torch.min(scores_2p).item()
-                        if minimax_score_m1 > best_minimax_score:
-                            best_minimax_score = minimax_score_m1
+                        if s2_worst > best_minimax_score:
+                            best_minimax_score = s2_worst
                             best_move = m1
                     else:
-                        minimax_score_m1 = torch.max(scores_2p).item()
-                        if minimax_score_m1 < best_minimax_score:
-                            best_minimax_score = minimax_score_m1
+                        if s2_worst < best_minimax_score:
+                            best_minimax_score = s2_worst
                             best_move = m1
 
                 if best_move is None:
