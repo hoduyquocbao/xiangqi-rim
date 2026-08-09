@@ -557,7 +557,7 @@ def start_mining(worker, games, depth, threads, tt_mb, sieve_mb, seed, token, re
     games = int(games or 100000)
     depth = int(depth or 4)
     tt_mb = int(tt_mb or 512)
-    sieve_mb = int(sieve_mb or 8192)
+    sieve_mb = prev_power_of_two(int(sieve_mb or 8192))
     seed = int(seed or 1)
 
     try:
@@ -839,6 +839,15 @@ def start_mining(worker, games, depth, threads, tt_mb, sieve_mb, seed, token, re
 
     yield (final_status, final_metrics, final_logs)
 
+def prev_power_of_two(n: int) -> int:
+    """Trả về lũy thừa của 2 lớn nhất nhỏ hơn hoặc bằng n (an toàn cho Bitset Mask)."""
+    if n <= 1024:
+        return 1024
+    p = 1
+    while p * 2 <= n:
+        p *= 2
+    return p
+
 def create_app():
     """Xây dựng giao diện web Gradio 4+ tự động thích ứng thông số phần cứng thực tế."""
     cpu_logical, cpu_physical, mem_total, mem_avail, raw_logical, cgroup_cpus = get_system_specs()
@@ -846,7 +855,7 @@ def create_app():
     # Thích ứng thông số RAM/CPU mặc định theo phần cứng thực tế
     default_threads = cpu_logical
     default_tt = min(2048, max(256, int((mem_total * 1024 * 0.25) / max(1, cpu_logical))))
-    default_sieve = min(65536, max(4096, int(mem_total * 1024 * 0.25)))
+    default_sieve = min(65536, max(1024, prev_power_of_two(int(mem_total * 1024 * 0.25))))
 
     theme = gr.themes.Soft(
         primary_hue="red",

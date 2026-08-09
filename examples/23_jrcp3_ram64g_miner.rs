@@ -239,9 +239,13 @@ impl Sieve {
     /// Yêu cầu: `mb` phải là lũy thừa 2 (512, 1024, 2048, 4096, 8192).
     pub fn new(mb: usize) -> Self {
         // Số phần tử AtomicU64 = tổng bytes / 8
-        let count = (mb * 1024 * 1024) / 8;
-        // Xác nhận count là lũy thừa 2 cho phép bitwise AND mask hoạt động đúng
-        assert!(count.is_power_of_two(), "Sieve size phải là lũy thừa 2!");
+        let raw_count = (mb * 1024 * 1024) / 8;
+        // Tự động làm tròn về lũy thừa của 2 lớn nhất nhỏ hơn hoặc bằng raw_count
+        let count = if raw_count.is_power_of_two() {
+            raw_count
+        } else {
+            1usize << (usize::BITS - 1 - raw_count.leading_zeros())
+        };
 
         let mut bits = Vec::with_capacity(count);
         for _ in 0..count {
