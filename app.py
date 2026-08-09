@@ -49,9 +49,9 @@ REPO = "hoduyquocbao/xiangqi-nnue-dataset"
 # ============================================================================
 # APPLICATION SEMANTIC VERSIONING & BUILD METADATA
 # ============================================================================
-APP_VERSION = "v2.6.0-production"
-APP_BUILD_STAMP = "2026-08-09 20:55:00 ICT"
-APP_RELEASE_NOTES = "Disk Telemetry Logger + Persistent Process Crash Audit"
+APP_VERSION = "v2.7.0-production"
+APP_BUILD_STAMP = "2026-08-09 21:08:00 ICT"
+APP_RELEASE_NOTES = "Sieve Power-of-Two Panic Fix + FileNotFoundError Guard + Auto Power-of-Two Sieve Clamp"
 
 # ============================================================================
 # PERSISTENT DISK LOGGING & TELEMETRY INFRASTRUCTURE

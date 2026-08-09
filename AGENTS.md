@@ -228,3 +228,11 @@ python3 scripts/test_quantization.py data/nnue_weights_gen5.bin
 
 ### 8.4 QUY TRÌNH DỪNG LẠI 1 NHỊP QUAN SÁT THIẾU SÓT
 > **"THÀ CHẬM MỘT NHỊP QUAN SÁT THIẾU SÓT CÒN HƠN CẨU THẢ, AI SLOP BIẾN CHẤT, LƯỜI BIẾNG, TÓM TẮT CẮT XÉN, LÀM CHO CÓ LỆ, LÀM ĐỂ ĐỐI PHÓ!"**
+
+### 8.5 QUY TRÌNH BẮT BUỘC TĂNG PHIÊN BẢN KHI SỬA MÃ NGUỒN (MANDATORY AUTOMATIC VERSION BUMP PROTOCOL)
+- **Ràng Buộc Sắt**: BẤT KỲ LẦN NÀO sửa lỗi (bugfix), nâng cấp tính năng (feature), hoặc chỉnh sửa mã nguồn trong `app.py` hay các tệp engine Rust, Agent BẮT BUỘC phải thực hiện tuần tự 4 bước tăng phiên bản:
+  1. **Tăng Số Phiên Bản `APP_VERSION`**: Ví dụ từ `v2.6.0-production` -> `v2.7.0-production` (hoặc patch release `v2.6.1-production`).
+  2. **Cập Nhật Dấu Thời Gian Build `APP_BUILD_STAMP`**: Ghi rõ mốc thời gian thực tế (ví dụ: `2026-08-09 21:08:00 ICT`).
+  3. **Cập Nhật Ghi Chú Phát Hành `APP_RELEASE_NOTES`**: Ghi ngắn gọn nội dung lỗi vừa được sửa hoặc tính năng vừa được nâng cấp.
+  4. **Kiểm Thử Biên Dịch Mới Cho Phép Commit**: Chạy `python3 -m py_compile app.py` hoặc `cargo check` để đảm bảo bản build mới hoạt động 100% trước khi push.
+- **Lý Do Tối Thượng**: Nếu sửa lỗi mã nguồn mà KHÔNG tăng số phiên bản và dấu thời gian, người dùng khi reload trang web sẽ rơi vào trạng thái "mù thông tin", không thể phân biệt được ứng dụng đang chạy bản cũ hay bản mới đã sửa lỗi!

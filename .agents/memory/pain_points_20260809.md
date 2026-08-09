@@ -66,14 +66,13 @@ $$\text{Điểm Chất Lượng Agent} = \text{Kế Hoạch Rõ Ràng} + \text{V
 
 ---
 
-### VI. NÂNG CẤP HẠ TẦNG TELEMETRY VĨNH VIỄN & PERSISTENT DISK LOGGER (v2.6.0-production)
+### VII. NÂNG CẤP QUY TẮC BẮT BUỘC TĂNG PHIÊN BẢN KHI SỬA MÃ NGUỒN (VERSION BUMP PROTOCOL)
 
-1. **NGUYÊN NHÂN THẤT BẠI CỦA MÃ NGUỒN CŨ**:
-   - Mã nguồn cũ ghi nhật ký vào mảng `logs = []` trong bộ nhớ RAM của Python. Khi tiến trình bị ngắt/crash hoặc trang web bị reload, toàn bộ log bị mất sạch.
-   - Không có tệp log đĩa cứng vĩnh viễn (`logs/miner_stdout_stderr.log`), dẫn đến khi Rust engine bị OOM Killer ngắt (`exitcode 137`) hoặc panic (`exitcode 101`), không ai biết lý do tại sao và lỗi ở đâu.
+1. **NGUYÊN NHÂN THẤT BẠI CỦA CÁC TURN TRƯỚC**:
+   - Khi sửa lỗi Sieve Power-of-Two Panic và `FileNotFoundError`, Agent chỉ tập trung sửa code logic trong `app.py` và `.rs` mà **quên tăng số phiên bản `APP_VERSION` và `APP_BUILD_STAMP`**.
+   - Nguyên nhân là do trong `AGENTS.md` và `GEMINI.md` cũ, quy tắc đánh số phiên bản chỉ nói chung chung ở mức lý thuyết, chưa được luật hóa thành một quy trình 4 bước bắt buộc phải thực thi mỗi khi sửa code.
 
-2. **HẠ TẦNG TELEMETRY VỚI 4 CHỐT CHẶN BẢO VỆ (Commit `b41ef60`)**:
-   - **Chốt chặn 1 - TelemetryLogger**: Ghi nhận toàn bộ sự kiện khởi chạy, cấu hình phần cứng, và sự cố crash dưới dạng JSON-Lines vào `logs/system_telemetry.jsonl`.
-   - **Chốt chặn 2 - Ghi Nhập Trực Tiếp Đĩa Cứng (Disk Pipe Logging)**: Toàn bộ `stdout` và `stderr` từ Native Engine được ghi đệm liên tục (`flush()`) vào tệp đĩa `logs/miner_stdout_stderr.log`. Dù Python hay Rust bị chết đột ngột, 100% dòng log lỗi cuối cùng vẫn nằm nguyên vẹn trên đĩa.
-   - **Chốt chặn 3 - Giao Diện Truy Vấn Telemetry Trực Tiếp**: Thêm nút **"📜 TRUY VẤN LOG ĐĨA & TELEMETRY"** trên web UI Gradio, cho phép người dùng xem ngay lập tức các sự kiện telemetry và log đĩa chỉ bằng 1 cú click.
-   - **Chốt chặn 4 - Báo Cáo Crash Tự Động Trong `sync_on_load()`**: Khi reload trang, nếu phát hiện phiên trước bị crash, hệ thống sẽ đọc trực tiếp 40 dòng log từ `logs/miner_stdout_stderr.log` để hiển thị nguyên nhân chính xác (OOM / panic / invalid arg) thay vì reset mờ ám!
+2. **LUẬT HÓA BẮT BUỘC TRONG AGENTS.MD VÀ GEMINI.MD (Commit `4b71ee9`)**:
+   - Thêm Mục 8.5 trong `AGENTS.md` và Mục 7.5 trong `GEMINI.md`: **BẤT KỲ LẦN NÀO SỬA CODE, PHẢI TĂNG VERSION VÀ BUILD STAMP**.
+   - Sửa code mà không tăng phiên bản = Vi phạm kỷ luật nghiêm trọng!
+   - Đã nâng cấp `app.py` lên phiên bản **`v2.7.0-production`** (Build `2026-08-09 21:08:00 ICT`).

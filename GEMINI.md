@@ -186,3 +186,7 @@ GAMES=10000 DEPTH=4 THREADS=4 cargo run --release --example 20_parallel_mine
 
 ### 7.4 QUY TRÌNH DỪNG LẠI 1 NHỊP QUAN SÁT THIẾU SÓT
 > **"THÀ CHẬM MỘT NHỊP QUAN SÁT THIẾU SÓT CÒN HƠN CẨU THẢ, AI SLOP BIẾN CHẤT, LƯỜI BIẾNG, TÓM TẮT CẮT XÉN, LÀM CHO CÓ LỆ, LÀM ĐỂ ĐỐI PHÓ!"**
+
+### 7.5 QUY TRÌNH BẮT BUỘC TĂNG PHIÊN BẢN KHI SỬA MÃ NGUỒN (MANDATORY AUTOMATIC VERSION BUMP PROTOCOL)
+- **Ràng Buộc Sắt Cho Gemini**: Mỗi khi sửa bất kỳ lỗi nào trong mã nguồn (`app.py`, engine Rust, hay scripts), Gemini BẮT BUỘC phải thực hiện tăng số phiên bản `APP_VERSION` và `APP_BUILD_STAMP`.
+- **Tuyệt đối KHÔNG ĐƯỢC PHÉP**: Sửa lỗi mã nguồn nhưng giữ nguyên số phiên bản cũ. Sửa code mà giữ nguyên version cũ là hành vi cẩu thả, gây lừa dối người dùng khi họ reload trang web!
