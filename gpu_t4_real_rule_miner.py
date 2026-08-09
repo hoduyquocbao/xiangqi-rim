@@ -6,12 +6,23 @@
 import os, sys, time, json, math, random, threading
 from pathlib import Path
 
-# Cấu hình độc lập 100% Pure Python Engine (Triệt tiêu rủi ro bug PyTorch Colab C++ registrations)
+# Cấu hình linh hoạt PyTorch CUDA GPU & Pure Python Fallback Engine
 HAS_TORCH = False
 torch = None
 nn = None
 F = None
 HfApi = None
+
+try:
+    import torch
+    import torch.nn as nn
+    import torch.nn.functional as F
+    HAS_TORCH = True
+except BaseException:
+    HAS_TORCH = False
+    torch = None
+    nn = None
+    F = None
 
 try:
     from huggingface_hub import HfApi
@@ -1545,7 +1556,7 @@ def mine(target_games: int = 1000, depth: int = 12):
         print(f"🧰 Software Env  : Python {python_ver} | PyTorch {torch_ver} | CUDA {torch.version.cuda}", flush=True)
     else:
         print(f"⚡ Execution Mode: Pure Python / Rule Engine (Zero GPU/PyTorch Dependency)", flush=True)
-    print(f"🏷️ Engine Version : v11.0-jrcp5-ultra-32d (Build 2026-08-10 01:45:00 ICT)", flush=True)
+    print(f"🏷️ Engine Version : v11.1-jrcp5-bulletproof (Build 2026-08-10 02:30:00 ICT)", flush=True)
     print(f"🎮 Target Config  : {target_games:,} Games | Search Depth {depth}", flush=True)
     print(f"🆔 Unique Node ID : node_{node_id}", flush=True)
     print(f"📦 File Chunk Cap : 50 MB / Chunk (Active: Chunk #{chunk_idx:04d})", flush=True)
