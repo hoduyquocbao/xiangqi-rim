@@ -490,9 +490,14 @@ def mine(target_games: int = 1000, depth: int = 12):
 
     evaluator = Evaluator().to(device).eval()
     
+    import uuid
+    node_id = uuid.uuid4().hex[:8]
+    chunk_idx = 1
+    start_stamp = int(time.time())
+
     out_dir = Path("data/colab_gpu_master")
     os.makedirs(out_dir, exist_ok=True)
-    out_file = out_dir / f"jrcp3_d12_master_gpu_{int(time.time())}.jsonl"
+    out_file = out_dir / f"jrcp3_d12_node_{node_id}_{start_stamp}_chunk_{chunk_idx:04d}.jsonl"
 
     sieve_set = set() # FEN Deduplication Sieve
     token = os.environ.get("HF_TOKEN")
@@ -516,18 +521,21 @@ def mine(target_games: int = 1000, depth: int = 12):
     print(f"🧠 System RAM    : {ram_gb:.2f} GB RAM", flush=True)
     print(f"⚡ GPU Device    : {torch.cuda.get_device_name(0)} ({vram_total:.2f} GB VRAM | Active Allocated: {vram_allocated:.2f} GB)", flush=True)
     print(f"🧰 Software Env  : Python {python_ver} | PyTorch {torch_ver} | CUDA {torch.version.cuda}", flush=True)
-    print(f"🏷️ Engine Version : v8.1.0-gpu-master (Build 2026-08-09 23:26:00 ICT)", flush=True)
+    print(f"🏷️ Engine Version : v8.9.0-node-chunking (Build 2026-08-10 00:40:00 ICT)", flush=True)
     print(f"🎮 Target Config  : {target_games:,} Games | Search Depth {depth} | Batch Size 4,096", flush=True)
-    print(f"💾 Output Path    : {out_file}", flush=True)
+    print(f"🆔 Unique Node ID : node_{node_id}", flush=True)
+    print(f"📦 File Chunk Cap : 50 MB / Chunk (Chunk #{chunk_idx})", flush=True)
+    print(f"💾 Active Output  : {out_file}", flush=True)
     print(f"🔑 HF Hub Status  : {'CONNECTED (' + dataset_repo + ')' if api else 'DISABLED (No HF_TOKEN)'}", flush=True)
     print("==================================================================\n", flush=True)
-    print("⚡ Thought Chain    : FULL 14-DIMENSIONAL JRCP 3.0 SPECIFICATION")
+    print("⚡ Thought Chain    : FULL 14-DIMENSIONAL JRCP 3.0 SPECIFICATION (100% DYNAMIC)")
     print(f"🎮 Target Games     : {target_games:,} ván")
     print(f"🧠 Search Depth     : {depth} (6 nước toàn diện)")
-    print(f"💾 Output File      : {out_file}")
+    print(f"💾 Active Chunk File: {out_file}")
     print("------------------------------------------------------------------")
 
     total_samples = 0
+    chunk_samples = 0
     completed_games = 0
     start_time = time.time()
 
@@ -674,6 +682,30 @@ def mine(target_games: int = 1000, depth: int = 12):
                         f.write(json.dumps(sample, ensure_ascii=False) + "\n")
                         game_samples += 1
                         total_samples += 1
+                        chunk_samples += 1
+                        
+                        # 50MB MAX FILE CHUNK ROTATION (Chống bùng nổ file GB không ứng dụng nào mở nổi)
+                        if chunk_samples >= 10000 or (out_file.exists() and out_file.stat().st_size >= 50 * 1024 * 1024):
+                            f.flush()
+                            f.close()
+                            # Auto-push completed chunk file to Hugging Face
+                            if api and token:
+                                try:
+                                    api.create_repo(repo_id=dataset_repo, repo_type="dataset", exist_ok=True, token=token)
+                                    api.upload_file(
+                                        path_or_fileobj=str(out_file),
+                                        path_in_repo=f"master_gpu_d12/{out_file.name}",
+                                        repo_id=dataset_repo,
+                                        repo_type="dataset",
+                                        token=token
+                                    )
+                                    print(f"   📦 CHUNK ROTATION (50MB Cap): Pushed chunk #{chunk_idx} ({out_file.name}) to HF Hub!", flush=True)
+                                except Exception as e:
+                                    print(f"   ⚠️ Chunk push notice: {e}", flush=True)
+                            chunk_idx += 1
+                            chunk_samples = 0
+                            out_file = out_dir / f"jrcp3_d12_node_{node_id}_{start_stamp}_chunk_{chunk_idx:04d}.jsonl"
+                            f = open(out_file, "w", encoding="utf-8")
                     else:
                         print(f"⚠️ [STRICT DATA FILTER REJECTED] Game {game_idx} Ply {ply}: Reason={err_reason} Move={encoded_move}", flush=True)
 
