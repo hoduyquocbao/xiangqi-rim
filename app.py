@@ -69,9 +69,9 @@ REPO = "hoduyquocbao/xiangqi-nnue-dataset"
 # ============================================================================
 # APPLICATION SEMANTIC VERSIONING & BUILD METADATA
 # ============================================================================
-APP_VERSION = "v3.3.0-production"
-APP_BUILD_STAMP = "2026-08-09 21:26:00 ICT"
-APP_RELEASE_NOTES = "Add Purge Out-File & Full Dataset File Manager UI (Purge wrong depth data & inspect/delete .jsonl files)"
+APP_VERSION = "v3.4.0-production"
+APP_BUILD_STAMP = "2026-08-09 21:28:00 ICT"
+APP_RELEASE_NOTES = "Add Clear Log Files to Blank Feature (Auto-Truncate logs/ on Purge & Manual Reset Log Button)"
 
 # ============================================================================
 # PERSISTENT DISK LOGGING & TELEMETRY INFRASTRUCTURE
@@ -133,6 +133,20 @@ class TelemetryLogger:
             except Exception as e:
                 return f"⚠️ Không thể đọc tệp telemetry: {e}"
         return "📜 Chưa có dữ liệu Telemetry."
+
+    @staticmethod
+    def clear_all_logs():
+        """Xóa sạch và đưa tất cả tệp log đĩa cứng & telemetry về trạng thái trắng (blank)."""
+        try:
+            with open(TELEMETRY_LOG_FILE, "w", encoding="utf-8") as f:
+                f.write("")
+        except Exception:
+            pass
+        try:
+            with open(MINER_DISK_LOG_FILE, "w", encoding="utf-8") as f:
+                f.write("")
+        except Exception:
+            pass
 
 # Biến toàn cục theo dõi tiến trình background
 process = None
@@ -430,8 +444,13 @@ def get_file_size_mb(filepath: str) -> float:
             pass
     return 0.0
 
+def reset_logs_to_blank() -> str:
+    """Xóa sạch và đưa toàn bộ tệp log đĩa cứng & telemetry về mặc định trắng (blank)."""
+    TelemetryLogger.clear_all_logs()
+    return "🧹 Đã đưa toàn bộ tệp log đĩa cứng (logs/miner_stdout_stderr.log) và telemetry (logs/system_telemetry.jsonl) về mặc định trắng (blank) 100%!"
+
 def purge_current_output_file() -> tuple[str, str, str]:
-    """Dừng tiến trình và xóa an toàn tệp dữ liệu output hiện tại khi người dùng cài đặt nhầm Depth."""
+    """Dừng tiến trình, xóa tệp output hiện tại và đưa toàn bộ log đĩa về trắng (blank)."""
     kill_all_miner_processes()
     session = load_session_state()
     out_file = session.get("out_file")
@@ -460,14 +479,12 @@ def purge_current_output_file() -> tuple[str, str, str]:
             deleted_msg = "ℹ️ Hệ thống sạch. Không tìm thấy tệp output nào cần xóa."
 
     clear_session_state()
-    TelemetryLogger.log_event("PURGE_DATASET", {"file": out_file})
+    TelemetryLogger.clear_all_logs()
     
     cpu_logical, cpu_physical, mem_total, mem_avail, *_ = get_system_specs()
-    status_md = f"### 🗑️ ĐÃ DỌN DEEP TỆP DỮ LIỆU CỦ THÀNH CÔNG\n{deleted_msg}\n- **Hệ thống**: Sẵn sàng bắt đầu lượt khai thác mới với Depth mới."
-    metrics_md = "Hệ thống sạch 100%."
-    events = TelemetryLogger.read_tail_telemetry_events(10)
-    disk_logs = TelemetryLogger.read_tail_disk_logs(25)
-    logs_text = f"{deleted_msg}\n\n📜 NHẬT KÝ TELEMETRY EVENTS:\n{events}\n\n📜 NHẬT KÝ ĐĨA CỨNG:\n{disk_logs}"
+    status_md = f"### 🗑️ ĐÃ DỌN DẸP TỆP DỮ LIỆU & RESET LOG ĐĨA VỀ BLANK THÀNH CÔNG\n{deleted_msg}\n- **Log đĩa**: Đã đưa `logs/system_telemetry.jsonl` và `logs/miner_stdout_stderr.log` về trắng (blank).\n- **Hệ thống**: Sẵn sàng bắt đầu lượt khai thác mới."
+    metrics_md = "Hệ thống sạch 100% (Logs reset blank)."
+    logs_text = f"{deleted_msg}\n\n🧹 Đã reset toàn bộ log đĩa & telemetry về trắng (blank). Hệ thống sẵn sàng cho lượt khai thác mới!"
     return status_md, metrics_md, logs_text
 
 def list_dataset_files():
@@ -1094,6 +1111,11 @@ Vận hành **Native Rust Engine {APP_VERSION}** tự động scaling theo CPU Q
                         variant="secondary",
                         size="lg"
                     )
+                    clear_logs_btn = gr.Button(
+                        "🧹 RESET LOG VỀ BLANK",
+                        variant="secondary",
+                        size="lg"
+                    )
 
             with gr.Column(scale=2):
                 gr.Markdown("### 📊 Trạng Thái & Báo Cáo Real-Time Hệ Thống")
@@ -1159,6 +1181,12 @@ Vận hành **Native Rust Engine {APP_VERSION}** tự động scaling theo CPU Q
 
         view_telemetry_btn.click(
             fn=fetch_disk_telemetry_logs,
+            inputs=[],
+            outputs=[logs_box]
+        )
+
+        clear_logs_btn.click(
+            fn=reset_logs_to_blank,
             inputs=[],
             outputs=[logs_box]
         )

@@ -209,3 +209,15 @@ $$\text{Điểm Chất Lượng Agent} = \text{Kế Hoạch Rõ Ràng} + \text{V
      2. Xóa 1-Click tệp dataset được chọn khỏi đĩa cứng.
      3. Cập nhật danh sách tệp tự động.
    - **Nâng Cấp Phiên Bản Mới**: `v3.3.0-production` (Build `2026-08-09 21:26:00 ICT`).
+
+---
+
+### XVI. CỦNG CỐ TÍNH NĂNG RESET LOG ĐĨA VỀ MẶC ĐỊNH TRẮNG (BLANK) (v3.4.0-production)
+
+1. **NGUYÊN NHÂN ANH HDQB BỔ SUNG YÊU CẦU**:
+   - Khi xóa tệp output dữ liệu cũ (do lỡ cài sai Depth), người dùng muốn **đồng thời dọn sạch toàn bộ các tệp log đĩa cứng và telemetry** (`logs/miner_stdout_stderr.log` và `logs/system_telemetry.jsonl`) về trạng thái trắng (blank) ban đầu.
+
+2. **GIẢI PHÁP ĐÃ THỰC THI (Commit `v3.4.0-production`)**:
+   - **Tự Động Reset Log Khi Purge Output File**: Trong hàm `purge_current_output_file()`, bổ sung lời gọi `TelemetryLogger.clear_all_logs()` để tự động đưa toàn bộ các tệp log đĩa về blank 100%.
+   - **Nút "🧹 RESET LOG VỀ BLANK"**: Bổ sung nút bấm thủ công trực tiếp trên giao diện điều khiển chính cho phép người dùng chủ động reset toàn bộ tệp log đĩa bất kỳ lúc nào.
+   - **Nâng Cấp Phiên Bản Mới**: `v3.4.0-production` (Build `2026-08-09 21:28:00 ICT`).
