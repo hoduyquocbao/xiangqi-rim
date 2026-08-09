@@ -398,3 +398,14 @@ $$\text{Điểm Chất Lượng Agent} = \text{Kế Hoạch Rõ Ràng} + \text{V
    - Đã tháo bỏ khối lệnh khởi chạy ra ngoài `if os.path.exists(bench_out)` và thụt lùi chuẩn xác ở mức loop level.
    - Run thử nghiệm trực tiếp trên Python: Đạt vận tốc đỉnh cao **5,655.8 FEN/s** (**6,598 FEN** từ 137 ván) ở mức `16 Cores | Depth 4`, điểm số ma trận trọng số đạt **4,322.04 Pts**!
    - **Nâng Cấp Phiên Bản Mới**: `v5.5.0-production` (Build `2026-08-09 22:25:00 ICT`).
+
+---
+
+### XXXI. THÊM CƠ CHẾ AUTO-REBUILD BINARY KHI CÓ CẬP NHẬT MÃ NGUỒN TRÊN HUGGINGFACE SPACES (v5.6.1-production)
+
+1. **NHẮC NHỞ QUAN TRỌNG CỦA ANH HDQB**:
+   - Khi cập nhật mã nguồn Rust (`21_ram64g_mine.rs`, `23_jrcp3_ram64g_miner.rs` hoặc `src/`), nếu container HuggingFace Spaces đã có sẵn tệp nhị phân release cũ, hàm `setup()` cũ chỉ kiểm tra `os.path.exists(target_path)` sẽ dùng lại binary cũ mà không biên dịch lại mã nguồn mới.
+
+2. **GIẢI PHÁP ĐÃ THỰC THI (Commit `v5.6.1-production`)**:
+   - **Tự Động Kiểm Tra Timestamp (`_is_up_to_date()`)**: Hàm `setup()` trong `app.py` hiện tại so sánh mtime (`os.path.getmtime(target_path) >= os.path.getmtime(src_file)`). Nếu tệp mã nguồn `.rs` mới hơn binary nhị phân hiện tại, `setup()` sẽ **tự động kích hoạt `cargo build --release` để biên dịch binary mới nhất 100%**!
+   - **Nâng Cấp Phiên Bản Mới**: `v5.6.1-production` (Build `2026-08-09 22:30:00 ICT`).

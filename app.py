@@ -69,9 +69,9 @@ REPO = "hoduyquocbao/xiangqi-nnue-dataset"
 # ============================================================================
 # APPLICATION SEMANTIC VERSIONING & BUILD METADATA
 # ============================================================================
-APP_VERSION = "v5.5.0-production"
-APP_BUILD_STAMP = "2026-08-09 22:25:00 ICT"
-APP_RELEASE_NOTES = "Fix Benchmark Loop Indentation Bug & Achieve 5,655.8 FEN/s Benchmark Velocity"
+APP_VERSION = "v5.6.1-production"
+APP_BUILD_STAMP = "2026-08-09 22:30:00 ICT"
+APP_RELEASE_NOTES = "Auto-rebuild Rust binaries on source code update & ensure 100% fresh compilation on Hugging Face Spaces"
 
 # ============================================================================
 # PERSISTENT DISK LOGGING & TELEMETRY INFRASTRUCTURE
@@ -244,34 +244,49 @@ def get_system_specs():
 
     return cpu_logical, cpu_physical, mem_total, mem_avail, raw_logical, cgroup_cpus
 
+COMPILATION_LOCK = threading.Lock()
+
 def setup(example_name: str = "23_jrcp3_ram64g_miner") -> str:
-    """Tự động kiểm tra phần cứng và biên dịch nhị phân Rust Native Engine."""
-    import subprocess
-    cargo_bin = shutil.which("cargo")
-    if not cargo_bin:
-        home_cargo = os.path.expanduser("~/.cargo/bin/cargo")
-        root_cargo = "/root/.cargo/bin/cargo"
-        if os.path.exists(home_cargo):
-            cargo_bin = home_cargo
-            os.environ["PATH"] += f":{os.path.expanduser('~/.cargo/bin')}"
-        elif os.path.exists(root_cargo):
-            cargo_bin = root_cargo
-            os.environ["PATH"] += ":/root/.cargo/bin"
-        else:
-            print("🔨 Cài đặt Rust toolchain...")
-            res = subprocess.run(
-                "curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain stable",
-                shell=True, capture_output=True, text=True
-            )
-            os.environ["PATH"] += f":{os.path.expanduser('~/.cargo/bin')}:/root/.cargo/bin"
-            cargo_bin = shutil.which("cargo") or os.path.expanduser("~/.cargo/bin/cargo")
+    """Tự động kiểm tra phần cứng và biên dịch nhị phân Rust Native Engine (Thread-Safe & Auto-Rebuild on Code Change)."""
+    target_path = os.path.abspath(f"target/release/examples/{example_name}")
+    src_file = os.path.abspath(f"examples/{example_name}.rs")
 
-    rustup_bin = shutil.which("rustup") or os.path.expanduser("~/.cargo/bin/rustup")
-    if os.path.exists(rustup_bin):
-        subprocess.run([rustup_bin, "default", "stable"], capture_output=True)
+    def _is_up_to_date() -> bool:
+        if os.path.exists(target_path) and os.path.exists(src_file):
+            return os.path.getmtime(target_path) >= os.path.getmtime(src_file)
+        return False
 
-    target_path = f"target/release/examples/{example_name}"
-    if not os.path.exists(target_path):
+    if _is_up_to_date():
+        return target_path
+
+    with COMPILATION_LOCK:
+        if _is_up_to_date():
+            return target_path
+
+        import subprocess
+        cargo_bin = shutil.which("cargo")
+        if not cargo_bin:
+            home_cargo = os.path.expanduser("~/.cargo/bin/cargo")
+            root_cargo = "/root/.cargo/bin/cargo"
+            if os.path.exists(home_cargo):
+                cargo_bin = home_cargo
+                os.environ["PATH"] += f":{os.path.expanduser('~/.cargo/bin')}"
+            elif os.path.exists(root_cargo):
+                cargo_bin = root_cargo
+                os.environ["PATH"] += ":/root/.cargo/bin"
+            else:
+                print("🔨 Cài đặt Rust toolchain...")
+                res = subprocess.run(
+                    "curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain stable",
+                    shell=True, capture_output=True, text=True
+                )
+                os.environ["PATH"] += f":{os.path.expanduser('~/.cargo/bin')}:/root/.cargo/bin"
+                cargo_bin = shutil.which("cargo") or os.path.expanduser("~/.cargo/bin/cargo")
+
+        rustup_bin = shutil.which("rustup") or os.path.expanduser("~/.cargo/bin/rustup")
+        if os.path.exists(rustup_bin):
+            subprocess.run([rustup_bin, "default", "stable"], capture_output=True)
+
         print(f"⚡ Đang biên dịch Native Rust Data Miner ({example_name})...")
         cmd = [cargo_bin, "build", "--release", "--example", example_name]
         res = subprocess.run(cmd, capture_output=True, text=True)
@@ -280,7 +295,7 @@ def setup(example_name: str = "23_jrcp3_ram64g_miner") -> str:
             raise RuntimeError(f"Không thể biên dịch Rust Engine: {res.stderr}")
         print("✅ Biên dịch thành công!")
 
-    return target_path
+        return target_path
 
 def precompile_binaries():
     """Tự động biên dịch ngầm các binary nhị phân Rust Miner ngay khi ứng dụng khởi động."""
@@ -531,19 +546,22 @@ def run_hardware_benchmark(target_depth: int = 4, target_seconds: float = 1.0) -
         env["BENCHMARK"] = "1"  # BẬT CHẾ ĐỘ BENCHMARK FLUSH TỨC THỜI 100%
 
         t0 = time.time()
-        proc = subprocess.Popen([binary], env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-        time.sleep(target_seconds)
-        
-        # Gửi tín hiệu SIGTERM ngắt nhẹ nhàng
-        try: proc.terminate()
-        except Exception: pass
-
         out_text, err_text = "", ""
         try:
-            out_text, err_text = proc.communicate(timeout=1.5)
-        except Exception:
-            try: proc.kill()
+            proc = subprocess.Popen([binary], env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+            time.sleep(target_seconds)
+            
+            # Gửi tín hiệu SIGTERM ngắt nhẹ nhàng
+            try: proc.terminate()
             except Exception: pass
+
+            try:
+                out_text, err_text = proc.communicate(timeout=1.5)
+            except Exception:
+                try: proc.kill()
+                except Exception: pass
+        except Exception as proc_err:
+            print(f"⚠️ Benchmark Popen error: {proc_err}")
 
         elapsed = max(0.1, time.time() - t0)
         samples = 0
