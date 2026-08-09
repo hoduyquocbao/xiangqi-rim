@@ -528,3 +528,26 @@ $$\text{Điểm Chất Lượng Agent} = \text{Kế Hoạch Rõ Ràng} + \text{V
      - Đạt **633/633 FENs độc nhất 100% (Sieve Size = 633)**.
      - Vận tốc đo đạc thực tế: **245.4 FEN/s (~14,700 FEN/phút)** với chuỗi Thought Chain JRCP 3.0 siêu dày!
    - **Nâng Cấp Phiên Bản Mới**: `v8.0.0-gpu-master` (Build `2026-08-09 23:22:00 ICT`).
+
+---
+
+### XXXIX. TÍCH HỢP BỘ 6 CHECKPOINT PHYSICAL RULE UNIT TESTS VÀ BÁO CÁO TELEMETRY THỜI GIAN THỰC (`v8.1.0-gpu-master`)
+
+1. **GIẢI QUYẾT TRIỆT ĐỂ BẮT LỖI HIỂN THỊ VÀ MINH BẠCH LUẬT CỜ TƯỚNG**:
+   - Tích hợp bộ **6 Physical Rule Unit Tests (`run_unit_tests()`)** tự động kiểm chấm 100% trước khi bắt đầu mining:
+     1. `Flying General Rule`: Kiểm tra cấm Tướng đối mặt trực tiếp.
+     2. `Horse Leg Blocking`: Kiểm tra cản chân Mã.
+     3. `Elephant Eye Blocking`: Kiểm tra cản mắt Tượng.
+     4. `Cannon Screen Requirement`: Kiểm tra Pháo bắt buộc có ngòi khi ăn quân.
+     5. `Palace Boundary Lock`: Kiểm tra Sĩ Tướng cấm rời Cung Tướng.
+     6. `Pawn River Crossing Rule`: Kiểm tra Tốt chưa qua sông không được đi ngang.
+   - **Kết Quả Chạy Kiểm Chấm Tại Colab**: `🎉 BỘ 6 CHECKPOINT UNIT TESTS LUẬT CỜ TƯỚNG VẬT LÝ: 100% THÀNH CÔNG!`
+
+2. **BẢO BÁO TELEMETRY HỆ THỐNG VÀ THỜI GIAN THỰC THI CHÍNH THỨC**:
+   - In rõ ràng Bảng thông số hệ thống ngay khi khởi chạy:
+     - `CPU Cores`: 2 vCPUs | Linux x86_64
+     - `System RAM`: 12.67 GB RAM
+     - `GPU Device`: Tesla T4 (14.56 GB VRAM)
+     - `Software Env`: Python 3.12.13 | PyTorch 2.11.0+cu128 | CUDA 12.8
+     - `Target Config`: 30,000 Games | Search Depth 12 | Batch Size 4,096
+   - **Nâng Cấp Phiên Bản Mới**: `v8.1.0-gpu-master` (Build `2026-08-09 23:26:00 ICT`).
