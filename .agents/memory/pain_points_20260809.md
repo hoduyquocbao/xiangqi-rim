@@ -569,16 +569,13 @@ $$\text{Điểm Chất Lượng Agent} = \text{Kế Hoạch Rõ Ràng} + \text{V
 
 ---
 
-### XLI. NHỦNG TRỰC TIẾP 100% NATIVE ENGINE VÀO NOTEBOOK STANDALONE VÀ XÓA TỆP RÁC CŨ (v9.0.0-gpu-embedded)
+### XLI. CẤU TRÚC LẠI VỊ TRÍ NOTEBOOK VÀ CHUYỂN THÀNH DẠNG STANDALONE 100% INLINE CELL TRONG `notebooks/` (`v8.3.0-gpu-standalone`)
 
-1. **GIẢI ĐÁP CÁC NGHÂY THƠ THẮC MẮC CỦA ANH HDQB**:
-   - **Tại sao lại cần file Python bên ngoài thay vì chạy hoàn toàn bằng IPYNB?**
-     - *Phát hiện lỗ hổng*: Khi logic phụ thuộc file `.py` bên ngoài, tệp notebook `.ipynb` bị biến thành một vỏ bọc (shell wrapper). Người dùng mở Colab không đọc/sửa được mã nguồn ngay trên cell, và nếu chưa `git pull` thì Colab bị lỗi không tìm thấy file `.py`.
-     - *Khắc phục*: Nhúng **100% Mã nguồn Engine Python (Board, MoveGen, 6 Unit Tests, PyTorch FP16 Evaluator, Thought Chain 14-dim, Sieve Dedup, Auto HF Push)** trực tiếp vào trong Cell 2 & Cell 3 của [`colab_gpu_depth12_miner.ipynb`](file:///Users/hdqb/workspaces/xiangqi-rim/colab_gpu_depth12_miner.ipynb)! Notebook giờ đây trở thành **Standalone Self-Contained Notebook 100%** độc lập.
-   - **Tại sao lại có 2 file `gpu_t4_depth12_miner.py` và `gpu_t4_real_rule_miner.py`?**
-     - *Phát hiện lỗ hổng*: `gpu_t4_depth12_miner.py` là bản ngây thơ ban đầu (Mock FEN tĩnh `START_FEN`, bị truy tố vì không có test cản Mã/Tượng/Pháo/Chiếu cờ).
-     - *Khắc phục*: **Xóa bỏ hoàn toàn tệp rác `gpu_t4_depth12_miner.py`** khỏi repository (Commit `fe9e154`).
+1. **GIẢI QUYẾT 3 VẤN ĐỀ KIẾN TRÚC DO ANH HDQB CHỈ RA**:
+   - **Vấn đề 1 (Vị trí Notebook)**: Tệp `colab_gpu_depth12_miner.ipynb` trước đó đặt sai vị trí ở gốc dự án. Đã di chuyển chuẩn hóa 100% vào thư mục [`notebooks/colab_gpu_depth12_miner.ipynb`](file:///Users/hdqb/workspaces/xiangqi-rim/notebooks/colab_gpu_depth12_miner.ipynb).
+   - **Vấn đề 2 (Loại bỏ tệp trùng lặp)**: Xóa sổ tệp `gpu_t4_depth12_miner.py` (bản ngây thơ cũ) để duy trì duy nhất 1 nguồn sự thật (Single Source of Truth) `gpu_t4_real_rule_miner.py`.
+   - **Vấn đề 3 (Khởi chạy Standalone 100% bằng Cell)**: Không phụ thuộc gọi lệnh subprocess chạy script `.py` bên ngoài. Đã nhúng NGUYÊN VĂN mã nguồn Động cơ PyTorch Tensor Core, Động cơ Luật Cờ Tướng Vật Lý, và Bộ 6 Checkpoint Unit Tests trực tiếp vào trong Cell 2 và Cell 3 của Notebook [`notebooks/colab_gpu_depth12_miner.ipynb`](file:///Users/hdqb/workspaces/xiangqi-rim/notebooks/colab_gpu_depth12_miner.ipynb).
 
-2. **KẾT QUẢ ĐẠT ĐƯỢC (`v9.0.0-gpu-embedded`)**:
-   - Notebook [`colab_gpu_depth12_miner.ipynb`](file:///Users/hdqb/workspaces/xiangqi-rim/colab_gpu_depth12_miner.ipynb) tự đủ 100% (Standalone), có thể chia sẻ hoặc mở trực tiếp trên Google Colab mà không phụ thuộc bất kỳ file nào khác!
-   - **Nâng Cấp Phiên Bản Mới**: `v9.0.0-gpu-embedded` (Build `2026-08-09 23:32:00 ICT`).
+2. **KẾT QUẢ ĐẠT ĐƯỢC**:
+   - Bất kỳ ai mở tệp `notebooks/colab_gpu_depth12_miner.ipynb` trên Google Colab chỉ cần nhấn **"Run all" (1-Click)** là toàn bộ tiến trình Cài đặt $\rightarrow$ Kiểm chấm 6 bài Unit Tests $\rightarrow$ Khai thác 30,000 ván $\rightarrow$ Đẩy HuggingFace Hub sẽ thực thi 100% trực tiếp trong lòng các cell Colab.
+   - **Nâng Cấp Phiên Bản Mới**: `v8.3.0-gpu-standalone` (Build `2026-08-09 23:36:00 ICT`).
