@@ -644,3 +644,19 @@ $$\text{Điểm Chất Lượng Agent} = \text{Kế Hoạch Rõ Ràng} + \text{V
    - **`board.material()`**: Tính toán chênh lệch điểm Centipawn thật (`mat_diff`), động sinh ra mô tả Ưu thế / Bất lợi của hai bên.
    - **`Candidates Dynamic Array`**: Trích xuất Top 3 nước đi hợp lệ vật lý hàng đầu (`legal_moves[:3]`), đánh dấu nước đi `BEST` được chọn.
    - **Nâng Cấp Phiên Bản Mới**: `v8.7.0-dynamic-thought` (Build `2026-08-10 00:17:00 ICT`).
+
+---
+
+### XLVI. CHUYỂN ĐỔI GIAO THỨC AUTO-PUSH SANG ĐỆM THỜI GIAN 5 PHÚT/LẦN & FINAL FLUSH (`v8.8.0-time-buffer-push`)
+
+1. **PHÁT HIỆN LỖI NGUYÊN THỂ BỎNG MẠNG (NETWORK BOTTLENECK & API OVERLOAD)**:
+   - Theo phân tích từ câu hỏi của anh HDQB: *"tự động push mỗi 20 record như vậy sẽ cần mạng tuyến tính ?"*.
+   - Với tốc độ GPU Tesla T4 ~245.4 FEN/s (~14,700 FEN/phút), 20 ván cờ cờ chỉ mất đúng **4 giây**!
+   - Việc đẩy file mỗi 20 ván gây ra 2 thảm họa mạng:
+     1. Gửi hàng trăm HTTP POST requests liên tục gây ngẽn đường truyền mạng tuyến tính và dính lỗi `HTTP 429 Too Many Requests (Rate Limit)` của Hugging Face Hub.
+     2. Tạo ra hàng ngàn Git Commits nhỏ lẻ làm phình to vô ích dung lượng lịch sử git của dataset repository.
+
+2. **TRIỂN KHAI GIAO THỨC ĐỆM THỜI GIAN BĂNG THÔNG TỐI ƯU (Commit `ddc1f53`)**:
+   - **`Time-Buffered Interval Push (300s)`**: Đổi điều kiện đẩy checkpoint từ `game_idx % 20` sang đệm thời gian **mỗi 5 phút (300 giây)** một lần.
+   - **`Final Flush Guarantee`**: Khi hoàn thành toàn bộ 30,000 ván cờ, hệ thống sẽ thực hiện 1 lần đẩy cuối cùng (`Final Flush Push`) bảo đảm 100% dữ liệu nguyên vẹn.
+   - **Nâng Cấp Phiên Bản Mới**: `v8.8.0-time-buffer-push` (Build `2026-08-10 00:31:00 ICT`).
