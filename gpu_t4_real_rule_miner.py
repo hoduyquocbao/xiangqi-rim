@@ -1,6 +1,6 @@
-# === XIANGQI-R1 REAL RULE GPU T4 DATA MINER ENGINE (v12.0-JRCP5-GPU-2PLY-MINIMAX) ===
+# === XIANGQI-R1 REAL RULE GPU T4 DATA MINER ENGINE (v12.1-JRCP5-GPU-OOM-FIREWALL-2PLY) ===
 # 100% PHYSICAL XIANGQI RULES + FULL JRCP 5.0 32-DIMENSIONAL ULTRA-DEEP TACTICAL THOUGHT CHAIN
-# + GPU 2-PLY MINIMAX ROLLOUT SEARCH (30,000-60,000 FENs / Mega-Batch GPU Tensor Evaluation)
+# + GPU 2-PLY MINIMAX ROLLOUT SEARCH WITH SUB-BATCH CHUNKING OOM FIREWALL (4,096 Tensors / Sub-Batch)
 # + 36 KẾ BINH PHÁP + THẾ TRẬN KINH ĐIỂN + PERPETUAL CHECK/CHASE RULE ENGINE + OPPONENT COUNTER AUDIT
 # + DYNAMIC OPENING FEN SAMPLER + SIEVE DEDUP + AUTO HF PUSH + REAL-TIME HEARTBEAT (3s)
 
@@ -1531,14 +1531,14 @@ def mine(target_games: int = 1000, depth: int = 12):
     print(f"🧠 System RAM    : {ram_gb:.2f} GB RAM", flush=True)
     print(f"⚡ GPU Device    : {torch.cuda.get_device_name(0)} ({vram_total:.2f} GB VRAM | Allocated: {vram_allocated:.2f} GB)", flush=True)
     print(f"🧰 Software Env  : Python {python_ver} | PyTorch {torch_ver} | CUDA {torch.version.cuda}", flush=True)
-    print(f"🏷️ Engine Version : v12.0-jrcp5-gpu-2ply-minimax (Build 2026-08-10 03:08:00 ICT)", flush=True)
+    print(f"🏷️ Engine Version : v12.1-jrcp5-gpu-oom-firewall-2ply (Build 2026-08-10 03:16:00 ICT)", flush=True)
     print(f"🎮 Target Config  : {target_games:,} Games | Search Depth {depth}", flush=True)
     print(f"🆔 Unique Node ID : node_{node_id}", flush=True)
     print(f"📦 File Chunk Cap : 50 MB / Chunk (Active: Chunk #{chunk_idx:04d})", flush=True)
     print(f"💾 Active Output  : {out_file}", flush=True)
     print(f"🔑 HF Hub Status  : {'CONNECTED (' + dataset_repo + ')' if api else 'DISABLED (No HF_TOKEN)'}", flush=True)
     print(f"🧠 Model Params   : {param_count:,} ({model_mb:.1f} MB) — Deep Residual 4-Block 512ch", flush=True)
-    print(f"🚀 Parallel Mode  : {PARALLEL} ván cờ song song / Mega-Batch GPU Evaluation", flush=True)
+    print(f"🚀 Parallel Mode  : {PARALLEL} ván cờ song song / GPU 2-Ply Minimax (4,096 Sub-Batch Chunking)", flush=True)
     print(f"📐 Thought Chain  : JRCP 5.0 — 32 chiều kích suy tưởng chiến thuật & luật đấu", flush=True)
     print(f"💓 Progress Log   : Real-Time Heartbeat Log mỗi 3.0 giây / 5 ván cờ", flush=True)
     print("==================================================================\n", flush=True)
@@ -1640,14 +1640,22 @@ def mine(target_games: int = 1000, depth: int = 12):
         if not slot_info:
             break
 
-        # === GPU MEGA-BATCH EVALUATION (30,000 - 60,000 2-Ply FENs / batch) ===
+        # === GPU MEGA-BATCH EVALUATION WITH SUB-BATCH CHUNKING (OOM FIREWALL) ===
         all_scores = None
         eval_start = time.time()
         if all_tensors:
-            mega_batch = torch.stack(all_tensors)
-            with torch.no_grad():
-                with torch.amp.autocast('cuda'):
-                    all_scores = evaluator(mega_batch).squeeze(-1)
+            SUB_BATCH_SIZE = 4096  # An toàn tuyệt đối chống OOM trên Tesla T4 16GB
+            score_list = []
+            
+            for i in range(0, len(all_tensors), SUB_BATCH_SIZE):
+                chunk_tensors = all_tensors[i:i + SUB_BATCH_SIZE]
+                sub_batch = torch.stack(chunk_tensors)
+                with torch.no_grad():
+                    with torch.amp.autocast('cuda'):
+                        sub_scores = evaluator(sub_batch).squeeze(-1)
+                score_list.append(sub_scores)
+            
+            all_scores = torch.cat(score_list, dim=0)
             torch.cuda.synchronize()
         eval_ms = (time.time() - eval_start) * 1000.0
 
