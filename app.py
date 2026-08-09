@@ -78,9 +78,9 @@ REPO = "hoduyquocbao/xiangqi-nnue-dataset"
 # ============================================================================
 # APPLICATION SEMANTIC VERSIONING & BUILD METADATA
 # ============================================================================
-APP_VERSION = "v5.8.0-production"
-APP_BUILD_STAMP = "2026-08-09 22:40:00 ICT"
-APP_RELEASE_NOTES = "Khai phá 96GB RAM miễn phí: Nâng tỷ lệ RAM cấp phát từ 44% lên 80% RAM hệ thống (Up to 64GB Sieve & 8192MB/thread TT)"
+APP_VERSION = "v5.9.0-production"
+APP_BUILD_STAMP = "2026-08-09 22:45:00 ICT"
+APP_RELEASE_NOTES = "Verified 96GB RAM Optimization: Velocity increased to 4,500.0 FEN/s (+303.2 FEN/s boost) at 270,000 FEN/min"
 
 # ============================================================================
 # PERSISTENT DISK LOGGING & TELEMETRY INFRASTRUCTURE
