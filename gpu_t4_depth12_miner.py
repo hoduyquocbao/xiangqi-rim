@@ -174,7 +174,7 @@ def run_gpu_t4_mining(target_games: int = 30000, target_depth: int = 12, batch_s
             overall_elapsed = max(0.1, time.time() - start_time)
             avg_fen_s = total_samples / overall_elapsed
 
-            print(f"⚡ [GPU T4 Step {step:04d}] Batch={batch_size:,} | Step Time={step_elapsed:.3f}s | Speed={fen_s:,.1f} FEN/s | Total Games={total_games_completed:,}/{target_games:,}")
+            print(f"⚡ [GPU T4 Step {step:04d}] Batch={batch_size:,} | Step Time={step_elapsed:.3f}s | Speed={fen_s:,.1f} FEN/s | Total Games={total_games_completed:,}/{target_games:,}", flush=True)
 
             # Auto Push Hub mỗi 10 steps
             if step % 10 == 0 and token:
