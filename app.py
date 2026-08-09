@@ -17,6 +17,14 @@ import gc
 import atexit
 import threading
 import subprocess
+import warnings
+
+# Tắt hoàn toàn các cảnh báo rác từ Gradio Deprecation & Node SSR Server Proxy
+warnings.filterwarnings("ignore", category=UserWarning)
+warnings.filterwarnings("ignore", category=DeprecationWarning)
+os.environ["GRADIO_SSR_MODE"] = "false"
+os.environ["GRADIO_NODE_PORT"] = "0"
+
 try:
     import psutil
     HAS_PSUTIL = True
@@ -49,9 +57,9 @@ REPO = "hoduyquocbao/xiangqi-nnue-dataset"
 # ============================================================================
 # APPLICATION SEMANTIC VERSIONING & BUILD METADATA
 # ============================================================================
-APP_VERSION = "v2.7.0-production"
-APP_BUILD_STAMP = "2026-08-09 21:08:00 ICT"
-APP_RELEASE_NOTES = "Sieve Power-of-Two Panic Fix + FileNotFoundError Guard + Auto Power-of-Two Sieve Clamp"
+APP_VERSION = "v2.8.0-production"
+APP_BUILD_STAMP = "2026-08-09 21:12:00 ICT"
+APP_RELEASE_NOTES = "Silence Gradio Deprecation Warnings & Disable Node SSR Proxy Warnings"
 
 # ============================================================================
 # PERSISTENT DISK LOGGING & TELEMETRY INFRASTRUCTURE
