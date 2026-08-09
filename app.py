@@ -49,9 +49,70 @@ REPO = "hoduyquocbao/xiangqi-nnue-dataset"
 # ============================================================================
 # APPLICATION SEMANTIC VERSIONING & BUILD METADATA
 # ============================================================================
-APP_VERSION = "v2.5.0-production"
-APP_BUILD_STAMP = "2026-08-09 20:38:00 ICT"
-APP_RELEASE_NOTES = "cgroups RAM Limit + Auto-Sync Timer + Live Version Header"
+APP_VERSION = "v2.6.0-production"
+APP_BUILD_STAMP = "2026-08-09 20:55:00 ICT"
+APP_RELEASE_NOTES = "Disk Telemetry Logger + Persistent Process Crash Audit"
+
+# ============================================================================
+# PERSISTENT DISK LOGGING & TELEMETRY INFRASTRUCTURE
+# ============================================================================
+LOG_DIR = os.path.abspath("logs")
+os.makedirs(LOG_DIR, exist_ok=True)
+
+TELEMETRY_LOG_FILE = os.path.join(LOG_DIR, "system_telemetry.jsonl")
+MINER_DISK_LOG_FILE = os.path.join(LOG_DIR, "miner_stdout_stderr.log")
+
+class TelemetryLogger:
+    """Hệ thống Logger & Telemetry chuyên nghiệp ghi vĩnh viễn ra đĩa cứng."""
+
+    @staticmethod
+    def log_event(event_name: str, payload: dict):
+        """Ghi nhận sự kiện telemetry dạng JSON-Lines vào logs/system_telemetry.jsonl."""
+        record = {
+            "timestamp": time.strftime("%Y-%m-%d %H:%M:%S ICT"),
+            "epoch": round(time.time(), 3),
+            "event": event_name,
+            "payload": payload
+        }
+        try:
+            with open(TELEMETRY_LOG_FILE, "a", encoding="utf-8") as f:
+                f.write(json.dumps(record, ensure_ascii=False) + "\n")
+        except Exception as e:
+            print(f"⚠️ Telemetry log write error: {e}")
+
+    @staticmethod
+    def log_error(event_name: str, exit_code: int, error_msg: str, last_logs: list = None):
+        """Ghi sự cố crash/panic với exit_code và vết log đầy đủ ra đĩa cứng."""
+        payload = {
+            "exit_code": exit_code,
+            "error_msg": error_msg,
+            "last_logs": last_logs or []
+        }
+        TelemetryLogger.log_event(f"ERROR_{event_name}", payload)
+
+    @staticmethod
+    def read_tail_disk_logs(max_lines: int = 50) -> str:
+        """Đọc 50 dòng log đĩa cứng mới nhất từ miner_stdout_stderr.log."""
+        if os.path.exists(MINER_DISK_LOG_FILE):
+            try:
+                with open(MINER_DISK_LOG_FILE, "r", encoding="utf-8", errors="replace") as f:
+                    lines = f.readlines()
+                    return "".join(lines[-max_lines:])
+            except Exception as e:
+                return f"⚠️ Không thể đọc tệp log đĩa: {e}"
+        return "📜 Chưa có nhật ký đĩa cứng nào được ghi."
+
+    @staticmethod
+    def read_tail_telemetry_events(max_events: int = 20) -> str:
+        """Đọc các sự kiện telemetry mới nhất từ logs/system_telemetry.jsonl."""
+        if os.path.exists(TELEMETRY_LOG_FILE):
+            try:
+                with open(TELEMETRY_LOG_FILE, "r", encoding="utf-8", errors="replace") as f:
+                    lines = [l.strip() for l in f.readlines() if l.strip()]
+                    return "\n".join(lines[-max_events:])
+            except Exception as e:
+                return f"⚠️ Không thể đọc tệp telemetry: {e}"
+        return "📜 Chưa có dữ liệu Telemetry."
 
 # Biến toàn cục theo dõi tiến trình background
 process = None
@@ -534,6 +595,24 @@ def start_mining(worker, games, depth, threads, tt_mb, sieve_mb, seed, token, re
         bufsize=1
     )
 
+    disk_log_handle = open(MINER_DISK_LOG_FILE, "a", encoding="utf-8")
+    disk_log_handle.write(f"\n============================================================================\n")
+    disk_log_handle.write(f"🚀 KHỞI CHẠY PHIÊN MINING #{stamp} | Worker: {worker} | Threads: {threads} | Depth: {depth}\n")
+    disk_log_handle.write(f"============================================================================\n")
+    disk_log_handle.flush()
+
+    TelemetryLogger.log_event("MINING_START", {
+        "worker": worker,
+        "games": games,
+        "depth": depth,
+        "threads": threads,
+        "tt_mb": tt_mb,
+        "sieve_mb": sieve_mb,
+        "seed": seed,
+        "pid": process.pid,
+        "out_file": out_file
+    })
+
     session_info = {
         "worker": worker,
         "games": games,
@@ -568,6 +647,10 @@ def start_mining(worker, games, depth, threads, tt_mb, sieve_mb, seed, token, re
                 logs.append(line_clean)
                 if len(logs) > 100:
                     logs.pop(0)
+
+                # Ghi trực tiếp 100% dòng ra tệp đĩa cứng vĩnh viễn
+                disk_log_handle.write(line_clean + "\n")
+                disk_log_handle.flush()
 
                 if "Samples:" in line_clean:
                     try:
@@ -636,27 +719,47 @@ def start_mining(worker, games, depth, threads, tt_mb, sieve_mb, seed, token, re
         exit_code = process.poll() if process else -1
         total_elapsed = time.time() - start_time
 
+        try:
+            if process and process.stdout:
+                rem = process.stdout.read()
+                if rem:
+                    disk_log_handle.write(rem + "\n")
+                    disk_log_handle.flush()
+        except Exception:
+            pass
+
+        disk_log_handle.write(f"=== PHIÊN KẾT THÚC #{stamp} | Exit Code: {exit_code} | Duration: {total_elapsed:.1f}s ===\n\n")
+        disk_log_handle.close()
+
     # AUDIT MÃ THOÁT OS (TELEMETRY CRASH AUDIT)
     if exit_code is not None and exit_code != 0:
         oom_warning = ""
         if exit_code in [137, -9]:
-            oom_warning = "\n🚨 **NGUYÊN NHÂN**: Tiến trình bị Linux kernel OOM Killer ngắt do CẤP PHÁT VƯỢT QUÁ RAM CONTAINER! Vui lòng giảm TT_MB hoặc Sieve_MB."
+            oom_warning = "\n🚨 **NGUYÊN NHÂN GỐC RỄ**: Tiến trình bị Linux Kernel OOM Killer ngắt do CẤP PHÁT VƯỢT QUÁ RAM CONTAINER! Vui lòng giảm TT_MB hoặc Sieve_MB."
 
-        crash_status = f"""### ❌ PHIÊN KHAI THÁC BỊ NGẮT ĐỘT NGỘT (CRASH TELEMETRY)
-- **Mã Thoát (Exit Code)**: `{exit_code}`{oom_warning}
+        # Ghi log Telemetry chuyên nghiệp vĩnh viễn
+        TelemetryLogger.log_error("ENGINE_CRASH", exit_code, f"Process terminated with exit code {exit_code}", logs[-30:])
+
+        disk_log_tail = TelemetryLogger.read_tail_disk_logs(35)
+
+        crash_status = f"""### ❌ PHIÊN KHAI THÁC BỊ NGẮT ĐỘT NGỘT (CRASH TELEMETRY AUDIT)
+- **Mã Thoát (Exit Code OS)**: `{exit_code}`{oom_warning}
 - **Worker Node**: `{worker}`
 - **Số mẫu FEN đã lưu**: `{current_samples:,}` mẫu
 - **Tệp xuất**: `{out_file}`
+- **Tệp Log Đĩa Cứng Vĩnh Viễn**: `{MINER_DISK_LOG_FILE}`
+- **Tệp Telemetry Event**: `{TELEMETRY_LOG_FILE}`
 - **Thời gian chạy trước crash**: `{total_elapsed:.1f}`s
 """
-        crash_metrics = f"""| Chỉ Số Telemetry Sự Cố | Chi Tiết |
+        crash_metrics = f"""| Chỉ Số Telemetry Sự Cố | Chi Tiết Thực Tế |
 |---|---|
 | 🚨 **Trạng Thái Session** | `CRASHED` |
-| 🔢 **Exit Code OS** | `{exit_code}`{oom_msg if 'oom_msg' in locals() else ''} |
+| 🔢 **Exit Code OS** | `{exit_code}` |
 | 🧩 **Mẫu Đã Ghi** | `{current_samples:,}` mẫu |
 | 📁 **Tệp Dữ Liệu** | `{out_file}` |
+| 📜 **Disk Log File** | `{MINER_DISK_LOG_FILE}` |
 """
-        crash_logs = "\n".join(logs[-35:]) + f"\n\n❌ PHIÊN BỊ NGẮT VỚI EXIT CODE {exit_code}!"
+        crash_logs = f"❌ NHẬT KÝ VẾT LỖI TỪ ĐĨA CỨNG (Exit Code {exit_code}):\n{disk_log_tail}"
 
         session_info["status"] = "CRASHED"
         session_info["exit_code"] = exit_code
@@ -837,13 +940,18 @@ Vận hành **Native Rust Engine {APP_VERSION}** tự động scaling theo CPU Q
                         variant="secondary",
                         size="lg"
                     )
+                    view_telemetry_btn = gr.Button(
+                        "📜 TRUY VẤN LOG ĐĨA & TELEMETRY",
+                        variant="secondary",
+                        size="lg"
+                    )
 
             with gr.Column(scale=2):
                 gr.Markdown("### 📊 Trạng Thái & Báo Cáo Real-Time Hệ Thống")
                 status_box = gr.Markdown(f"Sẵn sàng khai thác dữ liệu trên hệ thống `{cpu_logical}` vCPUs & `{mem_total:.1f} GB` RAM...")
                 metrics_box = gr.Markdown("Chờ khởi chạy...")
                 logs_box = gr.Textbox(
-                    label="📜 Nhật ký Native Engine Real-Time (Streaming Logs)",
+                    label="📜 Nhật ký Native Engine Real-Time & Persistent Disk Telemetry",
                     lines=15,
                     max_lines=25,
                     interactive=False
@@ -865,6 +973,17 @@ Vận hành **Native Rust Engine {APP_VERSION}** tự động scaling theo CPU Q
             fn=kill_all_miner_processes,
             inputs=[],
             outputs=[status_box]
+        )
+
+        def fetch_disk_telemetry_logs():
+            events = TelemetryLogger.read_tail_telemetry_events(15)
+            disk_logs = TelemetryLogger.read_tail_disk_logs(40)
+            return f"📜 NHẬT KÝ TELEMETRY EVENTS (logs/system_telemetry.jsonl):\n{events}\n\n📜 NHẬT KÝ ĐĨA CỨNG (logs/miner_stdout_stderr.log):\n{disk_logs}"
+
+        view_telemetry_btn.click(
+            fn=fetch_disk_telemetry_logs,
+            inputs=[],
+            outputs=[logs_box]
         )
 
         app.load(
