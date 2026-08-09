@@ -69,9 +69,9 @@ REPO = "hoduyquocbao/xiangqi-nnue-dataset"
 # ============================================================================
 # APPLICATION SEMANTIC VERSIONING & BUILD METADATA
 # ============================================================================
-APP_VERSION = "v4.4.0-production"
-APP_BUILD_STAMP = "2026-08-09 21:52:00 ICT"
-APP_RELEASE_NOTES = "Revert free_port_if_occupied & delegate socket/container management to native HuggingFace Space environment"
+APP_VERSION = "v4.5.0-production"
+APP_BUILD_STAMP = "2026-08-09 21:55:00 ICT"
+APP_RELEASE_NOTES = "Add Extended 45s Socket TIME_WAIT Drain Loop for HuggingFace Space Clean Launch"
 
 # ============================================================================
 # PERSISTENT DISK LOGGING & TELEMETRY INFRASTRUCTURE
@@ -1359,4 +1359,15 @@ if __name__ == "__main__":
     port = int(os.environ.get("PORT", os.environ.get("GRADIO_SERVER_PORT", 7860)))
     demo = create_app()
     demo.queue()
-    demo.launch(server_name="0.0.0.0", server_port=port)
+
+    # Vòng lặp chờ socket TIME_WAIT xả sạch (15 lần x 3s = 45s) để HF Space khởi động mượt mà
+    for attempt in range(1, 16):
+        try:
+            demo.launch(server_name="0.0.0.0", server_port=port)
+            break
+        except OSError as e:
+            if "Cannot find empty port" in str(e) or "7860" in str(e):
+                print(f"⏳ Cổng {port} đang được HF Space Kernel giải phóng socket (Lần thử {attempt}/15)... Tự động thử lại sau 3s")
+                time.sleep(3)
+            else:
+                raise e

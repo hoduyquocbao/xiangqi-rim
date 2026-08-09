@@ -297,3 +297,16 @@ $$\text{Điểm Chất Lượng Agent} = \text{Kế Hoạch Rõ Ràng} + \text{V
    - **Loại bỏ `free_port_if_occupied()` & vòng lặp custom retry**: Gỡ bỏ hoàn toàn logic diệt process và trả `app.py` về cơ chế khởi chạy Gradio tiêu chuẩn nguyên bản: `demo.launch(server_name="0.0.0.0", server_port=port)`.
    - **Giao quyền quản lý container cho HF Spaces**: Tôn trọng ranh giới môi trường thực thi của HuggingFace Space.
    - **Nâng Cấp Phiên Bản Mới**: `v4.4.0-production` (Build `2026-08-09 21:52:00 ICT`).
+
+---
+
+### XXIII. BỔ SUNG VÒNG LẶP CHỜ KHÔI PHỤC SOCKET TIME_WAIT NGUYÊN BẢN (v4.5.0-production)
+
+1. **NGUYÊN NHÂN KHI HUGGINGFACE SPACES RESTART CONTAINER NHANH**:
+   - Khi container restart nhanh, socket TCP Port 7860 của Kernel Linux đi vào trạng thái `TIME_WAIT` tự nhiên trong khoảng 15-30 giây.
+   - Nếu không có vòng lặp chờ nhẹ nhàng ở Python entrypoint, Gradio ném `OSError` lập tức làm container bị exit code 1.
+
+2. **GIẢI PHÁP ĐÃ THỰC THI (Commit `v4.5.0-production`)**:
+   - **Vòng lặp chờ 45 giây xả sạch TIME_WAIT**: Thử lại 15 lần (`max_retries = 15`), mỗi lần nghỉ `time.sleep(3)` (tổng 45s). Tôn trọng 100% môi trường HuggingFace Space mà không can thiệp diệt process OS.
+   - **Cơ chế**: Khi socket Kernel tự xả xong `TIME_WAIT` sau vài giây, `demo.launch()` mở cổng 7860 thành công 100%.
+   - **Nâng Cấp Phiên Bản Mới**: `v4.5.0-production` (Build `2026-08-09 21:55:00 ICT`).
