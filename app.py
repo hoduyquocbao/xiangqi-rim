@@ -69,9 +69,9 @@ REPO = "hoduyquocbao/xiangqi-nnue-dataset"
 # ============================================================================
 # APPLICATION SEMANTIC VERSIONING & BUILD METADATA
 # ============================================================================
-APP_VERSION = "v4.2.0-production"
-APP_BUILD_STAMP = "2026-08-09 21:48:00 ICT"
-APP_RELEASE_NOTES = "Add Resilient Socket Port 7860 Retry Loop (Fix HF Space Restart TIME_WAIT OSError)"
+APP_VERSION = "v4.3.0-production"
+APP_BUILD_STAMP = "2026-08-09 21:50:00 ICT"
+APP_RELEASE_NOTES = "Add Zombie Socket Process Killer (Fix Port 7860 Zombie Process Occupation on Container Restart)"
 
 # ============================================================================
 # PERSISTENT DISK LOGGING & TELEMETRY INFRASTRUCTURE
@@ -1350,6 +1350,24 @@ Vận hành **Native Rust Engine {APP_VERSION}** tự động scaling theo CPU Q
 
     return app
 
+def free_port_if_occupied(port: int):
+    """Tìm và diệt tận gốc các tiến trình zombie rác đang chiếm giữ socket port trước khi khởi chạy Gradio server."""
+    if not HAS_PSUTIL:
+        return
+    current_pid = os.getpid()
+    for proc in psutil.process_iter(['pid', 'name']):
+        try:
+            if proc.info['pid'] == current_pid:
+                continue
+            connections = proc.connections(kind='inet')
+            for conn in connections:
+                if conn.laddr and conn.laddr.port == port:
+                    print(f"🚨 PHÁT HIỆN ZOMBIE PROCESS PID {proc.info['pid']} ({proc.info['name']}) ĐANG KẸT TRÊN PORT {port}. ĐANG DIỆT TẬN GỐC...")
+                    proc.kill()
+                    time.sleep(0.5)
+        except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess, AttributeError):
+            pass
+
 if __name__ == "__main__":
     print("============================================================================")
     print(f"🚀 XIANGQI-RIM APPLICATION VERSION: {APP_VERSION}")
@@ -1357,18 +1375,23 @@ if __name__ == "__main__":
     print(f"📝 RELEASE NOTES: {APP_RELEASE_NOTES}")
     print("============================================================================")
     port = int(os.environ.get("PORT", os.environ.get("GRADIO_SERVER_PORT", 7860)))
+    
+    # Diệt zombie process đang giữ port 7860 trước khi khởi tạo app
+    free_port_if_occupied(port)
+
     demo = create_app()
     demo.queue()
 
-    # Resilient Socket Port Retry Loop: Chống treo/crash container HF Space khi socket 7860 đang trong trạng thái TIME_WAIT
+    # Resilient Socket Port Retry Loop kết hợp Zombie Socket Process Killer
     max_retries = 10
     for attempt in range(1, max_retries + 1):
+        free_port_if_occupied(port)
         try:
             demo.launch(server_name="0.0.0.0", server_port=port)
             break
         except OSError as e:
             if "Cannot find empty port" in str(e) or "7860" in str(e):
-                print(f"⚠️ Port {port} đang trong trạng thái TIME_WAIT/bị chiếm tạm thời (Lần thử {attempt}/{max_retries}). Thử lại sau 2 giây...")
+                print(f"⚠️ Port {port} chưa sẵn sàng (Lần thử {attempt}/{max_retries}). Thử lại sau 2 giây...")
                 time.sleep(2)
             else:
                 raise e
