@@ -83,27 +83,58 @@ def get_cgroup_cpu_quota() -> float:
 
     return 0.0
 
+def get_cgroup_memory_limit() -> float:
+    """Tự động nhận diện giới hạn RAM thực tế bị cgroups/HuggingFace giới hạn cho container."""
+    v1_file = "/sys/fs/cgroup/memory/memory.limit_in_bytes"
+    if os.path.exists(v1_file):
+        try:
+            val = int(open(v1_file).read().strip())
+            if 0 < val < (1 << 40):
+                return round(val / (1024 ** 3), 2)
+        except Exception:
+            pass
+
+    v2_file = "/sys/fs/cgroup/memory.max"
+    if os.path.exists(v2_file):
+        try:
+            txt = open(v2_file).read().strip()
+            if txt != "max":
+                val = int(txt)
+                if 0 < val < (1 << 40):
+                    return round(val / (1024 ** 3), 2)
+        except Exception:
+            pass
+
+    return 0.0
+
 def get_system_specs():
-    """Nhận diện chính xác thông số phần cứng thực tế và khai phá CPU quota bị HuggingFace giới hạn."""
+    """Nhận diện chính xác thông số phần cứng thực tế và khai phá CPU & RAM quota bị HuggingFace giới hạn."""
     raw_logical = os.cpu_count() or 12
     cgroup_cpus = get_cgroup_cpu_quota()
 
     if cgroup_cpus > 0:
         cpu_effective = max(1, int(cgroup_cpus))
     else:
-        cpu_effective = min(raw_logical, 32)  # Nâng từ 12 lên 32 cores cho bare-metal
+        cpu_effective = min(raw_logical, 32)
 
     cpu_logical = max(1, cpu_effective)
+    cgroup_mem = get_cgroup_memory_limit()
 
     if HAS_PSUTIL:
         phys = psutil.cpu_count(logical=False) or max(1, cpu_logical // 2)
         cpu_physical = min(phys, cpu_logical)
-        mem_total = psutil.virtual_memory().total / (1024 ** 3)
-        mem_avail = psutil.virtual_memory().available / (1024 ** 3)
+        host_mem_total = psutil.virtual_memory().total / (1024 ** 3)
+        host_mem_avail = psutil.virtual_memory().available / (1024 ** 3)
+        if cgroup_mem > 0:
+            mem_total = min(host_mem_total, cgroup_mem)
+            mem_avail = min(host_mem_avail, cgroup_mem)
+        else:
+            mem_total = host_mem_total
+            mem_avail = host_mem_avail
     else:
         cpu_physical = max(1, cpu_logical // 2)
-        mem_total = 64.0
-        mem_avail = 64.0
+        mem_total = cgroup_mem if cgroup_mem > 0 else 64.0
+        mem_avail = mem_total
 
     return cpu_logical, cpu_physical, mem_total, mem_avail, raw_logical, cgroup_cpus
 
