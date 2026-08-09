@@ -18,12 +18,23 @@ import atexit
 import threading
 import subprocess
 import warnings
+import logging
 
 # Tắt hoàn toàn các cảnh báo rác từ Gradio Deprecation & Node SSR Server Proxy
 warnings.filterwarnings("ignore", category=UserWarning)
 warnings.filterwarnings("ignore", category=DeprecationWarning)
 os.environ["GRADIO_SSR_MODE"] = "false"
 os.environ["GRADIO_NODE_PORT"] = "0"
+
+# Lọc bỏ ngoại lệ SSE disconnect rác khi server restart (Response already started)
+class SuppressSSEDisconnectFilter(logging.Filter):
+    def filter(self, record: logging.LogRecord) -> bool:
+        msg = record.getMessage()
+        if "response already started" in msg or "sse_stream" in msg:
+            return False
+        return True
+
+logging.getLogger("uvicorn.error").addFilter(SuppressSSEDisconnectFilter())
 
 try:
     import psutil
@@ -57,9 +68,9 @@ REPO = "hoduyquocbao/xiangqi-nnue-dataset"
 # ============================================================================
 # APPLICATION SEMANTIC VERSIONING & BUILD METADATA
 # ============================================================================
-APP_VERSION = "v2.9.0-production"
-APP_BUILD_STAMP = "2026-08-09 21:18:00 ICT"
-APP_RELEASE_NOTES = "Fix Active Session UI Auto-Recovery on Reload (saved_pid_alive + multi-binary cmdline matching)"
+APP_VERSION = "v3.0.0-production"
+APP_BUILD_STAMP = "2026-08-09 21:20:00 ICT"
+APP_RELEASE_NOTES = "Suppress Orphaned SSE Stream Disconnect Exception + Active Session UI Auto-Recovery"
 
 # ============================================================================
 # PERSISTENT DISK LOGGING & TELEMETRY INFRASTRUCTURE

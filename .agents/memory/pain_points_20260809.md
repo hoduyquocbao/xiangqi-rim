@@ -153,3 +153,18 @@ $$\text{Điểm Chất Lượng Agent} = \text{Kế Hoạch Rõ Ràng} + \text{V
 2. **GIẢI PHÁP ĐÃ XỬ LÝ NÂNG CẤP VÂN TỐC KHÔI PHỤC (Commit `v2.9.0-production`)**:
    - **Thêm helper `is_miner_cmdline(cmdline)`**: Nhận diện tất cả các tên nhị phân Rust miner (`21_ram64g_mine`, `23_jrcp3_ram64g_miner`, `mine_dataset`, `xiangrust`, `target/release/examples`).
    - **Bổ sung Kiểm Tra Tiến Trình Theo `saved_pid`**: Đọc `saved_pid` từ `data/active_session.json` và kiểm tra `saved_pid_alive` thông qua `psutil.pid_exists(saved_pid)` / `os.kill(saved_pid, 0)`. Nếu tiến trình ngầm vẫn sống trong OS, `sync_on_load()` 100% khôi phục lại trạng thái **ĐANG KHAI THÁC** cùng toàn bộ thông số FEN/s, dung lượng tệp, và tail logs live!
+
+---
+
+### XII. LỌC BỎ NGOẠI LỆ DISCONNECT RÁC STARLETTE SSE KHI SERVER RESTART (v3.0.0-production)
+
+1. **NGUYÊN NHÂN NỔI TRACEBACK `RuntimeError: Caught handled exception, but response already started`**:
+   - Khi ứng dụng Python vừa restart (`=== Application restarted at ... ===`), bộ nhớ RAM của Gradio Session Queue bị dọn sạch.
+   - Các tab trình duyệt cũ vẫn giữ luồng `SSE Stream` (`/queue/data`) và tiếp tục gửi polling request tới Server bằng Session ID cũ.
+   - Gradio xử lý kết nối cũ đã gửi HTTP Header `200 OK (text/event-stream)` ra mạng. Ngay sau đó Gradio không thấy Session ID cũ trong RAM nên ném ra `HTTPException(404: Not Found)`.
+   - Do Header `200 OK` đã phát đi rồi, Starlette/FastAPI không thể gửi thêm Header `404` đè lên được nữa, tạo ra ngoại lệ `RuntimeError("Caught handled exception, but response already started.")`.
+   - **ĐÂY KHÔNG PHẢI LỖI CHƯƠNG TRÌNH**, chỉ là xung đột ngắt kết nối không đồng bộ rác khi Server restart trong khi Client cũ vẫn duy trì poll. Khi người dùng F5/reload trang, trình duyệt tự mở SSE stream mới và hết lỗi 100%.
+
+2. **GIẢI PHÁP ĐÃ THỰC THI (Commit `v3.0.0-production`)**:
+   - **Tạo `SuppressSSEDisconnectFilter`**: Gắn filter vào `logging.getLogger("uvicorn.error")` để triệt tiêu toàn bộ log rác `response already started` và `sse_stream` khi ứng dụng restart.
+   - **Nâng Cấp Phiên Bản Mới**: `v3.0.0-production` (Build `2026-08-09 21:20:00 ICT`).
