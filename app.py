@@ -19,6 +19,7 @@ import threading
 import subprocess
 import warnings
 import logging
+import glob
 
 # Tắt hoàn toàn các cảnh báo rác từ Gradio Deprecation & Node SSR Server Proxy
 warnings.filterwarnings("ignore", category=UserWarning)
@@ -68,9 +69,9 @@ REPO = "hoduyquocbao/xiangqi-nnue-dataset"
 # ============================================================================
 # APPLICATION SEMANTIC VERSIONING & BUILD METADATA
 # ============================================================================
-APP_VERSION = "v3.2.0-production"
-APP_BUILD_STAMP = "2026-08-09 21:24:00 ICT"
-APP_RELEASE_NOTES = "Add logs/ to .gitignore to prevent committing runtime logs to Git"
+APP_VERSION = "v3.3.0-production"
+APP_BUILD_STAMP = "2026-08-09 21:26:00 ICT"
+APP_RELEASE_NOTES = "Add Purge Out-File & Full Dataset File Manager UI (Purge wrong depth data & inspect/delete .jsonl files)"
 
 # ============================================================================
 # PERSISTENT DISK LOGGING & TELEMETRY INFRASTRUCTURE
@@ -428,6 +429,87 @@ def get_file_size_mb(filepath: str) -> float:
         except Exception:
             pass
     return 0.0
+
+def purge_current_output_file() -> tuple[str, str, str]:
+    """Dừng tiến trình và xóa an toàn tệp dữ liệu output hiện tại khi người dùng cài đặt nhầm Depth."""
+    kill_all_miner_processes()
+    session = load_session_state()
+    out_file = session.get("out_file")
+    
+    deleted_msg = ""
+    if out_file and os.path.exists(out_file):
+        try:
+            size_mb = get_file_size_mb(out_file)
+            os.remove(out_file)
+            deleted_msg = f"🗑️ **Đã xóa thành công tệp dữ liệu output hiện tại**: `{out_file}` (`{size_mb:.2f} MB`)"
+        except Exception as e:
+            deleted_msg = f"⚠️ Lỗi khi xóa tệp `{out_file}`: {e}"
+    else:
+        # Xóa tất cả các file output dở dang trong data/hf_space/ nếu có
+        files = glob.glob("data/hf_space/*.jsonl") + glob.glob("data/hf_space/*.json")
+        if files:
+            count = 0
+            for f in files:
+                try:
+                    os.remove(f)
+                    count += 1
+                except Exception:
+                    pass
+            deleted_msg = f"🗑️ **Đã dọn dẹp sạch `{count}` tệp dataset dở dang trong `data/hf_space/`**"
+        else:
+            deleted_msg = "ℹ️ Hệ thống sạch. Không tìm thấy tệp output nào cần xóa."
+
+    clear_session_state()
+    TelemetryLogger.log_event("PURGE_DATASET", {"file": out_file})
+    
+    cpu_logical, cpu_physical, mem_total, mem_avail, *_ = get_system_specs()
+    status_md = f"### 🗑️ ĐÃ DỌN DEEP TỆP DỮ LIỆU CỦ THÀNH CÔNG\n{deleted_msg}\n- **Hệ thống**: Sẵn sàng bắt đầu lượt khai thác mới với Depth mới."
+    metrics_md = "Hệ thống sạch 100%."
+    events = TelemetryLogger.read_tail_telemetry_events(10)
+    disk_logs = TelemetryLogger.read_tail_disk_logs(25)
+    logs_text = f"{deleted_msg}\n\n📜 NHẬT KÝ TELEMETRY EVENTS:\n{events}\n\n📜 NHẬT KÝ ĐĨA CỨNG:\n{disk_logs}"
+    return status_md, metrics_md, logs_text
+
+def list_dataset_files():
+    """Liệt kê danh sách tất cả các tệp dataset .jsonl/.json trên đĩa."""
+    files = glob.glob("data/hf_space/*.jsonl") + glob.glob("data/*.jsonl") + glob.glob("data/*.json")
+    files = sorted(list(set(files)), reverse=True)
+    return files if files else ["Không tìm thấy tệp dataset nào"]
+
+def inspect_dataset_file(selected_file: str) -> str:
+    """Khảo sát chi tiết tệp dataset (số dòng, MB, sample preview)."""
+    if not selected_file or not os.path.exists(selected_file):
+        return "⚠️ Tệp không tồn tại hoặc chưa chọn tệp."
+    
+    size_mb = get_file_size_mb(selected_file)
+    lines = 0
+    sample_preview = []
+    
+    try:
+        with open(selected_file, "r", encoding="utf-8") as f:
+            for i, line in enumerate(f):
+                lines += 1
+                if i < 2:
+                    sample_preview.append(f"--- MẪU FEN {i+1} ---\n" + line.strip()[:600] + "...")
+        preview_text = "\n\n".join(sample_preview) if sample_preview else "Tệp rỗng."
+        return f"📊 THÔNG TIN TỆP DATASET: `{selected_file}`\n• Dung lượng: `{size_mb:.2f} MB`\n• Số mẫu FEN: `{lines:,}` mẫu\n\n🔍 MẪU DỮ LIỆU PREVIEW (2 mẫu đầu):\n{preview_text}"
+    except Exception as e:
+        return f"❌ Lỗi đọc tệp `{selected_file}`: {e}"
+
+def delete_selected_dataset_file(selected_file: str):
+    """Xóa 1 tệp dataset cụ thể được chọn từ dropdown."""
+    if not selected_file or not os.path.exists(selected_file):
+        files = list_dataset_files()
+        return "⚠️ Tệp không tồn tại.", gr.Dropdown(choices=files, value=files[0] if files else None)
+    try:
+        size_mb = get_file_size_mb(selected_file)
+        os.remove(selected_file)
+        updated_files = list_dataset_files()
+        new_selection = updated_files[0] if updated_files else None
+        return f"🗑️ **Đã xóa thành công tệp dataset**: `{selected_file}` (`{size_mb:.2f} MB`)", gr.Dropdown(choices=updated_files, value=new_selection)
+    except Exception as e:
+        files = list_dataset_files()
+        return f"❌ Lỗi khi xóa tệp: {e}", gr.Dropdown(choices=files)
 
 def sync_on_load():
     """Được gọi tự động khi trang Gradio được reload/mở mới để đồng bộ và hiển thị lại toàn bộ thông tin tiến trình thực tế."""
@@ -997,6 +1079,11 @@ Vận hành **Native Rust Engine {APP_VERSION}** tự động scaling theo CPU Q
                         variant="stop",
                         size="lg"
                     )
+                    purge_btn = gr.Button(
+                        "🗑️ XÓA FILE OUTPUT HIỆN TẠI",
+                        variant="stop",
+                        size="lg"
+                    )
                     free_ram_btn = gr.Button(
                         "🧹 GIẢI PHÓNG RAM",
                         variant="secondary",
@@ -1019,6 +1106,28 @@ Vận hành **Native Rust Engine {APP_VERSION}** tự động scaling theo CPU Q
                     interactive=False
                 )
 
+        with gr.Accordion("📁 QUẢN LÝ & KHẢO SÁT CÁC TỆP DATASET TRÊN ĐĨA (DATASET FILE MANAGER)", open=False):
+            gr.Markdown("### 📂 Quản lý các tệp dataset (.jsonl / .json) trên đĩa cứng:")
+            with gr.Row():
+                dataset_files_list = list_dataset_files()
+                dataset_dropdown = gr.Dropdown(
+                    label="📄 Chọn tệp Dataset để quản lý",
+                    choices=dataset_files_list,
+                    value=dataset_files_list[0] if dataset_files_list else None,
+                    interactive=True
+                )
+                refresh_dataset_btn = gr.Button("🔄 CẬP NHẬT DANH SÁCH", variant="secondary")
+            
+            with gr.Row():
+                inspect_dataset_btn = gr.Button("🔍 KHẢO SÁT CHI TIẾT TỆP", variant="primary")
+                delete_dataset_btn = gr.Button("🗑️ XÓA TỆP ĐÃ CHỌN", variant="stop")
+            
+            dataset_info_box = gr.Textbox(
+                label="📊 Kết quả khảo sát & preview tệp dataset",
+                lines=10,
+                interactive=False
+            )
+
         start_btn.click(
             fn=start_mining,
             inputs=[worker_input, games_slider, depth_slider, threads_slider, tt_mb_slider, sieve_mb_slider, seed_input, token_input, repo_input],
@@ -1029,6 +1138,12 @@ Vận hành **Native Rust Engine {APP_VERSION}** tự động scaling theo CPU Q
             fn=stop_mining,
             inputs=[],
             outputs=[status_box]
+        )
+
+        purge_btn.click(
+            fn=purge_current_output_file,
+            inputs=[],
+            outputs=[status_box, metrics_box, logs_box]
         )
 
         free_ram_btn.click(
@@ -1046,6 +1161,24 @@ Vận hành **Native Rust Engine {APP_VERSION}** tự động scaling theo CPU Q
             fn=fetch_disk_telemetry_logs,
             inputs=[],
             outputs=[logs_box]
+        )
+
+        refresh_dataset_btn.click(
+            fn=lambda: gr.Dropdown(choices=list_dataset_files(), value=list_dataset_files()[0] if list_dataset_files() else None),
+            inputs=[],
+            outputs=[dataset_dropdown]
+        )
+
+        inspect_dataset_btn.click(
+            fn=inspect_dataset_file,
+            inputs=[dataset_dropdown],
+            outputs=[dataset_info_box]
+        )
+
+        delete_dataset_btn.click(
+            fn=delete_selected_dataset_file,
+            inputs=[dataset_dropdown],
+            outputs=[dataset_info_box, dataset_dropdown]
         )
 
         app.load(

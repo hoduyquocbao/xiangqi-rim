@@ -193,3 +193,19 @@ $$\text{Điểm Chất Lượng Agent} = \text{Kế Hoạch Rõ Ràng} + \text{V
 2. **GIẢI PHÁP ĐÃ THỰC THI (Commit `v3.2.0-production`)**:
    - **Bổ sung `logs/` vào `.gitignore`**: Đảm bảo toàn bộ thư mục `logs/` bị chặn tuyệt đối ở mức Git, không bao giờ xuất hiện trong git status hay commit history.
    - **Nâng Cấp Phiên Bản Mới**: `v3.2.0-production` (Build `2026-08-09 21:24:00 ICT`).
+
+---
+
+### XV. BỔ SUNG NÚT XÓA FILE CŨ & TRÌNH QUẢN LÝ TỆP DATASET (v3.3.0-production)
+
+1. **NGUYÊN NHÂN ANH HDQB YÊU CẦU NÂNG CẤP**:
+   - Khi người dùng lỡ tay cài đặt Depth sai (quá thấp làm dữ liệu cạn hoặc quá cao làm máy chạy lâu), người dùng muốn dừng tiến trình và XÓA SẠCH tệp output dở dang trên Web UI để làm lại từ đầu.
+   - Giao diện cũ hoàn toàn thiếu chức năng xóa file output và thiếu trình quản lý các tệp dataset `.jsonl` / `.json` trên đĩa.
+
+2. **GIẢI PHÁP ĐÃ THỰC THI (Commit `v3.3.0-production`)**:
+   - **Nút "🗑️ XÓA FILE OUTPUT HIỆN TẠI"**: Dừng tiến trình ngầm và xóa tệp `out_file` hiện tại (hoặc tất cả các file dở dang trong `data/hf_space/`), đồng thời reset session state về 0.
+   - **Khu Vực "📁 QUẢN LÝ & KHẢO SÁT CÁC TỆP DATASET TRÊN ĐĨA"**: Tích hợp Accordion UI cho phép:
+     1. Khảo sát chi tiết bất kỳ tệp dataset nào trên đĩa (số mẫu FEN, MB, preview 2 mẫu FEN đầu tiên).
+     2. Xóa 1-Click tệp dataset được chọn khỏi đĩa cứng.
+     3. Cập nhật danh sách tệp tự động.
+   - **Nâng Cấp Phiên Bản Mới**: `v3.3.0-production` (Build `2026-08-09 21:26:00 ICT`).
