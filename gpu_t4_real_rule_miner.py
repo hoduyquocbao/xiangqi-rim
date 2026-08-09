@@ -18,7 +18,7 @@ try:
     import torch.nn as nn
     import torch.nn.functional as F
     HAS_TORCH = True
-except Exception:
+except BaseException:
     HAS_TORCH = False
     torch = None
     nn = None
