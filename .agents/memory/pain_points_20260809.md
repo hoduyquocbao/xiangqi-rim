@@ -660,3 +660,19 @@ $$\text{Điểm Chất Lượng Agent} = \text{Kế Hoạch Rõ Ràng} + \text{V
    - **`Time-Buffered Interval Push (300s)`**: Đổi điều kiện đẩy checkpoint từ `game_idx % 20` sang đệm thời gian **mỗi 5 phút (300 giây)** một lần.
    - **`Final Flush Guarantee`**: Khi hoàn thành toàn bộ 30,000 ván cờ, hệ thống sẽ thực hiện 1 lần đẩy cuối cùng (`Final Flush Push`) bảo đảm 100% dữ liệu nguyên vẹn.
    - **Nâng Cấp Phiên Bản Mới**: `v8.8.0-time-buffer-push` (Build `2026-08-10 00:31:00 ICT`).
+
+---
+
+### XLVII. NÂNG CẤP NGUYÊN TẮC BẢO VỆ DỮ LIỆU CỘNG ĐỒNG: ZERO README TOUCH, NODE PARTITIONING & 50MB CHUNK CAP (`v8.9.0-node-chunking`)
+
+1. **PHÁT HIỆN 3 NGUY CƠ CHẾT NGƯỜI KHI MINING ĐA MÁY / CỘNG ĐỒNG**:
+   - Theo phát giác chuyên sâu từ anh HDQB: *"không tự cập nhật readme dataset khi khởi chạy hoặc khi push và nếu nhiều người cùng thực hiện việc tự động cập nhật thì rối loạn bùng nổ dữ liệu và tương tác không thể quản lý file dữ liệu lớn hàng GB không ứng dụng nào mở nổi để debug"*.
+   - **Thảm họa 1**: Tự động sửa/ghi đè `README.md` khi push làm phát sinh xung đột Git Merge (Merge Conflicts) liên tục giữa các node làm sập tiến trình upload.
+   - **Thảm họa 2**: Các node dùng chung tên file đè dữ liệu của nhau trên Hub.
+   - **Thảm họa 3**: File `.jsonl` bùng nổ dung lượng vài GB làm đứng máy, treo VS Code/Vim, không công cụ nào mở nổi để debug.
+
+2. **TRIỂN KHAI PHÒNG NGỰ 3 LỚP ĐẠT CHUẨN ENTERPRISE (Commit `5cf516c`)**:
+   - **`Zero README Touch Safeguard`**: Khóa 100% việc chạm vào `README.md` khi push dataset. Tệp `README.md` do Maintainer duy trì tĩnh.
+   - **`Node-ID Partitioning`**: Tự động sinh `node_id = uuid.uuid4().hex[:8]` duy nhất cho mỗi máy/lần chạy. Tệp có dạng: `jrcp3_d12_node_{node_id}_{timestamp}_chunk_{chunk_idx:04d}.jsonl`. Các node khai thác song song 100% không lo chạm file nhau!
+   - **`50MB File Chunk Cap`**: Giới hạn tối đa 50MB (~10,000 FENs) cho mỗi tệp `.jsonl`. Khi file vượt 50MB, tự động đóng file, đẩy lên HF Hub và mở file chunk mới `chunk_0002.jsonl`. Mọi phần mềm debug đều mở cực mượt!
+   - **Nâng Cấp Phiên Bản Mới**: `v8.9.0-node-chunking` (Build `2026-08-10 00:40:00 ICT`).
