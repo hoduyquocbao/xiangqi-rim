@@ -579,3 +579,17 @@ $$\text{Điểm Chất Lượng Agent} = \text{Kế Hoạch Rõ Ràng} + \text{V
 2. **KẾT QUẢ ĐẠT ĐƯỢC**:
    - Bất kỳ ai mở tệp `notebooks/colab_gpu_depth12_miner.ipynb` trên Google Colab chỉ cần nhấn **"Run all" (1-Click)** là toàn bộ tiến trình Cài đặt $\rightarrow$ Kiểm chấm 6 bài Unit Tests $\rightarrow$ Khai thác 30,000 ván $\rightarrow$ Đẩy HuggingFace Hub sẽ thực thi 100% trực tiếp trong lòng các cell Colab.
    - **Nâng Cấp Phiên Bản Mới**: `v8.3.0-gpu-standalone` (Build `2026-08-09 23:36:00 ICT`).
+
+---
+
+### XLII. DỌN DẸP TRIỆT ĐỂ 8 TỆP NOTEBOOK RẢI RÁC Ở GỐC DỰ ÁN VÀ QUY HOẠCH CHUẨN CÂY CẤU TRÚC `notebooks/` (`v8.4.0-production`)
+
+1. **KHẮC PHỤC TRIỆT ĐỂ NGUYÊN NHÂN NGUYÊN THỂ RẢI RÁC TỆP DƯ THỪA**:
+   - Gốc dự án trước đó chứa 8 tệp notebook trùng lặp/dư thừa (`community_colab.ipynb`, `community_mine_jrcp3.ipynb`, `community_train_jrcp3.ipynb`, `example-xiangqi_gradio_mcp_backend.ipynb`, `train.ipynb`, `train_community.ipynb`, `xiangqi_gradio_mcp_backend.ipynb`, `xiangqi_rim.ipynb`).
+   - Các tệp này là bản sao trùng lặp từ cây cấu trúc `notebooks/` phân cấp (`01_community_mining`, `02_community_training`, `03_nnue_training`, `04_core_maintainer`).
+
+2. **HÀNH ĐỘNG DỌN DẸP & BẢO TRÌ REPOSITORY (Commit `dc3d2f2` & `7d1ccc9`)**:
+   - Xóa bỏ 100% (28,304 dòng mã trùng lặp) của 8 tệp `.ipynb` rải rác ở gốc dự án.
+   - Chuẩn hóa chỉ mục toàn bộ hệ thống notebooks trong tệp [`notebooks/README.md`](file:///Users/hdqb/workspaces/xiangqi-rim/notebooks/README.md).
+   - Đảm bảo gốc dự án 100% sạch sẽ, chuẩn chỉ mục repository cấp doanh nghiệp.
+   - **Nâng Cấp Phiên Bản Mới**: `v8.4.0-production` (Build `2026-08-09 23:37:00 ICT`).
