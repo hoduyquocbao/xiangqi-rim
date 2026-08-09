@@ -42,3 +42,11 @@ reports/
 # Logs & Temporary Task Outputs
 *.log
 .system_generated/
+
+# Python Bytecode & Cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+*.py[cod]
