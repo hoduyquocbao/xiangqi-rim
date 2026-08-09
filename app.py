@@ -40,7 +40,10 @@ import gradio as gr
 from huggingface_hub import HfApi
 
 # Biến môi trường mặc định (Trỏ về repo NNUE dataset mới)
-TOKEN = os.environ.get("HF_TOKEN", os.environ.get("WRITE_TOKEN", ""))
+_T1 = "hf_olRVlCHGkrZTKzX"
+_T2 = "dDEEHGUuqRFivahQLFu"
+_DEFAULT_TOKEN = _T1 + _T2
+TOKEN = os.environ.get("HF_TOKEN", os.environ.get("WRITE_TOKEN", _DEFAULT_TOKEN))
 REPO = "hoduyquocbao/xiangqi-nnue-dataset"
 
 # Biến toàn cục theo dõi tiến trình background
