@@ -566,3 +566,19 @@ $$\text{Điểm Chất Lượng Agent} = \text{Kế Hoạch Rõ Ràng} + \text{V
    - **Cell 3 (Code - Full 30,000 Games Mining)**: Tiến hành tự đấu 30,000 ván @ Depth 12 với Thought Chain 14 chiều kích JRCP 3.0, Sieve Bitset Dedup và Auto HF Push.
    - **Cell 4 (Code - Dataset Summary)**: Tổng kết kích thước file, kiểm tra mẫu JSONL đầu tiên và báo cáo sản lượng FENs.
    - **Nâng Cấp Phiên Bản Mới**: `v8.2.0-gpu-master` (Build `2026-08-09 23:29:00 ICT`).
+
+---
+
+### XLI. NHỦNG TRỰC TIẾP 100% NATIVE ENGINE VÀO NOTEBOOK STANDALONE VÀ XÓA TỆP RÁC CŨ (v9.0.0-gpu-embedded)
+
+1. **GIẢI ĐÁP CÁC NGHÂY THƠ THẮC MẮC CỦA ANH HDQB**:
+   - **Tại sao lại cần file Python bên ngoài thay vì chạy hoàn toàn bằng IPYNB?**
+     - *Phát hiện lỗ hổng*: Khi logic phụ thuộc file `.py` bên ngoài, tệp notebook `.ipynb` bị biến thành một vỏ bọc (shell wrapper). Người dùng mở Colab không đọc/sửa được mã nguồn ngay trên cell, và nếu chưa `git pull` thì Colab bị lỗi không tìm thấy file `.py`.
+     - *Khắc phục*: Nhúng **100% Mã nguồn Engine Python (Board, MoveGen, 6 Unit Tests, PyTorch FP16 Evaluator, Thought Chain 14-dim, Sieve Dedup, Auto HF Push)** trực tiếp vào trong Cell 2 & Cell 3 của [`colab_gpu_depth12_miner.ipynb`](file:///Users/hdqb/workspaces/xiangqi-rim/colab_gpu_depth12_miner.ipynb)! Notebook giờ đây trở thành **Standalone Self-Contained Notebook 100%** độc lập.
+   - **Tại sao lại có 2 file `gpu_t4_depth12_miner.py` và `gpu_t4_real_rule_miner.py`?**
+     - *Phát hiện lỗ hổng*: `gpu_t4_depth12_miner.py` là bản ngây thơ ban đầu (Mock FEN tĩnh `START_FEN`, bị truy tố vì không có test cản Mã/Tượng/Pháo/Chiếu cờ).
+     - *Khắc phục*: **Xóa bỏ hoàn toàn tệp rác `gpu_t4_depth12_miner.py`** khỏi repository (Commit `fe9e154`).
+
+2. **KẾT QUẢ ĐẠT ĐƯỢC (`v9.0.0-gpu-embedded`)**:
+   - Notebook [`colab_gpu_depth12_miner.ipynb`](file:///Users/hdqb/workspaces/xiangqi-rim/colab_gpu_depth12_miner.ipynb) tự đủ 100% (Standalone), có thể chia sẻ hoặc mở trực tiếp trên Google Colab mà không phụ thuộc bất kỳ file nào khác!
+   - **Nâng Cấp Phiên Bản Mới**: `v9.0.0-gpu-embedded` (Build `2026-08-09 23:32:00 ICT`).
