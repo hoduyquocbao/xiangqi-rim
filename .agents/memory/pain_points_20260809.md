@@ -168,3 +168,16 @@ $$\text{Điểm Chất Lượng Agent} = \text{Kế Hoạch Rõ Ràng} + \text{V
 2. **GIẢI PHÁP ĐÃ THỰC THI (Commit `v3.0.0-production`)**:
    - **Tạo `SuppressSSEDisconnectFilter`**: Gắn filter vào `logging.getLogger("uvicorn.error")` để triệt tiêu toàn bộ log rác `response already started` và `sse_stream` khi ứng dụng restart.
    - **Nâng Cấp Phiên Bản Mới**: `v3.0.0-production` (Build `2026-08-09 21:20:00 ICT`).
+
+---
+
+### XIII. BẢO TỒN NHẬT KÝ ĐĨA & TELEMETRY KHI HỆ THỐNG IDLE (v3.1.0-production)
+
+1. **NGUYÊN NHÂN LỖI BỊ RESET LOG SAU 2 GIÂY KHI BẤM TRUY VẤN LOG**:
+   - Vòng lặp `gr.Timer(3.0)` trong `app.py` tự động kích hoạt `sync_on_load()` mỗi 3 giây để cập nhật giao diện.
+   - Khi hệ thống đang ở trạng thái nghỉ (Idle / Không có tiến trình miner chạy), nhánh `else` của `sync_on_load()` trước đây bị khóa cứng trả về `log_text = "Hệ thống sẵn sàng."`.
+   - Khi người dùng bấm **"📜 TRUY VẤN LOG ĐĨA & TELEMETRY"**, tệp log đĩa được đọc và nạp vào `logs_box`. Tuy nhiên chỉ 2-3 giây sau, `gr.Timer(3.0)` đếm giờ chạy lại `sync_on_load()` và đè chuỗi `"Hệ thống sẵn sàng."` lên `logs_box`, làm thông tin log bị mất khỏi tầm mắt người dùng!
+
+2. **GIẢI PHÁP ĐÃ THỰC THI (Commit `v3.1.0-production`)**:
+   - **Tự Động Nạp Log Đĩa Trong Nhánh Idle**: Trong nhánh `else` của `sync_on_load()`, thay vì trả về chuỗi tĩnh rỗng nghĩa, `sync_on_load()` chủ động gọi `TelemetryLogger.read_tail_telemetry_events(10)` và `read_tail_disk_logs(25)` để liên tục giữ vết log đĩa & telemetry events trên giao diện.
+   - **Trải Nghiệm Đọc Log Liên Tục**: Người dùng có thể xem log đĩa mọi lúc, kể cả khi hệ thống idle hay đang chạy ngầm, mà KHÔNG BAO GIỜ bị đè chữ `"Hệ thống sẵn sàng."` lên nữa!

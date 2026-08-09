@@ -68,9 +68,9 @@ REPO = "hoduyquocbao/xiangqi-nnue-dataset"
 # ============================================================================
 # APPLICATION SEMANTIC VERSIONING & BUILD METADATA
 # ============================================================================
-APP_VERSION = "v3.0.0-production"
-APP_BUILD_STAMP = "2026-08-09 21:20:00 ICT"
-APP_RELEASE_NOTES = "Suppress Orphaned SSE Stream Disconnect Exception + Active Session UI Auto-Recovery"
+APP_VERSION = "v3.1.0-production"
+APP_BUILD_STAMP = "2026-08-09 21:22:00 ICT"
+APP_RELEASE_NOTES = "Fix Telemetry Log View Overwrite Bug (Idle Sync Shows Persistent Disk Logs)"
 
 # ============================================================================
 # PERSISTENT DISK LOGGING & TELEMETRY INFRASTRUCTURE
@@ -560,7 +560,9 @@ def sync_on_load():
     else:
         status_md = f"Sẵn sàng khai thác dữ liệu trên hệ thống `{cpu_logical}` vCPUs & `{mem_total:.1f} GB` RAM..."
         metrics_md = "Chờ khởi chạy..."
-        log_text = "Hệ thống sẵn sàng."
+        events = TelemetryLogger.read_tail_telemetry_events(10)
+        disk_logs = TelemetryLogger.read_tail_disk_logs(25)
+        log_text = f"📜 NHẬT KÝ TELEMETRY EVENTS (logs/system_telemetry.jsonl):\n{events}\n\n📜 NHẬT KÝ ĐĨA CỨNG (logs/miner_stdout_stderr.log):\n{disk_logs}"
 
     return status_md, metrics_md, log_text
 
