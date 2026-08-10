@@ -1811,6 +1811,8 @@ def mine(target_games: int = 1000, depth: int = 12):
                     best_score = int(best_minimax_score)
                     pv_moves = [m for m in best_pv_moves if m is not None]
 
+            encoded_move = best_move.encode()
+
             # ── PV MULTI-NODE HARVESTING: TẠO DỮ LIỆU CẢ 2 PHE (RED & BLACK) ──
             pv_board = Board()
             pv_board.grid = list(boards[s].grid)
@@ -1837,6 +1839,8 @@ def mine(target_games: int = 1000, depth: int = 12):
                             f.write(json.dumps(sample, ensure_ascii=False) + "\n")
                             total_samples += 1
                             chunk_samples += 1
+                        else:
+                            rejected_count += 1
 
                 pv_board.apply(pv_mv)
                 pv_hist.append(pv_mv)
@@ -1860,12 +1864,10 @@ def mine(target_games: int = 1000, depth: int = 12):
                         print(f"   📦 CHUNK ROTATION: Pushed chunk #{chunk_idx} ({out_file.name}) to HF Hub!", flush=True)
                     except Exception as e:
                         print(f"   ⚠️ Chunk push notice: {e}", flush=True)
-                        chunk_idx += 1
-                        chunk_samples = 0
-                        out_file = out_dir / f"jrcp5_d12_node_{node_id}_{start_stamp}_chunk_{chunk_idx:04d}.jsonl"
-                        f = open(out_file, "w", encoding="utf-8")
-                else:
-                    rejected_count += 1
+                chunk_idx += 1
+                chunk_samples = 0
+                out_file = out_dir / f"jrcp5_d12_node_{node_id}_{start_stamp}_chunk_{chunk_idx:04d}.jsonl"
+                f = open(out_file, "w", encoding="utf-8")
 
             history_moves_list[s].append(encoded_move)
             boards[s].apply(best_move)
