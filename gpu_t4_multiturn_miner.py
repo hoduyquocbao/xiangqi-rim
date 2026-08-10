@@ -38,6 +38,12 @@ try:
 except ImportError:
     HfApi = None
 
+PIECES = {
+    'K': 1, 'A': 2, 'B': 3, 'N': 4, 'R': 5, 'C': 6, 'P': 7,
+    'k': 8, 'a': 9, 'b': 10, 'n': 11, 'r': 12, 'c': 13, 'p': 14
+}
+
+# Tên quân cờ bằng tiếng Việt phục vụ trích xuất dữ liệu tự nhiên
 NAMES = {
     1: "Tướng", 2: "Sĩ", 3: "Tượng", 4: "Mã", 5: "Xe", 6: "Pháo", 7: "Tốt",
     8: "Tướng", 9: "Sĩ", 10: "Tượng", 11: "Mã", 12: "Xe", 13: "Pháo", 14: "Tốt"

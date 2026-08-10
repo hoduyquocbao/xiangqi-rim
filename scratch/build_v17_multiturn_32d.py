@@ -3,7 +3,7 @@ import re
 with open('gpu_t4_real_rule_miner.py', 'r', encoding='utf-8') as f:
     real_src = f.read()
 
-start_idx = real_src.find('NAMES = {')
+start_idx = real_src.find('PIECES = {')
 make_sample_idx = real_src.find('def make_sample(')
 make_sample_end = real_src.find('PARALLEL = 64')
 
