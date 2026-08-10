@@ -3,20 +3,21 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Xiangqi-R1 32D Multi-Turn Dataset Inspector & Visual Previewer</title>
+    <title>Xiangqi-R1 Studio 32D Trajectory Inspector & Analytics Suite v5.0</title>
     <!-- Google Fonts -->
     <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600;700&family=Inter:wght@300;400;500;600;700;800&family=Noto+Serif+TC:wght@600;700;900&display=swap" rel="stylesheet">
     <style>
         :root {
-            --bg-main: #090d16;
-            --bg-card: #111827;
-            --bg-card-border: #1f2937;
-            --text-main: #f3f4f6;
-            --text-muted: #9ca3af;
+            --bg-main: #060911;
+            --bg-card: #0d1322;
+            --bg-card-border: #1e293b;
+            --text-main: #f8fafc;
+            --text-muted: #94a3b8;
             --accent-emerald: #10b981;
             --accent-cyan: #06b6d4;
             --accent-amber: #f59e0b;
             --accent-red: #ef4444;
+            --accent-purple: #a855f7;
         }
 
         * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -33,42 +34,36 @@
         .font-xiangqi { font-family: 'Noto Serif TC', serif; }
 
         ::-webkit-scrollbar { width: 8px; height: 8px; }
-        ::-webkit-scrollbar-track { background: #0b0f19; }
-        ::-webkit-scrollbar-thumb { background: #1f2937; border-radius: 4px; }
-        ::-webkit-scrollbar-thumb:hover { background: #374151; }
+        ::-webkit-scrollbar-track { background: #060911; }
+        ::-webkit-scrollbar-thumb { background: #1e293b; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #334155; }
 
         header {
-            background-color: rgba(17, 24, 39, 0.95);
-            backdrop-filter: blur(8px);
+            background-color: rgba(13, 19, 34, 0.95);
+            backdrop-filter: blur(12px);
             border-bottom: 1px solid var(--bg-card-border);
-            position: sticky;
-            top: 0;
-            z-index: 50;
+            position: sticky; top: 0; z-index: 50;
             padding: 0.75rem 1.5rem;
         }
 
         .header-container {
-            max-width: 1400px;
-            margin: 0 auto;
-            display: flex;
-            flex-wrap: wrap;
-            align-items: center;
-            justify-content: space-between;
-            gap: 1rem;
+            max-width: 1600px; margin: 0 auto;
+            display: flex; flex-wrap: wrap; align-items: center;
+            justify-content: space-between; gap: 1rem;
         }
 
         .logo-box { display: flex; align-items: center; gap: 0.75rem; }
 
         .logo-icon {
-            width: 40px; height: 40px; border-radius: 12px;
+            width: 44px; height: 44px; border-radius: 12px;
             background: linear-gradient(135deg, #f59e0b, #ef4444);
             display: flex; align-items: center; justify-content: center;
-            color: #fff; font-size: 1.25rem; font-weight: 900;
-            box-shadow: 0 4px 12px rgba(239, 68, 68, 0.4);
+            color: #fff; font-size: 1.35rem; font-weight: 900;
+            box-shadow: 0 4px 14px rgba(239, 68, 68, 0.4);
         }
 
         .header-title h1 {
-            font-size: 1.1rem; font-weight: 800;
+            font-size: 1.15rem; font-weight: 800;
             background: linear-gradient(90deg, #fde68a, #6ee7b7, #67e8f9);
             -webkit-background-clip: text; -webkit-text-fill-color: transparent;
         }
@@ -79,89 +74,108 @@
         }
 
         .badge-live {
-            display: inline-block; width: 6px; height: 6px;
+            display: inline-block; width: 8px; height: 8px;
             border-radius: 50%; background-color: #10b981;
+            box-shadow: 0 0 8px #10b981;
         }
 
-        .btn-group { display: flex; align-items: center; gap: 0.75rem; }
+        .btn-group { display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap; }
 
         .btn {
-            padding: 0.5rem 1rem; font-size: 0.75rem; font-weight: 600;
+            padding: 0.45rem 0.85rem; font-size: 0.75rem; font-weight: 600;
             border-radius: 8px; cursor: pointer; border: 1px solid transparent;
             transition: all 0.2s ease; display: inline-flex; align-items: center; gap: 0.4rem;
+            user-select: none;
         }
 
-        .btn-secondary { background-color: #1f2937; color: #e5e7eb; border-color: #374151; }
-        .btn-secondary:hover { background-color: #374151; }
+        .btn-secondary { background-color: #1e293b; color: #e2e8f0; border-color: #334155; }
+        .btn-secondary:hover { background-color: #334155; color: #fff; }
 
         .btn-primary { background-color: #059669; color: #ffffff; box-shadow: 0 4px 12px rgba(5, 150, 105, 0.3); }
         .btn-primary:hover { background-color: #10b981; }
 
+        .btn-purple { background-color: #7e22ce; color: #ffffff; box-shadow: 0 4px 12px rgba(126, 34, 206, 0.3); }
+        .btn-purple:hover { background-color: #9333ea; }
+
         main {
-            max-width: 1400px; width: 100%; margin: 0 auto;
-            padding: 1.5rem; display: flex; flex-direction: column; gap: 1.5rem;
+            max-width: 1600px; width: 100%; margin: 0 auto;
+            padding: 1.25rem; display: flex; flex-direction: column; gap: 1.25rem;
         }
 
         .status-bar {
-            display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1rem;
+            display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 1rem;
         }
 
         .card {
-            background-color: rgba(17, 24, 39, 0.7);
+            background-color: rgba(13, 19, 34, 0.85);
             border: 1px solid var(--bg-card-border);
             border-radius: 16px; padding: 1.25rem;
-            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.3);
+            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.4);
         }
 
         .meta-row {
             display: flex; justify-content: space-between;
-            font-size: 0.75rem; font-family: 'Fira Code', monospace; margin-top: 0.4rem;
+            font-size: 0.75rem; font-family: 'Fira Code', monospace; margin-top: 0.35rem;
         }
 
-        .meta-label { color: #6b7280; }
+        .meta-label { color: #64748b; }
         .meta-val { font-weight: 700; }
 
         .select-input {
-            width: 100%; background-color: #0b0f19; border: 1px solid #374151;
-            border-radius: 8px; color: #f3f4f6; padding: 0.5rem; font-size: 0.8rem;
+            width: 100%; background-color: #060911; border: 1px solid #334155;
+            border-radius: 8px; color: #f8fafc; padding: 0.5rem; font-size: 0.8rem;
             outline: none; cursor: pointer;
         }
         .select-input:focus { border-color: #10b981; }
 
-        .layout-grid { display: grid; grid-template-columns: 1fr; gap: 1.5rem; }
+        .layout-grid { display: grid; grid-template-columns: 1fr; gap: 1.25rem; }
 
-        @media (min-width: 1024px) {
+        @media (min-width: 1100px) {
             .layout-grid { grid-template-columns: 5fr 7fr; }
         }
 
         .xq-grid {
             display: grid; grid-template-columns: repeat(9, 1fr); grid-template-rows: repeat(10, 1fr);
-            aspect-ratio: 9 / 10; background: #111827; border: 2px solid #374151;
-            border-radius: 12px; overflow: hidden; box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.5);
+            aspect-ratio: 9 / 10; background: #090d16; border: 2px solid #334155;
+            border-radius: 12px; overflow: hidden; box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.6);
             position: relative;
         }
 
         .xq-cell {
-            border: 1px solid #1f2937; display: flex; align-items: center;
+            border: 1px solid #1e293b; display: flex; align-items: center;
             justify-content: center; position: relative; user-select: none;
         }
 
         .piece {
             width: 86%; height: 86%; border-radius: 50%; display: flex;
-            align-items: center; justify-content: center; font-size: 1.25rem; font-weight: 900;
-            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.4); z-index: 10;
+            align-items: center; justify-content: center; font-size: 1.3rem; font-weight: 900;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.5); z-index: 10;
         }
 
-        .piece-red { background: linear-gradient(135deg, #ef4444 0%, #b91c1c 100%); color: #fef2f2; border: 2px solid #fca5a5; }
-        .piece-black { background: linear-gradient(135deg, #374151 0%, #111827 100%); color: #38bdf8; border: 2px solid #7dd3fc; }
+        .piece-red { background: linear-gradient(135deg, #ef4444 0%, #991b1b 100%); color: #fef2f2; border: 2px solid #fca5a5; }
+        .piece-black { background: linear-gradient(135deg, #334155 0%, #0f172a 100%); color: #38bdf8; border: 2px solid #7dd3fc; }
 
         .bg-src { background-color: rgba(245, 158, 11, 0.25) !important; }
         .bg-dst { background-color: rgba(16, 185, 129, 0.25) !important; }
         .piece-src { box-shadow: 0 0 0 3px #f59e0b; }
         .piece-dst { box-shadow: 0 0 0 3px #10b981; }
 
+        /* Sparkline Eval Chart */
+        .sparkline-container {
+            height: 48px; display: flex; align-items: flex-end; gap: 2px;
+            background-color: #060911; border: 1px solid #1e293b; border-radius: 8px;
+            padding: 4px; margin-top: 0.75rem; overflow-x: auto;
+        }
+
+        .sparkline-bar {
+            flex: 1; min-width: 4px; border-radius: 2px; cursor: pointer;
+            transition: all 0.15s ease; position: relative;
+        }
+        .sparkline-bar:hover { opacity: 0.8; filter: brightness(1.2); }
+        .sparkline-bar.active { outline: 2px solid #fff; z-index: 5; }
+
         .dim-card {
-            background-color: rgba(17, 24, 39, 0.8);
+            background-color: rgba(13, 19, 34, 0.85);
             border: 1px solid rgba(255, 255, 255, 0.08);
             border-left-width: 4px; border-radius: 12px; padding: 0.85rem 1rem;
             margin-bottom: 0.75rem; transition: all 0.2s ease;
@@ -175,31 +189,60 @@
         .dim-grp-6 { border-left-color: #ec4899; }
 
         .dim-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.35rem; }
-        .dim-title { font-size: 0.8rem; font-weight: 700; color: #e5e7eb; }
-        .dim-tag { font-size: 0.65rem; padding: 0.15rem 0.5rem; border-radius: 4px; background-color: #1f2937; color: #9ca3af; font-weight: 500; }
+        .dim-title { font-size: 0.8rem; font-weight: 700; color: #f1f5f9; }
+        .dim-tag { font-size: 0.65rem; padding: 0.15rem 0.5rem; border-radius: 4px; background-color: #1e293b; color: #94a3b8; font-weight: 500; }
 
         .dim-body {
             font-size: 0.75rem; font-family: 'Fira Code', monospace; color: #cbd5e1;
-            white-space: pre-wrap; line-height: 1.5; padding-left: 0.5rem; border-left: 1px solid #374151;
+            white-space: pre-wrap; line-height: 1.5; padding-left: 0.5rem; border-left: 1px solid #334155;
         }
 
         .filter-btn {
             padding: 0.35rem 0.75rem; font-size: 0.7rem; border-radius: 6px;
-            background-color: #1f2937; color: #9ca3af; border: 1px solid transparent; cursor: pointer;
+            background-color: #1e293b; color: #94a3b8; border: 1px solid transparent; cursor: pointer;
         }
         .filter-btn.active { background-color: rgba(16, 185, 129, 0.2); color: #34d399; border-color: rgba(16, 185, 129, 0.4); }
 
         .search-box {
-            width: 100%; background-color: #0b0f19; border: 1px solid #374151;
-            border-radius: 8px; padding: 0.5rem 0.85rem; font-size: 0.75rem; color: #f3f4f6;
+            width: 100%; background-color: #060911; border: 1px solid #334155;
+            border-radius: 8px; padding: 0.55rem 0.85rem; font-size: 0.75rem; color: #f8fafc;
             outline: none; margin-bottom: 1rem;
         }
         .search-box:focus { border-color: #10b981; }
 
         .pre-box {
-            background-color: #0b0f19; border: 1px solid #1f2937; border-radius: 10px;
+            background-color: #060911; border: 1px solid #1e293b; border-radius: 10px;
             padding: 0.85rem; font-family: 'Fira Code', monospace; font-size: 0.75rem;
-            color: #e2e8f0; white-space: pre-wrap; overflow-y: auto; max-height: 240px;
+            color: #e2e8f0; white-space: pre-wrap; overflow-y: auto; max-height: 260px;
+        }
+
+        /* Modal styling */
+        .modal-backdrop {
+            position: fixed; inset: 0; background: rgba(0,0,0,0.8); backdrop-filter: blur(6px);
+            display: none; align-items: center; justify-content: center; z-index: 100; p: 1rem;
+        }
+        .modal-content {
+            background: #0d1322; border: 1px solid #334155; border-radius: 16px;
+            width: 100%; max-width: 700px; padding: 1.5rem; display: flex; flex-direction: column; gap: 1rem;
+        }
+
+        /* Candidate Table */
+        .cand-table {
+            width: 100%; border-collapse: collapse; font-size: 0.72rem; font-family: 'Fira Code', monospace;
+            margin-top: 0.5rem;
+        }
+        .cand-table th, .cand-table td {
+            padding: 0.4rem 0.6rem; border: 1px solid #1e293b; text-align: left;
+        }
+        .cand-table th { background: #060911; color: #94a3b8; }
+
+        /* Graveyard */
+        .graveyard-box {
+            display: flex; gap: 0.5rem; flex-wrap: wrap; min-height: 28px; align-items: center;
+            background: #060911; padding: 0.35rem 0.6rem; border-radius: 6px; border: 1px solid #1e293b;
+        }
+        .graveyard-piece {
+            font-size: 0.9rem; font-weight: 800; font-family: 'Noto Serif TC', serif;
         }
     </style>
 </head>
@@ -210,35 +253,48 @@
             <div class="logo-box">
                 <div class="logo-icon font-xiangqi">帥</div>
                 <div class="header-title">
-                    <h1>Xiangqi-R1 32D Multi-Turn Dataset Inspector</h1>
+                    <h1>Xiangqi-R1 Studio 32D Trajectory Inspector & Analytics Suite</h1>
                     <p>
-                        <span>v17.5 JRCP 5.0 Standard</span>
+                        <span>v5.0 Ultimate Multiturn Engine</span>
                         <span class="badge-live"></span>
-                        <span style="color: #10b981; font-family: 'Fira Code', monospace;">Multi-Game JSONL Inspector</span>
+                        <span style="color: #10b981; font-family: 'Fira Code', monospace;">Batch JSONL & Multi-File Support</span>
                     </p>
                 </div>
             </div>
 
             <div class="btn-group">
                 <button onclick="loadDefaultSample()" class="btn btn-secondary">
-                    ⚡ Load Sample Game
+                    ⚡ Load 40-Ply Sample Game
                 </button>
                 <label class="btn btn-primary">
-                    📂 Open JSONL File
-                    <input type="file" id="jsonlFileInput" accept=".jsonl,.json,.txt" style="display: none;">
+                    📂 Open JSONL File(s)
+                    <input type="file" id="jsonlFileInput" accept=".jsonl,.json,.txt" multiple style="display: none;">
                 </label>
+                <button onclick="openPasteModal()" class="btn btn-purple">
+                    📝 Paste JSONL Text
+                </button>
             </div>
         </div>
     </header>
 
     <main>
+
+        <!-- Global Batch Dataset Summary Bar -->
         <div class="status-bar">
+            <!-- Game Selector Card -->
             <div class="card">
-                <div style="font-size: 0.7rem; font-weight: 700; color: #9ca3af; text-transform: uppercase; margin-bottom: 0.5rem;">
-                    🎮 Select Game Record (<span id="totalGamesCount">1</span> Game Loaded)
+                <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.5rem;">
+                    <span style="font-size: 0.7rem; font-weight: 700; color: #94a3b8; text-transform: uppercase;">
+                        🎮 Select Game (<span id="totalGamesCount">0</span> Games Loaded)
+                    </span>
+                    <span id="auditBadge" style="font-size: 0.65rem; padding: 0.15rem 0.5rem; border-radius: 9999px; background: rgba(16, 185, 129, 0.2); color: #34d399; border: 1px solid rgba(16, 185, 129, 0.3);">
+                        32/32D Valid ✓
+                    </span>
                 </div>
+
                 <select id="gameSelect" class="select-input" onchange="onGameChange(this.value)">
                 </select>
+
                 <div class="meta-row">
                     <span class="meta-label">Game ID:</span>
                     <span id="metaGameId" class="meta-val" style="color: #f59e0b;">-</span>
@@ -253,38 +309,103 @@
                 </div>
             </div>
 
+            <!-- Trajectory Step Player & Auto Slideshow -->
             <div class="card" style="display: flex; flex-direction: column; justify-content: space-between;">
-                <div style="display: flex; align-items: center; justify-content: space-between;">
-                    <span style="font-size: 0.7rem; font-weight: 700; color: #9ca3af; text-transform: uppercase;">
-                        ♟️ Trajectory Step Player
-                    </span>
-                    <span id="turnCounter" style="font-size: 0.9rem; font-weight: 800; font-family: 'Fira Code', monospace; color: #10b981;">
-                        Turn 1 / 1
-                    </span>
+                <div>
+                    <div style="display: flex; align-items: center; justify-content: space-between;">
+                        <span style="font-size: 0.7rem; font-weight: 700; color: #94a3b8; text-transform: uppercase;">
+                            ♟️ Trajectory Step Player & Sparkline Eval
+                        </span>
+                        <span id="turnCounter" style="font-size: 0.9rem; font-weight: 800; font-family: 'Fira Code', monospace; color: #10b981;">
+                            Turn 1 / 1
+                        </span>
+                    </div>
+
+                    <!-- Sparkline Chart -->
+                    <div id="sparklineChart" class="sparkline-container">
+                        <!-- Bars rendered by JS -->
+                    </div>
                 </div>
-                <div style="display: flex; align-items: center; gap: 0.75rem; margin-top: 1rem;">
-                    <button onclick="prevTurnStep()" class="btn btn-secondary">◀ Prev Turn</button>
-                    <input type="range" id="turnSlider" min="1" max="1" value="1" oninput="onSliderMove(this.value)" style="flex: 1; accent-color: #10b981; cursor: pointer;">
-                    <button onclick="nextTurnStep()" class="btn btn-primary">Next Turn ▶</button>
+
+                <div style="display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; margin-top: 0.75rem; flex-wrap: wrap;">
+                    <div style="display: flex; gap: 0.4rem;">
+                        <button onclick="jumpToTurn(0)" class="btn btn-secondary" style="padding: 0.35rem 0.6rem;">⏮️ Start</button>
+                        <button onclick="prevTurnStep()" class="btn btn-secondary" style="padding: 0.35rem 0.6rem;">◀ Prev</button>
+                        <button id="playPauseBtn" onclick="toggleAutoPlay()" class="btn btn-primary" style="padding: 0.35rem 0.75rem;">▶ Play</button>
+                        <button onclick="nextTurnStep()" class="btn btn-secondary" style="padding: 0.35rem 0.6rem;">Next ▶</button>
+                        <button onclick="jumpToTurn(-1)" class="btn btn-secondary" style="padding: 0.35rem 0.6rem;">End ⏭️</button>
+                    </div>
+
+                    <div style="display: flex; align-items: center; gap: 0.4rem;">
+                        <span style="font-size: 0.65rem; color: #64748b;">Speed:</span>
+                        <select id="playSpeedSelect" class="select-input" style="padding: 0.25rem; font-size: 0.7rem; width: auto;" onchange="onSpeedChange(this.value)">
+                            <option value="1000">1.0s</option>
+                            <option value="500">0.5s</option>
+                            <option value="2000">2.0s</option>
+                        </select>
+                    </div>
                 </div>
+
+                <input type="range" id="turnSlider" min="1" max="1" value="1" oninput="onSliderMove(this.value)" style="width: 100%; accent-color: #10b981; cursor: pointer; margin-top: 0.5rem;">
             </div>
         </div>
 
+        <!-- Main Layout Grid -->
         <div class="layout-grid">
-            <div style="display: flex; flex-direction: column; gap: 1.5rem;">
+
+            <!-- Left: 2D Xiangqi Board, Captured Graveyard & Candidates Table -->
+            <div style="display: flex; flex-direction: column; gap: 1.25rem;">
+                
+                <!-- 2D Xiangqi Board Card -->
                 <div class="card">
                     <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.75rem;">
-                        <span style="font-size: 0.85rem; font-weight: 800;">♟️ Bàn Cờ 2D Trực Quan</span>
+                        <span style="font-size: 0.85rem; font-weight: 800;">♟️ Bàn Cờ 2D Trực Quan & Tù Binh</span>
                         <span id="turnSideBadge" style="font-size: 0.7rem; padding: 0.2rem 0.6rem; border-radius: 9999px; background: rgba(239, 68, 68, 0.2); color: #fca5a5; border: 1px solid rgba(239, 68, 68, 0.3);">
                             Lượt Đỏ
                         </span>
                     </div>
+
                     <div id="xiangqiBoardGrid" class="xq-grid"></div>
-                    <div id="fenDisplay" style="font-size: 0.65rem; font-family: 'Fira Code', monospace; color: #6b7280; margin-top: 0.75rem; word-break: break-all;"></div>
+
+                    <!-- Captured Pieces Graveyard -->
+                    <div style="margin-top: 0.75rem; display: flex; flex-direction: column; gap: 0.4rem;">
+                        <div style="display: flex; align-items: center; justify-content: space-between; font-size: 0.7rem;">
+                            <span style="color: #ef4444; font-weight: 700;">🔴 Tù Binh Đỏ Bị Ăn:</span>
+                            <div id="redGraveyard" class="graveyard-box"></div>
+                        </div>
+                        <div style="display: flex; align-items: center; justify-content: space-between; font-size: 0.7rem;">
+                            <span style="color: #38bdf8; font-weight: 700;">🔵 Tù Binh Đen Bị Ăn:</span>
+                            <div id="blackGraveyard" class="graveyard-box"></div>
+                        </div>
+                    </div>
+
+                    <div id="fenDisplay" style="font-size: 0.65rem; font-family: 'Fira Code', monospace; color: #64748b; margin-top: 0.75rem; word-break: break-all;"></div>
                 </div>
 
+                <!-- Candidates Move Matrix Card -->
                 <div class="card">
-                    <div style="font-size: 0.85rem; font-weight: 800; border-bottom: 1px solid #1f2937; padding-bottom: 0.5rem; margin-bottom: 0.75rem;">
+                    <div style="font-size: 0.85rem; font-weight: 800; border-bottom: 1px solid #1e293b; padding-bottom: 0.5rem; margin-bottom: 0.5rem;">
+                        🎯 Ma Trận Ứng Viên Candidate Moves ([25/32])
+                    </div>
+                    <div id="candidatesTableContainer">
+                        <table class="cand-table">
+                            <thead>
+                                <tr>
+                                    <th>Move</th>
+                                    <th>Diễn giải</th>
+                                    <th>Eval</th>
+                                    <th>Ý đồ / Intent</th>
+                                </tr>
+                            </thead>
+                            <tbody id="candidatesTableBody">
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- Markdown Dialogue Preview Card -->
+                <div class="card">
+                    <div style="font-size: 0.85rem; font-weight: 800; border-bottom: 1px solid #1e293b; padding-bottom: 0.5rem; margin-bottom: 0.75rem;">
                         💬 Preview Markdown Hội Thoại (LLM Format)
                     </div>
 
@@ -304,14 +425,21 @@
                 </div>
             </div>
 
+            <!-- Right: 32D Thought Inspector -->
             <div class="card">
-                <div style="font-size: 0.95rem; font-weight: 800; margin-bottom: 0.25rem;">
-                    🧠 Mạch Suy Tưởng 32 Chiều Kích (&lt;thought&gt; Block)
+                <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.25rem;">
+                    <span style="font-size: 0.95rem; font-weight: 800;">
+                        🧠 Mạch Suy Tưởng 32 Chiều Kích (&lt;thought&gt; Block)
+                    </span>
+                    <span id="dimComplianceBadge" style="font-size: 0.65rem; padding: 0.15rem 0.5rem; border-radius: 4px; background: rgba(16, 185, 129, 0.2); color: #34d399;">
+                        32/32 Complete
+                    </span>
                 </div>
-                <div style="font-size: 0.75rem; color: #9ca3af; margin-bottom: 0.75rem;">
+                <div style="font-size: 0.75rem; color: #94a3b8; margin-bottom: 0.75rem;">
                     Phân tích chi tiết 32 chiều kích dưới bối cảnh JRCP 5.0
                 </div>
 
+                <!-- Filter Chips -->
                 <div style="display: flex; flex-wrap: wrap; gap: 0.4rem; margin-bottom: 0.75rem;">
                     <button class="filter-btn active" onclick="filter32D('all', this)">Tất cả (32)</button>
                     <button class="filter-btn" onclick="filter32D('grp1', this)">Nhận thức (1-6)</button>
@@ -322,25 +450,49 @@
                     <button class="filter-btn" onclick="filter32D('grp6', this)">Luật đấu (29-32)</button>
                 </div>
 
-                <input type="text" id="dimSearchInput" oninput="search32D(this.value)" placeholder="🔍 Tìm kiếm từ khóa trong 32 chiều kích..." class="search-box">
+                <!-- Search Box -->
+                <input type="text" id="dimSearchInput" oninput="search32D(this.value)" placeholder="🔍 Tìm kiếm từ khóa trong 32 chiều kích (ví dụ: 'Pháo', 'Sĩ', 'Bẫy', 'Candidates')..." class="search-box">
 
-                <div id="dimsCardsContainer" style="overflow-y: auto; max-height: 700px; padding-right: 0.25rem;"></div>
+                <!-- 32D Cards Container -->
+                <div id="dimsCardsContainer" style="overflow-y: auto; max-height: 750px; padding-right: 0.25rem;">
+                </div>
             </div>
+
         </div>
 
+        <!-- Raw JSON Footer Box -->
         <div class="card">
             <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.5rem;">
-                <span style="font-size: 0.85rem; font-weight: 800;">📄 Raw JSONL Record</span>
+                <span style="font-size: 0.85rem; font-weight: 800;">📄 Raw JSONL Record Inspector</span>
                 <button onclick="copyRawRecordJson()" class="btn btn-secondary" style="font-size: 0.65rem; padding: 0.25rem 0.5rem;">📋 Copy Raw JSON</button>
             </div>
             <pre id="rawRecordJsonBox" class="pre-box" style="max-height: 180px; color: #a7f3d0;"></pre>
         </div>
+
     </main>
 
+    <!-- Paste Modal -->
+    <div id="pasteModal" class="modal-backdrop">
+        <div class="modal-content">
+            <div style="display: flex; align-items: center; justify-content: space-between;">
+                <span style="font-size: 0.9rem; font-weight: 800;">📝 Paste Raw JSONL Text</span>
+                <button onclick="closePasteModal()" class="btn btn-secondary" style="padding: 0.2rem 0.5rem;">✕</button>
+            </div>
+            <textarea id="pasteTextarea" placeholder="Dán nội dung JSONL vào đây (mỗi dòng là 1 JSON record)..." style="width: 100%; height: 260px; background: #060911; border: 1px solid #334155; border-radius: 8px; color: #f8fafc; padding: 0.75rem; font-family: 'Fira Code', monospace; font-size: 0.75rem; outline: none;"></textarea>
+            <div style="display: flex; justify-content: flex-end; gap: 0.5rem;">
+                <button onclick="closePasteModal()" class="btn btn-secondary">Hủy</button>
+                <button onclick="processPastedJsonl()" class="btn btn-primary">⚡ Nạp Dữ Liệu</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- JavaScript Inspector Engine v5 -->
     <script>
         let loadedGamesList = [];
         let activeGameIndex = 0;
         let activeTurnIndex = 0;
+        let autoPlayTimer = null;
+        let autoPlaySpeed = 1000;
 
         const PIECES_MAP = {
             'r': { name: '車', side: 'black' }, 'n': { name: '馬', side: 'black' }, 'b': { name: '象', side: 'black' },
@@ -351,47 +503,88 @@
             'P': { name: '兵', side: 'red' }
         };
 
-        const DEFAULT_SINGLE_GAME = {"game_id": "055eecf3", "total_plies": 4, "outcome": "in_progress", "messages": [{"role": "system", "content": "Bạn là Xiangqi-R1 Master v5.0 — mô hình suy luận cờ Tướng siêu việt được huấn luyện phân tích chiều sâu chiến thuật 32 chiều kích."}, {"role": "user", "content": "Bàn cờ Turn 1:\nFEN: rnbakabnr/9/1c2c4/p1p1p1p1p/9/9/P1P1P1P1P/4C2C1/9/RNBAKABNR w - - 0 1\nLượt Đỏ đi."}, {"role": "assistant", "content": "<thought>\n[1/32] KIỂM KÊ QUÂN CỜ:\n  Đỏ: Xe (a0), Mã (b0), Tượng (c0), Sĩ (d0), Tướng (e0), Sĩ (f0), Tượng (g0), Mã (h0), Xe (i0), Pháo (e2), Pháo (h2), Tốt (a3), Tốt (c3), Tốt (e3), Tốt (g3), Tốt (i3)\n  Đen: Tốt (a6), Tốt (c6), Tốt (e6), Tốt (g6), Tốt (i6), Pháo (b7), Pháo (e7), Xe (a9), Mã (b9), Tượng (c9), Sĩ (d9), Tướng (e9), Sĩ (f9), Tượng (g9), Mã (h9), Xe (i9)\n[2/32] BÀN CỜ 2D:\n    a    b    c    d    e    f    g    h    i\n  ┌────┬────┬────┬────┬────┬────┬────┬────┬────┐\n9 │ 車 │ 馬 │ 象 │ 士 │ 將 │ 士 │ 象 │ 馬 │ 車 │\n  ├────┼────┼────┼────┼────┼────┼────┼────┼────┤\n8 │ ． │ ． │ ． │ ． │ ． │ ． │ ． │ ． │ ． │\n  ├────┼────┼────┼────┼────┼────┼────┼────┼────┤\n7 │ ． │ 砲 │ ． │ ． │ 砲 │ ． │ ． │ ． │ ． │\n  ├────┼────┼────┼────┼────┼────┼────┼────┼────┤\n6 │ 卒 │ ． │ 卒 │ ． │ 卒 │ ． │ 卒 │ ． │ 卒 │\n  ├────┼────┼────┼────┼────┼────┼────┼────┼────┤\n5 │ ． │ ． │ ． │ ． │ ． │ ． │ ． │ ． │ ． │\n  ├────┼────┼────┼────┼────┼────┼────┼────┼────┤  ═══ Sông Ngân Hà ═══\n4 │ ． │ ． │ ． │ ． │ ． │ ． │ ． │ ． │ ． │\n  ├────┼────┼────┼────┼────┼────┼────┼────┼────┤\n3 │ 兵 │ ． │ 兵 │ ． │ 兵 │ ． │ 兵 │ ． │ 兵 │\n  ├────┼────┼────┼────┼────┼────┼────┼────┼────┤\n2 │ ． │ ． │ ． │ ． │ 炮 │ ． │ ． │ 炮 │ ． │\n  ├────┼────┼────┼────┼────┼────┼────┼────┼────┤\n1 │ ． │ ． │ ． │ ． │ ． │ ． │ ． │ ． │ ． │\n  ├────┼────┼────┼────┼────┼────┼────┼────┼────┤\n0 │ 車 │ 馬 │ 相 │ 仕 │ 帥 │ 仕 │ 相 │ 馬 │ 車 │\n  └────┴────┴────┴────┴────┴────┴────┴────┴────┘\n    a    b    c    d    e    f    g    h    i\n[3/32] TƯƠNG QUAN VẬT CHẤT CHI TIẾT:\n  Đỏ: 480cp | Đen: 480cp | Chênh lệch: 0cp\n[4/32] PHÂN TÍCH 9 LỘ:\n  Lộ 1 (a): KHÓA | Lộ 5 (e): KHÓA | Lộ 8 (h): MỞ\n[25/32] ĐÁNH GIÁ CANDIDATES (36 ứng viên):\n    + Ứng viên 1: e2e6 — Pháo(e2->e6) ăn Tốt(e6) ★BEST★\n[26/32] SO SÁNH & CHỌN BESTMOVE:\n  Chọn e2e6 — Pháo(e2 -> e6), ăn Tốt(e6) (0cp).\n[27/32] CENTIPAWN TỔNG HỢP: 0cp\n[28/32] XÁC MINH: e2e6 khớp regex ^[a-i][0-9][a-i][0-9]$ ✓\n</thought>"}, {"role": "user", "content": "Bàn cờ Turn 2:\nFEN: rnbakabnr/9/1c2c4/p1p1C1p1p/9/9/P1P1P1P1P/7C1/9/RNBAKABNR b - - 0 1\nLượt Đen đi."}, {"role": "assistant", "content": "<thought>\n[1/32] KIỂM KÊ QUÂN CỜ:\n  Đỏ: Xe(a0), Mã(b0), Pháo(e6)...\n[26/32] SO SÁNH & CHỌN BESTMOVE:\n  Chọn e7e3 — Pháo(e7 -> e3), ăn Tốt(e3) (0cp).\n</thought>"}]};
+        const INITIAL_PIECE_COUNTS = {
+            'R': 2, 'N': 2, 'B': 2, 'A': 2, 'K': 1, 'C': 2, 'P': 5,
+            'r': 2, 'n': 2, 'b': 2, 'a': 2, 'k': 1, 'c': 2, 'p': 5
+        };
 
+        const DEFAULT_SAMPLE_DATASET = [{"game_id": "xiangqi_master_game_001", "total_plies": 40, "outcome": "red_win", "stamp": 1786400000, "messages": [{"role": "system", "content": "Bạn là Xiangqi-R1 Master v5.0 — mô hình suy luận cờ Tướng siêu việt được huấn luyện phân tích chiều sâu chiến thuật 32 chiều kích.\nBạn phải phân tích bàn cờ qua 32 chiều kích suy tưởng <thought> chi tiết trước khi xuất kết quả JSON JRCP 5.0."}, {"role": "user", "content": "Bàn cờ Turn 1:\nFEN: rnbakabnr/9/1c2c4/p1p1p1p1p/9/9/P1P1P1P1P/4C2C1/9/RNBAKABNR w - - 0 1\nLượt Đỏ đi."}, {"role": "assistant", "content": "<thought>\n[1/32] KIỂM KÊ QUÂN CỜ:\n  Đỏ: Xe(a0), Mã(b0), Tượng(c0), Sĩ(d0), Tướng(e0), Sĩ(f0), Tượng(g0), Mã(h0), Xe(i0), Pháo(e2), Pháo(h2), Tốt(a3), Tốt(c3), Tốt(e3), Tốt(g3), Tốt(i3)\n  Đen: Tốt(a6), Tốt(c6), Tốt(e6), Tốt(g6), Tốt(i6), Pháo(b7), Pháo(e7), Xe(a9), Mã(b9), Tượng(c9), Sĩ(d9), Tướng(e9), Sĩ(f9), Tượng(g9), Mã(h9), Xe(i9)\n[2/32] BÀN CỜ 2D:\n    a    b    c    d    e    f    g    h    i\n  ┌────┬────┬────┬────┬────┬────┬────┬────┬────┐\n9 │ 車 │ 馬 │ 象 │ 士 │ 將 │ 士 │ 象 │ 馬 │ 車 │\n  ├────┼────┼────┼────┼────┼────┼────┼────┼────┤\n8 │ ． │ ． │ ． │ ． │ ． │ ． │ ． │ ． │ ． │\n  ├────┼────┼────┼────┼────┼────┼────┼────┼────┤\n7 │ ． │ 砲 │ ． │ ． │ 砲 │ ． │ ． │ ． │ ． │\n  ├────┼────┼────┼────┼────┼────┼────┼────┼────┤\n6 │ 卒 │ ． │ 卒 │ ． │ 卒 │ ． │ 卒 │ ． │ 卒 │\n  ├────┼────┼────┼────┼────┼────┼────┼────┼────┤\n5 │ ． │ ． │ ． │ ． │ ． │ ． │ ． │ ． │ ． │\n  ├────┼────┼────┼────┼────┼────┼────┼────┼────┤  ═══ Sông Ngân Hà ═══\n4 │ ． │ ． │ ． │ ． │ ． │ ． │ ． │ ． │ ． │\n  ├────┼────┼────┼────┼────┼────┼────┼────┼────┤\n3 │ 兵 │ ． │ 兵 │ ． │ 兵 │ ． │ 兵 │ ． │ 兵 │\n  ├────┼────┼────┼────┼────┼────┼────┼────┼────┤\n2 │ ． │ ． │ ． │ ． │ 炮 │ ． │ ． │ 炮 │ ． │\n  ├────┼────┼────┼────┼────┼────┼────┼────┼────┤\n1 │ ． │ ． │ ． │ ． │ ． │ ． │ ． │ ． │ ． │\n  ├────┼────┼────┼────┼────┼────┼────┼────┼────┤\n0 │ 車 │ 馬 │ 相 │ 仕 │ 帥 │ 仕 │ 相 │ 馬 │ 車 │\n  └────┴────┴────┴────┴────┴────┴────┴────┴────┘\n    a    b    c    d    e    f    g    h    i\n[3/32] TƯƠNG QUAN VẬT CHẤT CHI TIẾT:\n  Đỏ: 480cp | Đen: 480cp | Chênh lệch: 0cp\n[4/32] PHÂN TÍCH 9 LỘ:\n  Lộ 1 (a): MỞ | Lộ 4 (d): CHIẾM ƯU | Lộ 5 (e): KHÓA TRUNG LỘ | Lộ 8 (h): TỰ DO\n[5/32] ĐÁNH GIÁ TRIỂN KHAI QUÂN:\n  Đỏ: 4/6 quân chủ lực đã phát triển | Đen: 3/6 quân chủ lực đã phát triển\n[6/32] ĐỘ ĐỘNG QUÂN CỜ (MOBILITY):\n  Đỏ: 38 nước đi hợp lệ | Đen: 34 nước đi hợp lệ\n[7/32] AN TOÀN TƯỚNG (KING SAFETY):\n  Đỏ: 95/100 (Sĩ Tượng bền vững) | Đen: 90/100 (Bị đe dọa Lộ Trung)\n[8/32] PHÂN TÍCH QUÂN BỊ TẤN CÔNG:\n  Tốt e6 Đen bị Pháo e2 Đỏ nhắm bắn trực tiếp.\n[9/32] QUÂN TREO KHÔNG NGUYÊN (HANGING PIECES):\n  Không có quân treo nghiêm trọng.\n[10/32] TRẠNG THÁI GHIM (PINNED PIECES):\n  Mã b9 Đen bị Pháo Đỏ dọa ghim khi qua sông.\n[11/32] PHÂN TÍCH ĐÒN KÉP (FORKS):\n  Pháo e2 tạo đòn đe dọa kép lên Trung Lộ và Tốt e6.\n[12/32] PHÂN TÍCH ĐÒN MỞ (DISCOVERED ATTACKS):\n  Mã c2 di chuyển sẽ mở đường cho Xe d1 chiếm Lộ 4.\n[13/32] BẪY ĂN QUÂN (TRAPS):\n  Giăng bẫy dụ Pháo Đen ăn Tốt c3 để Pháo Đỏ phản đòn.\n[14/32] NGUY CƠ CHIẾU BÍ (CHECKMATE THREATS):\n  Chưa có nguy cơ chiếu bí tức thì (Depth safety = ok).\n[15/32] DƯƠNG ĐÔNG KÍCH TÂY (DIVERSION):\n  Điều Xe sang cánh trái mở rộng tầm khống chế cánh phải.\n[16/32] MẪU CHIẾN THUẬT (PATTERNS):\n  Pháo Đầu Mã Đội, Xe Chiếm Lộ Mở, Mã Quỳ Phòng Thủ.\n[17/32] PHỐI HỢP QUÂN CỜ (SYNERGY):\n  Pháo - Xe phối hợp khống chế Trục dọc Lộ 4 & Lộ 5.\n[18/32] ĐIỂM YẾU CẤU TRÚC (WEAKNESSES):\n  Đen hổng Tốt Trung Lộ e6.\n[19/32] 36 KẾ BINH PHÁP (STRATAGEMS):\n  Kế 1: Dục cầm cố túng — Mở đường dụ đối phương dâng cao.\n[20/32] THẾ TRẬN KINH ĐIỂN (FORMATIONS):\n  Pháo Đầu Đối Bình Phong Mã.\n[21/32] GIAI ĐOẠN KHAI NGUYÊN (TEMPO & PHASE):\n  Giai đoạn Opening (Nước thứ 1) — Giành 1 Nhịp Chuẩn.\n[22/32] PHẢN ĐÒN DỰ KIẾN (OPPONENT COUNTER):\n  Đen có thể nhảy Mã h9->g7 để củng cố Trung Lộ.\n[23/32] PHÂN TÍCH ƯU THẾ & BẤT LỢI:\n  Ưu thế: Chiếm Trung Lộ Lộ 5 | Bất lợi: Chưa xuất Xe cánh phải.\n[24/32] MA TRẬN TRỌNG SỐ QUYẾT ĐỊNH:\n  Độ chính xác (9/10) + An toàn (9/10) + Ngữ cảnh (9/10) - Rủi ro (2/10) = 25/40 (ĐẠT).\n[25/32] ĐÁNH GIÁ CANDIDATES (3 ứng viên):\n    + Ứng viên 1: e2e6 — Pháo(e2->e6) ăn Tốt(e6) ★BEST★ (0cp)\n    + Ứng viên 2: b0c2 — Mã(b0->c2) phát triển (10cp)\n    + Ứng viên 3: h0g2 — Mã(h0->g2) phát triển biên (5cp)\n[26/32] SO SÁNH & CHỌN BESTMOVE:\n  Chọn e2e6 — Pháo(e2->e6) ăn Tốt(e6) (0cp).\n[27/32] CENTIPAWN TỔNG HỢP: 0cp\n[28/32] XÁC MINH REGEX: e2e6 khớp ^[a-i][0-9][a-i][0-9]$ ✓\n[29/32] PHẢN ĐÒN TỐI ƯU (OPTIMAL COUNTER):\n  Đen bắt buộc phải chống Sĩ hoặc nhảy Mã b9->c7.\n[30/32] KIỂM TRA LUẬT CẤM LẶP NƯỚC:\n  Không vi phạm luật Lặp Nước / Chọi Tướng.\n[31/32] CHUỖI ĐỔI QUÂN (EXCHANGE CHAIN):\n  Đổi Pháo lấy Tốt Trung Lộ tạo ưu thế lâu dài.\n[32/32] THƯ VIỆN TÀN CUỘC TABLEBASE:\n  Bàn cờ 32 quân — Chưa sử dụng 5-piece Tablebase.\n</thought>"}, {"role": "user", "content": "Bàn cờ Turn 2:\nFEN: rnbakabnr/9/1c2c4/p1p1C1p1p/9/9/P1P1P1P1P/7C1/9/RNBAKABNR b - - 0 1\nLượt Đen đi."}, {"role": "assistant", "content": "<thought>\n[1/32] KIỂM KÊ QUÂN CỜ:\n  Đỏ: Xe(a0), Mã(b0), Tượng(c0), Sĩ(d0), Tướng(e0), Sĩ(f0), Tượng(g0), Mã(h0), Xe(i0), Pháo(e2), Pháo(h2), Tốt(a3), Tốt(c3), Tốt(e3), Tốt(g3), Tốt(i3)\n  Đen: Tốt(a6), Tốt(c6), Tốt(e6), Tốt(g6), Tốt(i6), Pháo(b7), Pháo(e7), Xe(a9), Mã(b9), Tượng(c9), Sĩ(d9), Tướng(e9), Sĩ(f9), Tượng(g9), Mã(h9), Xe(i9)\n[2/32] BÀN CỜ 2D:\n    a    b    c    d    e    f    g    h    i\n  ┌────┬────┬────┬────┬────┬────┬────┬────┬────┐\n9 │ 車 │ 馬 │ 象 │ 士 │ 將 │ 士 │ 象 │ 馬 │ 車 │\n  ├────┼────┼────┼────┼────┼────┼────┼────┼────┤\n8 │ ． │ ． │ ． │ ． │ ． │ ． │ ． │ ． │ ． │\n  ├────┼────┼────┼────┼────┼────┼────┼────┼────┤\n7 │ ． │ 砲 │ ． │ ． │ 砲 │ ． │ ． │ ． │ ． │\n  ├────┼────┼────┼────┼────┼────┼────┼────┼────┤\n6 │ 卒 │ ． │ 卒 │ ． │ 卒 │ ． │ 卒 │ ． │ 卒 │\n  ├────┼────┼────┼────┼────┼────┼────┼────┼────┤\n5 │ ． │ ． │ ． │ ． │ ． │ ． │ ． │ ． │ ． │\n  ├────┼────┼────┼────┼────┼────┼────┼────┼────┤  ═══ Sông Ngân Hà ═══\n4 │ ． │ ． │ ． │ ． │ ． │ ． │ ． │ ． │ ． │\n  ├────┼────┼────┼────┼────┼────┼────┼────┼────┤\n3 │ 兵 │ ． │ 兵 │ ． │ 兵 │ ． │ 兵 │ ． │ 兵 │\n  ├────┼────┼────┼────┼────┼────┼────┼────┼────┤\n2 │ ． │ ． │ ． │ ． │ 炮 │ ． │ ． │ 炮 │ ． │\n  ├────┼────┼────┼────┼────┼────┼────┼────┼────┤\n1 │ ． │ ． │ ． │ ． │ ． │ ． │ ． │ ． │ ． │\n  ├────┼────┼────┼────┼────┼────┼────┼────┼────┤\n0 │ 車 │ 馬 │ 相 │ 仕 │ 帥 │ 仕 │ 相 │ 馬 │ 車 │\n  └────┴────┴────┴────┴────┴────┴────┴────┴────┘\n    a    b    c    d    e    f    g    h    i\n[3/32] TƯƠNG QUAN VẬT CHẤT CHI TIẾT:\n  Đỏ: 480cp | Đen: 480cp | Chênh lệch: 0cp\n[4/32] PHÂN TÍCH 9 LỘ:\n  Lộ 1 (a): MỞ | Lộ 4 (d): CHIẾM ƯU | Lộ 5 (e): KHÓA TRUNG LỘ | Lộ 8 (h): TỰ DO\n[5/32] ĐÁNH GIÁ TRIỂN KHAI QUÂN:\n  Đỏ: 4/6 quân chủ lực đã phát triển | Đen: 3/6 quân chủ lực đã phát triển\n[6/32] ĐỘ ĐỘNG QUÂN CỜ (MOBILITY):\n  Đỏ: 38 nước đi hợp lệ | Đen: 34 nước đi hợp lệ\n[7/32] AN TOÀN TƯỚNG (KING SAFETY):\n  Đỏ: 95/100 (Sĩ Tượng bền vững) | Đen: 90/100 (Bị đe dọa Lộ Trung)\n[8/32] PHÂN TÍCH QUÂN BỊ TẤN CÔNG:\n  Tốt e6 Đen bị Pháo e2 Đỏ nhắm bắn trực tiếp.\n[9/32] QUÂN TREO KHÔNG NGUYÊN (HANGING PIECES):\n  Không có quân treo nghiêm trọng.\n[10/32] TRẠNG THÁI GHIM (PINNED PIECES):\n  Mã b9 Đen bị Pháo Đỏ dọa ghim khi qua sông.\n[11/32] PHÂN TÍCH ĐÒN KÉP (FORKS):\n  Pháo e2 tạo đòn đe dọa kép lên Trung Lộ và Tốt e6.\n[12/32] PHÂN TÍCH ĐÒN MỞ (DISCOVERED ATTACKS):\n  Mã c2 di chuyển sẽ mở đường cho Xe d1 chiếm Lộ 4.\n[13/32] BẪY ĂN QUÂN (TRAPS):\n  Giăng bẫy dụ Pháo Đen ăn Tốt c3 để Pháo Đỏ phản đòn.\n[14/32] NGUY CƠ CHIẾU BÍ (CHECKMATE THREATS):\n  Chưa có nguy cơ chiếu bí tức thì (Depth safety = ok).\n[15/32] DƯƠNG ĐÔNG KÍCH TÂY (DIVERSION):\n  Điều Xe sang cánh trái mở rộng tầm khống chế cánh phải.\n[16/32] MẪU CHIẾN THUẬT (PATTERNS):\n  Pháo Đầu Mã Đội, Xe Chiếm Lộ Mở, Mã Quỳ Phòng Thủ.\n[17/32] PHỐI HỢP QUÂN CỜ (SYNERGY):\n  Pháo - Xe phối hợp khống chế Trục dọc Lộ 4 & Lộ 5.\n[18/32] ĐIỂM YẾU CẤU TRÚC (WEAKNESSES):\n  Đen hổng Tốt Trung Lộ e6.\n[19/32] 36 KẾ BINH PHÁP (STRATAGEMS):\n  Kế 1: Dục cầm cố túng — Mở đường dụ đối phương dâng cao.\n[20/32] THẾ TRẬN KINH ĐIỂN (FORMATIONS):\n  Pháo Đầu Đối Bình Phong Mã.\n[21/32] GIAI ĐOẠN KHAI NGUYÊN (TEMPO & PHASE):\n  Giai đoạn Opening (Nước thứ 2) — Giành 1 Nhịp Chuẩn.\n[22/32] PHẢN ĐÒN DỰ KIẾN (OPPONENT COUNTER):\n  Đen có thể nhảy Mã h9->g7 để củng cố Trung Lộ.\n[23/32] PHÂN TÍCH ƯU THẾ & BẤT LỢI:\n  Ưu thế: Chiếm Trung Lộ Lộ 5 | Bất lợi: Chưa xuất Xe cánh phải.\n[24/32] MA TRẬN TRỌNG SỐ QUYẾT ĐỊNH:\n  Độ chính xác (9/10) + An toàn (9/10) + Ngữ cảnh (9/10) - Rủi ro (2/10) = 25/40 (ĐẠT).\n[25/32] ĐÁNH GIÁ CANDIDATES (3 ứng viên):\n    + Ứng viên 1: e7e3 — Pháo(e7->e3) ăn Tốt(e3) ★BEST★ (0cp)\n    + Ứng viên 2: b0c2 — Mã(b0->c2) phát triển (10cp)\n    + Ứng viên 3: h0g2 — Mã(h0->g2) phát triển biên (5cp)\n[26/32] SO SÁNH & CHỌN BESTMOVE:\n  Chọn e7e3 — Pháo(e7->e3) ăn Tốt(e3) (0cp).\n[27/32] CENTIPAWN TỔNG HỢP: 0cp\n[28/32] XÁC MINH REGEX: e7e3 khớp ^[a-i][0-9][a-i][0-9]$ ✓\n[29/32] PHẢN ĐÒN TỐI ƯU (OPTIMAL COUNTER):\n  Đen bắt buộc phải chống Sĩ hoặc nhảy Mã b9->c7.\n[30/32] KIỂM TRA LUẬT CẤM LẶP NƯỚC:\n  Không vi phạm luật Lặp Nước / Chọi Tướng.\n[31/32] CHUỖI ĐỔI QUÂN (EXCHANGE CHAIN):\n  Đổi Pháo lấy Tốt Trung Lộ tạo ưu thế lâu dài.\n[32/32] THƯ VIỆN TÀN CUỘC TABLEBASE:\n  Bàn cờ 32 quân — Chưa sử dụng 5-piece Tablebase.\n</thought>"}, {"role": "user", "content": "Bàn cờ Turn 3:\nFEN: rnbakabnr/9/1c6/p1p1C1p1p/9/9/P1P1c1P1P/7C1/9/RNBAKABNR w - - 0 2\nLượt Đỏ đi."}, {"role": "assistant", "content": "<thought>\n[1/32] KIỂM KÊ QUÂN CỜ:\n  Đỏ: Xe(a0), Mã(b0), Tượng(c0), Sĩ(d0), Tướng(e0), Sĩ(f0), Tượng(g0), Mã(h0), Xe(i0), Pháo(e2), Pháo(h2), Tốt(a3), Tốt(c3), Tốt(e3), Tốt(g3), Tốt(i3)\n  Đen: Tốt(a6), Tốt(c6), Tốt(e6), Tốt(g6), Tốt(i6), Pháo(b7), Pháo(e7), Xe(a9), Mã(b9), Tượng(c9), Sĩ(d9), Tướng(e9), Sĩ(f9), Tượng(g9), Mã(h9), Xe(i9)\n[2/32] BÀN CỜ 2D:\n    a    b    c    d    e    f    g    h    i\n  ┌────┬────┬────┬────┬────┬────┬────┬────┬────┐\n9 │ 車 │ 馬 │ 象 │ 士 │ 將 │ 士 │ 象 │ 馬 │ 車 │\n  ├────┼────┼────┼────┼────┼────┼────┼────┼────┤\n8 │ ． │ ． │ ． │ ． │ ． │ ． │ ． │ ． │ ． │\n  ├────┼────┼────┼────┼────┼────┼────┼────┼────┤\n7 │ ． │ 砲 │ ． │ ． │ 砲 │ ． │ ． │ ． │ ． │\n  ├────┼────┼────┼────┼────┼────┼────┼────┼────┤\n6 │ 卒 │ ． │ 卒 │ ． │ 卒 │ ． │ 卒 │ ． │ 卒 │\n  ├────┼────┼────┼────┼────┼────┼────┼────┼────┤\n5 │ ． │ ． │ ． │ ． │ ． │ ． │ ． │ ． │ ． │\n  ├────┼────┼────┼────┼────┼────┼────┼────┼────┤  ═══ Sông Ngân Hà ═══\n4 │ ． │ ． │ ． │ ． │ ． │ ． │ ． │ ． │ ． │\n  ├────┼────┼────┼────┼────┼────┼────┼────┼────┤\n3 │ 兵 │ ． │ 兵 │ ． │ 兵 │ ． │ 兵 │ ． │ 兵 │\n  ├────┼────┼────┼────┼────┼────┼────┼────┼────┤\n2 │ ． │ ． │ ． │ ． │ 炮 │ ． │ ． │ 炮 │ ． │\n  ├────┼────┼────┼────┼────┼────┼────┼────┼────┤\n1 │ ． │ ． │ ． │ ． │ ． │ ． │ ． │ ． │ ． │\n  ├────┼────┼────┼────┼────┼────┼────┼────┼────┤\n0 │ 車 │ 馬 │ 相 │ 仕 │ 帥 │ 仕 │ 相 │ 馬 │ 車 │\n  └────┴────┴────┴────┴────┴────┴────┴────┴────┘\n    a    b    c    d    e    f    g    h    i\n[3/32] TƯƠNG QUAN VẬT CHẤT CHI TIẾT:\n  Đỏ: 480cp | Đen: 480cp | Chênh lệch: 15cp\n[4/32] PHÂN TÍCH 9 LỘ:\n  Lộ 1 (a): MỞ | Lộ 4 (d): CHIẾM ƯU | Lộ 5 (e): KHÓA TRUNG LỘ | Lộ 8 (h): TỰ DO\n[5/32] ĐÁNH GIÁ TRIỂN KHAI QUÂN:\n  Đỏ: 4/6 quân chủ lực đã phát triển | Đen: 3/6 quân chủ lực đã phát triển\n[6/32] ĐỘ ĐỘNG QUÂN CỜ (MOBILITY):\n  Đỏ: 38 nước đi hợp lệ | Đen: 34 nước đi hợp lệ\n[7/32] AN TOÀN TƯỚNG (KING SAFETY):\n  Đỏ: 95/100 (Sĩ Tượng bền vững) | Đen: 90/100 (Bị đe dọa Lộ Trung)\n[8/32] PHÂN TÍCH QUÂN BỊ TẤN CÔNG:\n  Tốt e6 Đen bị Pháo e2 Đỏ nhắm bắn trực tiếp.\n[9/32] QUÂN TREO KHÔNG NGUYÊN (HANGING PIECES):\n  Không có quân treo nghiêm trọng.\n[10/32] TRẠNG THÁI GHIM (PINNED PIECES):\n  Mã b9 Đen bị Pháo Đỏ dọa ghim khi qua sông.\n[11/32] PHÂN TÍCH ĐÒN KÉP (FORKS):\n  Pháo e2 tạo đòn đe dọa kép lên Trung Lộ và Tốt e6.\n[12/32] PHÂN TÍCH ĐÒN MỞ (DISCOVERED ATTACKS):\n  Mã c2 di chuyển sẽ mở đường cho Xe d1 chiếm Lộ 4.\n[13/32] BẪY ĂN QUÂN (TRAPS):\n  Giăng bẫy dụ Pháo Đen ăn Tốt c3 để Pháo Đỏ phản đòn.\n[14/32] NGUY CƠ CHIẾU BÍ (CHECKMATE THREATS):\n  Chưa có nguy cơ chiếu bí tức thì (Depth safety = ok).\n[15/32] DƯƠNG ĐÔNG KÍCH TÂY (DIVERSION):\n  Điều Xe sang cánh trái mở rộng tầm khống chế cánh phải.\n[16/32] MẪU CHIẾN THUẬT (PATTERNS):\n  Pháo Đầu Mã Đội, Xe Chiếm Lộ Mở, Mã Quỳ Phòng Thủ.\n[17/32] PHỐI HỢP QUÂN CỜ (SYNERGY):\n  Pháo - Xe phối hợp khống chế Trục dọc Lộ 4 & Lộ 5.\n[18/32] ĐIỂM YẾU CẤU TRÚC (WEAKNESSES):\n  Đen hổng Tốt Trung Lộ e6.\n[19/32] 36 KẾ BINH PHÁP (STRATAGEMS):\n  Kế 1: Dục cầm cố túng — Mở đường dụ đối phương dâng cao.\n[20/32] THẾ TRẬN KINH ĐIỂN (FORMATIONS):\n  Pháo Đầu Đối Bình Phong Mã.\n[21/32] GIAI ĐOẠN KHAI NGUYÊN (TEMPO & PHASE):\n  Giai đoạn Opening (Nước thứ 3) — Giành 1 Nhịp Chuẩn.\n[22/32] PHẢN ĐÒN DỰ KIẾN (OPPONENT COUNTER):\n  Đen có thể nhảy Mã h9->g7 để củng cố Trung Lộ.\n[23/32] PHÂN TÍCH ƯU THẾ & BẤT LỢI:\n  Ưu thế: Chiếm Trung Lộ Lộ 5 | Bất lợi: Chưa xuất Xe cánh phải.\n[24/32] MA TRẬN TRỌNG SỐ QUYẾT ĐỊNH:\n  Độ chính xác (9/10) + An toàn (9/10) + Ngữ cảnh (9/10) - Rủi ro (2/10) = 25/40 (ĐẠT).\n[25/32] ĐÁNH GIÁ CANDIDATES (3 ứng viên):\n    + Ứng viên 1: b0c2 — Mã(b0->c2) phát triển ★BEST★ (15cp)\n    + Ứng viên 2: b0c2 — Mã(b0->c2) phát triển (10cp)\n    + Ứng viên 3: h0g2 — Mã(h0->g2) phát triển biên (5cp)\n[26/32] SO SÁNH & CHỌN BESTMOVE:\n  Chọn b0c2 — Mã(b0->c2) phát triển (15cp).\n[27/32] CENTIPAWN TỔNG HỢP: 15cp\n[28/32] XÁC MINH REGEX: b0c2 khớp ^[a-i][0-9][a-i][0-9]$ ✓\n[29/32] PHẢN ĐÒN TỐI ƯU (OPTIMAL COUNTER):\n  Đen bắt buộc phải chống Sĩ hoặc nhảy Mã b9->c7.\n[30/32] KIỂM TRA LUẬT CẤM LẶP NƯỚC:\n  Không vi phạm luật Lặp Nước / Chọi Tướng.\n[31/32] CHUỖI ĐỔI QUÂN (EXCHANGE CHAIN):\n  Đổi Pháo lấy Tốt Trung Lộ tạo ưu thế lâu dài.\n[32/32] THƯ VIỆN TÀN CUỘC TABLEBASE:\n  Bàn cờ 32 quân — Chưa sử dụng 5-piece Tablebase.\n</thought>"}, {"role": "user", "content": "Bàn cờ Turn 4:\nFEN: rnbakabnr/9/1c6/p1p1C1p1p/9/9/P1P1c1P1P/2N4C1/9/R1BAKABNR b - - 0 2\nLượt Đen đi."}, {"role": "assistant", "content": "<thought>\n[1/32] KIỂM KÊ QUÂN CỜ:\n  Đỏ: Xe(a0), Mã(b0), Tượng(c0), Sĩ(d0), Tướng(e0), Sĩ(f0), Tượng(g0), Mã(h0), Xe(i0), Pháo(e2), Pháo(h2), Tốt(a3), Tốt(c3), Tốt(e3), Tốt(g3), Tốt(i3)\n  Đen: Tốt(a6), Tốt(c6), Tốt(e6), Tốt(g6), Tốt(i6), Pháo(b7), Pháo(e7), Xe(a9), Mã(b9), Tượng(c9), Sĩ(d9), Tướng(e9), Sĩ(f9), Tượng(g9), Mã(h9), Xe(i9)\n[2/32] BÀN CỜ 2D:\n    a    b    c    d    e    f    g    h    i\n  ┌────┬────┬────┬────┬────┬────┬────┬────┬────┐\n9 │ 車 │ 馬 │ 象 │ 士 │ 將 │ 士 │ 象 │ 馬 │ 車 │\n  ├────┼────┼────┼────┼────┼────┼────┼────┼────┤\n8 │ ． │ ． │ ． │ ． │ ． │ ． │ ． │ ． │ ． │\n  ├────┼────┼────┼────┼────┼────┼────┼────┼────┤\n7 │ ． │ 砲 │ ． │ ． │ 砲 │ ． │ ． │ ． │ ． │\n  ├────┼────┼────┼────┼────┼────┼────┼────┼────┤\n6 │ 卒 │ ． │ 卒 │ ． │ 卒 │ ． │ 卒 │ ． │ 卒 │\n  ├────┼────┼────┼────┼────┼────┼────┼────┼────┤\n5 │ ． │ ． │ ． │ ． │ ． │ ． │ ． │ ． │ ． │\n  ├────┼────┼────┼────┼────┼────┼────┼────┼────┤  ═══ Sông Ngân Hà ═══\n4 │ ． │ ． │ ． │ ． │ ． │ ． │ ． │ ． │ ． │\n  ├────┼────┼────┼────┼────┼────┼────┼────┼────┤\n3 │ 兵 │ ． │ 兵 │ ． │ 兵 │ ． │ 兵 │ ． │ 兵 │\n  ├────┼────┼────┼────┼────┼────┼────┼────┼────┤\n2 │ ． │ ． │ ． │ ． │ 炮 │ ． │ ． │ 炮 │ ． │\n  ├────┼────┼────┼────┼────┼────┼────┼────┼────┤\n1 │ ． │ ． │ ． │ ． │ ． │ ． │ ． │ ． │ ． │\n  ├────┼────┼────┼────┼────┼────┼────┼────┼────┤\n0 │ 車 │ 馬 │ 相 │ 仕 │ 帥 │ 仕 │ 相 │ 馬 │ 車 │\n  └────┴────┴────┴────┴────┴────┴────┴────┴────┘\n    a    b    c    d    e    f    g    h    i\n[3/32] TƯƠNG QUAN VẬT CHẤT CHI TIẾT:\n  Đỏ: 480cp | Đen: 480cp | Chênh lệch: 10cp\n[4/32] PHÂN TÍCH 9 LỘ:\n  Lộ 1 (a): MỞ | Lộ 4 (d): CHIẾM ƯU | Lộ 5 (e): KHÓA TRUNG LỘ | Lộ 8 (h): TỰ DO\n[5/32] ĐÁNH GIÁ TRIỂN KHAI QUÂN:\n  Đỏ: 4/6 quân chủ lực đã phát triển | Đen: 3/6 quân chủ lực đã phát triển\n[6/32] ĐỘ ĐỘNG QUÂN CỜ (MOBILITY):\n  Đỏ: 38 nước đi hợp lệ | Đen: 34 nước đi hợp lệ\n[7/32] AN TOÀN TƯỚNG (KING SAFETY):\n  Đỏ: 95/100 (Sĩ Tượng bền vững) | Đen: 90/100 (Bị đe dọa Lộ Trung)\n[8/32] PHÂN TÍCH QUÂN BỊ TẤN CÔNG:\n  Tốt e6 Đen bị Pháo e2 Đỏ nhắm bắn trực tiếp.\n[9/32] QUÂN TREO KHÔNG NGUYÊN (HANGING PIECES):\n  Không có quân treo nghiêm trọng.\n[10/32] TRẠNG THÁI GHIM (PINNED PIECES):\n  Mã b9 Đen bị Pháo Đỏ dọa ghim khi qua sông.\n[11/32] PHÂN TÍCH ĐÒN KÉP (FORKS):\n  Pháo e2 tạo đòn đe dọa kép lên Trung Lộ và Tốt e6.\n[12/32] PHÂN TÍCH ĐÒN MỞ (DISCOVERED ATTACKS):\n  Mã c2 di chuyển sẽ mở đường cho Xe d1 chiếm Lộ 4.\n[13/32] BẪY ĂN QUÂN (TRAPS):\n  Giăng bẫy dụ Pháo Đen ăn Tốt c3 để Pháo Đỏ phản đòn.\n[14/32] NGUY CƠ CHIẾU BÍ (CHECKMATE THREATS):\n  Chưa có nguy cơ chiếu bí tức thì (Depth safety = ok).\n[15/32] DƯƠNG ĐÔNG KÍCH TÂY (DIVERSION):\n  Điều Xe sang cánh trái mở rộng tầm khống chế cánh phải.\n[16/32] MẪU CHIẾN THUẬT (PATTERNS):\n  Pháo Đầu Mã Đội, Xe Chiếm Lộ Mở, Mã Quỳ Phòng Thủ.\n[17/32] PHỐI HỢP QUÂN CỜ (SYNERGY):\n  Pháo - Xe phối hợp khống chế Trục dọc Lộ 4 & Lộ 5.\n[18/32] ĐIỂM YẾU CẤU TRÚC (WEAKNESSES):\n  Đen hổng Tốt Trung Lộ e6.\n[19/32] 36 KẾ BINH PHÁP (STRATAGEMS):\n  Kế 1: Dục cầm cố túng — Mở đường dụ đối phương dâng cao.\n[20/32] THẾ TRẬN KINH ĐIỂN (FORMATIONS):\n  Pháo Đầu Đối Bình Phong Mã.\n[21/32] GIAI ĐOẠN KHAI NGUYÊN (TEMPO & PHASE):\n  Giai đoạn Opening (Nước thứ 4) — Giành 1 Nhịp Chuẩn.\n[22/32] PHẢN ĐÒN DỰ KIẾN (OPPONENT COUNTER):\n  Đen có thể nhảy Mã h9->g7 để củng cố Trung Lộ.\n[23/32] PHÂN TÍCH ƯU THẾ & BẤT LỢI:\n  Ưu thế: Chiếm Trung Lộ Lộ 5 | Bất lợi: Chưa xuất Xe cánh phải.\n[24/32] MA TRẬN TRỌNG SỐ QUYẾT ĐỊNH:\n  Độ chính xác (9/10) + An toàn (9/10) + Ngữ cảnh (9/10) - Rủi ro (2/10) = 25/40 (ĐẠT).\n[25/32] ĐÁNH GIÁ CANDIDATES (3 ứng viên):\n    + Ứng viên 1: b9c7 — Mã(b9->c7) nhảy Mã Quỳ ★BEST★ (10cp)\n    + Ứng viên 2: b0c2 — Mã(b0->c2) phát triển (10cp)\n    + Ứng viên 3: h0g2 — Mã(h0->g2) phát triển biên (5cp)\n[26/32] SO SÁNH & CHỌN BESTMOVE:\n  Chọn b9c7 — Mã(b9->c7) nhảy Mã Quỳ (10cp).\n[27/32] CENTIPAWN TỔNG HỢP: 10cp\n[28/32] XÁC MINH REGEX: b9c7 khớp ^[a-i][0-9][a-i][0-9]$ ✓\n[29/32] PHẢN ĐÒN TỐI ƯU (OPTIMAL COUNTER):\n  Đen bắt buộc phải chống Sĩ hoặc nhảy Mã b9->c7.\n[30/32] KIỂM TRA LUẬT CẤM LẶP NƯỚC:\n  Không vi phạm luật Lặp Nước / Chọi Tướng.\n[31/32] CHUỖI ĐỔI QUÂN (EXCHANGE CHAIN):\n  Đổi Pháo lấy Tốt Trung Lộ tạo ưu thế lâu dài.\n[32/32] THƯ VIỆN TÀN CUỘC TABLEBASE:\n  Bàn cờ 32 quân — Chưa sử dụng 5-piece Tablebase.\n</thought>"}, {"role": "user", "content": "Bàn cờ Turn 5:\nFEN: r1bakabnr/2n6/1c6/p1p1C1p1p/9/9/P1P1c1P1P/2N4C1/9/R1BAKABNR w - - 0 3\nLượt Đỏ đi."}, {"role": "assistant", "content": "<thought>\n[1/32] KIỂM KÊ QUÂN CỜ:\n  Đỏ: Xe(a0), Mã(b0), Tượng(c0), Sĩ(d0), Tướng(e0), Sĩ(f0), Tượng(g0), Mã(h0), Xe(i0), Pháo(e2), Pháo(h2), Tốt(a3), Tốt(c3), Tốt(e3), Tốt(g3), Tốt(i3)\n  Đen: Tốt(a6), Tốt(c6), Tốt(e6), Tốt(g6), Tốt(i6), Pháo(b7), Pháo(e7), Xe(a9), Mã(b9), Tượng(c9), Sĩ(d9), Tướng(e9), Sĩ(f9), Tượng(g9), Mã(h9), Xe(i9)\n[2/32] BÀN CỜ 2D:\n    a    b    c    d    e    f    g    h    i\n  ┌────┬────┬────┬────┬────┬────┬────┬────┬────┐\n9 │ 車 │ 馬 │ 象 │ 士 │ 將 │ 士 │ 象 │ 馬 │ 車 │\n  ├────┼────┼────┼────┼────┼────┼────┼────┼────┤\n8 │ ． │ ． │ ． │ ． │ ． │ ． │ ． │ ． │ ． │\n  ├────┼────┼────┼────┼────┼────┼────┼────┼────┤\n7 │ ． │ 砲 │ ． │ ． │ 砲 │ ． │ ． │ ． │ ． │\n  ├────┼────┼────┼────┼────┼────┼────┼────┼────┤\n6 │ 卒 │ ． │ 卒 │ ． │ 卒 │ ． │ 卒 │ ． │ 卒 │\n  ├────┼────┼────┼────┼────┼────┼────┼────┼────┤\n5 │ ． │ ． │ ． │ ． │ ． │ ． │ ． │ ． │ ． │\n  ├────┼────┼────┼────┼────┼────┼────┼────┼────┤  ═══ Sông Ngân Hà ═══\n4 │ ． │ ． │ ． │ ． │ ． │ ． │ ． │ ． │ ． │\n  ├────┼────┼────┼────┼────┼────┼────┼────┼────┤\n3 │ 兵 │ ． │ 兵 │ ． │ 兵 │ ． │ 兵 │ ． │ 兵 │\n  ├────┼────┼────┼────┼────┼────┼────┼────┼────┤\n2 │ ． │ ． │ ． │ ． │ 炮 │ ． │ ． │ 炮 │ ． │\n  ├────┼────┼────┼────┼────┼────┼────┼────┼────┤\n1 │ ． │ ． │ ． │ ． │ ． │ ． │ ． │ ． │ ． │\n  ├────┼────┼────┼────┼────┼────┼────┼────┼────┤\n0 │ 車 │ 馬 │ 相 │ 仕 │ 帥 │ 仕 │ 相 │ 馬 │ 車 │\n  └────┴────┴────┴────┴────┴────┴────┴────┴────┘\n    a    b    c    d    e    f    g    h    i\n[3/32] TƯƠNG QUAN VẬT CHẤT CHI TIẾT:\n  Đỏ: 480cp | Đen: 480cp | Chênh lệch: 20cp\n[4/32] PHÂN TÍCH 9 LỘ:\n  Lộ 1 (a): MỞ | Lộ 4 (d): CHIẾM ƯU | Lộ 5 (e): KHÓA TRUNG LỘ | Lộ 8 (h): TỰ DO\n[5/32] ĐÁNH GIÁ TRIỂN KHAI QUÂN:\n  Đỏ: 4/6 quân chủ lực đã phát triển | Đen: 3/6 quân chủ lực đã phát triển\n[6/32] ĐỘ ĐỘNG QUÂN CỜ (MOBILITY):\n  Đỏ: 38 nước đi hợp lệ | Đen: 34 nước đi hợp lệ\n[7/32] AN TOÀN TƯỚNG (KING SAFETY):\n  Đỏ: 95/100 (Sĩ Tượng bền vững) | Đen: 90/100 (Bị đe dọa Lộ Trung)\n[8/32] PHÂN TÍCH QUÂN BỊ TẤN CÔNG:\n  Tốt e6 Đen bị Pháo e2 Đỏ nhắm bắn trực tiếp.\n[9/32] QUÂN TREO KHÔNG NGUYÊN (HANGING PIECES):\n  Không có quân treo nghiêm trọng.\n[10/32] TRẠNG THÁI GHIM (PINNED PIECES):\n  Mã b9 Đen bị Pháo Đỏ dọa ghim khi qua sông.\n[11/32] PHÂN TÍCH ĐÒN KÉP (FORKS):\n  Pháo e2 tạo đòn đe dọa kép lên Trung Lộ và Tốt e6.\n[12/32] PHÂN TÍCH ĐÒN MỞ (DISCOVERED ATTACKS):\n  Mã c2 di chuyển sẽ mở đường cho Xe d1 chiếm Lộ 4.\n[13/32] BẪY ĂN QUÂN (TRAPS):\n  Giăng bẫy dụ Pháo Đen ăn Tốt c3 để Pháo Đỏ phản đòn.\n[14/32] NGUY CƠ CHIẾU BÍ (CHECKMATE THREATS):\n  Chưa có nguy cơ chiếu bí tức thì (Depth safety = ok).\n[15/32] DƯƠNG ĐÔNG KÍCH TÂY (DIVERSION):\n  Điều Xe sang cánh trái mở rộng tầm khống chế cánh phải.\n[16/32] MẪU CHIẾN THUẬT (PATTERNS):\n  Pháo Đầu Mã Đội, Xe Chiếm Lộ Mở, Mã Quỳ Phòng Thủ.\n[17/32] PHỐI HỢP QUÂN CỜ (SYNERGY):\n  Pháo - Xe phối hợp khống chế Trục dọc Lộ 4 & Lộ 5.\n[18/32] ĐIỂM YẾU CẤU TRÚC (WEAKNESSES):\n  Đen hổng Tốt Trung Lộ e6.\n[19/32] 36 KẾ BINH PHÁP (STRATAGEMS):\n  Kế 1: Dục cầm cố túng — Mở đường dụ đối phương dâng cao.\n[20/32] THẾ TRẬN KINH ĐIỂN (FORMATIONS):\n  Pháo Đầu Đối Bình Phong Mã.\n[21/32] GIAI ĐOẠN KHAI NGUYÊN (TEMPO & PHASE):\n  Giai đoạn Opening (Nước thứ 5) — Giành 1 Nhịp Chuẩn.\n[22/32] PHẢN ĐÒN DỰ KIẾN (OPPONENT COUNTER):\n  Đen có thể nhảy Mã h9->g7 để củng cố Trung Lộ.\n[23/32] PHÂN TÍCH ƯU THẾ & BẤT LỢI:\n  Ưu thế: Chiếm Trung Lộ Lộ 5 | Bất lợi: Chưa xuất Xe cánh phải.\n[24/32] MA TRẬN TRỌNG SỐ QUYẾT ĐỊNH:\n  Độ chính xác (9/10) + An toàn (9/10) + Ngữ cảnh (9/10) - Rủi ro (2/10) = 25/40 (ĐẠT).\n[25/32] ĐÁNH GIÁ CANDIDATES (3 ứng viên):\n    + Ứng viên 1: h0g2 — Mã(h0->g2) phát triển Mã Biên ★BEST★ (20cp)\n    + Ứng viên 2: b0c2 — Mã(b0->c2) phát triển (10cp)\n    + Ứng viên 3: h0g2 — Mã(h0->g2) phát triển biên (5cp)\n[26/32] SO SÁNH & CHỌN BESTMOVE:\n  Chọn h0g2 — Mã(h0->g2) phát triển Mã Biên (20cp).\n[27/32] CENTIPAWN TỔNG HỢP: 20cp\n[28/32] XÁC MINH REGEX: h0g2 khớp ^[a-i][0-9][a-i][0-9]$ ✓\n[29/32] PHẢN ĐÒN TỐI ƯU (OPTIMAL COUNTER):\n  Đen bắt buộc phải chống Sĩ hoặc nhảy Mã b9->c7.\n[30/32] KIỂM TRA LUẬT CẤM LẶP NƯỚC:\n  Không vi phạm luật Lặp Nước / Chọi Tướng.\n[31/32] CHUỖI ĐỔI QUÂN (EXCHANGE CHAIN):\n  Đổi Pháo lấy Tốt Trung Lộ tạo ưu thế lâu dài.\n[32/32] THƯ VIỆN TÀN CUỘC TABLEBASE:\n  Bàn cờ 32 quân — Chưa sử dụng 5-piece Tablebase.\n</thought>"}, {"role": "user", "content": "Bàn cờ Turn 6:\nFEN: r1bakabnr/2n6/1c6/p1p1C1p1p/9/9/P1P1c1P1P/2N3N1C/9/R1BAKAB1R b - - 0 3\nLượt Đen đi."}, {"role": "assistant", "content": "<thought>\n[1/32] KIỂM KÊ QUÂN CỜ:\n  Đỏ: Xe(a0), Mã(b0), Tượng(c0), Sĩ(d0), Tướng(e0), Sĩ(f0), Tượng(g0), Mã(h0), Xe(i0), Pháo(e2), Pháo(h2), Tốt(a3), Tốt(c3), Tốt(e3), Tốt(g3), Tốt(i3)\n  Đen: Tốt(a6), Tốt(c6), Tốt(e6), Tốt(g6), Tốt(i6), Pháo(b7), Pháo(e7), Xe(a9), Mã(b9), Tượng(c9), Sĩ(d9), Tướng(e9), Sĩ(f9), Tượng(g9), Mã(h9), Xe(i9)\n[2/32] BÀN CỜ 2D:\n    a    b    c    d    e    f    g    h    i\n  ┌────┬────┬────┬────┬────┬────┬────┬────┬────┐\n9 │ 車 │ 馬 │ 象 │ 士 │ 將 │ 士 │ 象 │ 馬 │ 車 │\n  ├────┼────┼────┼────┼────┼────┼────┼────┼────┤\n8 │ ． │ ． │ ． │ ． │ ． │ ． │ ． │ ． │ ． │\n  ├────┼────┼────┼────┼────┼────┼────┼────┼────┤\n7 │ ． │ 砲 │ ． │ ． │ 砲 │ ． │ ． │ ． │ ． │\n  ├────┼────┼────┼────┼────┼────┼────┼────┼────┤\n6 │ 卒 │ ． │ 卒 │ ． │ 卒 │ ． │ 卒 │ ． │ 卒 │\n  ├────┼────┼────┼────┼────┼────┼────┼────┼────┤\n5 │ ． │ ． │ ． │ ． │ ． │ ． │ ． │ ． │ ． │\n  ├────┼────┼────┼────┼────┼────┼────┼────┼────┤  ═══ Sông Ngân Hà ═══\n4 │ ． │ ． │ ． │ ． │ ． │ ． │ ． │ ． │ ． │\n  ├────┼────┼────┼────┼────┼────┼────┼────┼────┤\n3 │ 兵 │ ． │ 兵 │ ． │ 兵 │ ． │ 兵 │ ． │ 兵 │\n  ├────┼────┼────┼────┼────┼────┼────┼────┼────┤\n2 │ ． │ ． │ ． │ ． │ 炮 │ ． │ ． │ 炮 │ ． │\n  ├────┼────┼────┼────┼────┼────┼────┼────┼────┤\n1 │ ． │ ． │ ． │ ． │ ． │ ． │ ． │ ． │ ． │\n  ├────┼────┼────┼────┼────┼────┼────┼────┼────┤\n0 │ 車 │ 馬 │ 相 │ 仕 │ 帥 │ 仕 │ 相 │ 馬 │ 車 │\n  └────┴────┴────┴────┴────┴────┴────┴────┴────┘\n    a    b    c    d    e    f    g    h    i\n[3/32] TƯƠNG QUAN VẬT CHẤT CHI TIẾT:\n  Đỏ: 480cp | Đen: 480cp | Chênh lệch: 18cp\n[4/32] PHÂN TÍCH 9 LỘ:\n  Lộ 1 (a): MỞ | Lộ 4 (d): CHIẾM ƯU | Lộ 5 (e): KHÓA TRUNG LỘ | Lộ 8 (h): TỰ DO\n[5/32] ĐÁNH GIÁ TRIỂN KHAI QUÂN:\n  Đỏ: 4/6 quân chủ lực đã phát triển | Đen: 3/6 quân chủ lực đã phát triển\n[6/32] ĐỘ ĐỘNG QUÂN CỜ (MOBILITY):\n  Đỏ: 38 nước đi hợp lệ | Đen: 34 nước đi hợp lệ\n[7/32] AN TOÀN TƯỚNG (KING SAFETY):\n  Đỏ: 95/100 (Sĩ Tượng bền vững) | Đen: 90/100 (Bị đe dọa Lộ Trung)\n[8/32] PHÂN TÍCH QUÂN BỊ TẤN CÔNG:\n  Tốt e6 Đen bị Pháo e2 Đỏ nhắm bắn trực tiếp.\n[9/32] QUÂN TREO KHÔNG NGUYÊN (HANGING PIECES):\n  Không có quân treo nghiêm trọng.\n[10/32] TRẠNG THÁI GHIM (PINNED PIECES):\n  Mã b9 Đen bị Pháo Đỏ dọa ghim khi qua sông.\n[11/32] PHÂN TÍCH ĐÒN KÉP (FORKS):\n  Pháo e2 tạo đòn đe dọa kép lên Trung Lộ và Tốt e6.\n[12/32] PHÂN TÍCH ĐÒN MỞ (DISCOVERED ATTACKS):\n  Mã c2 di chuyển sẽ mở đường cho Xe d1 chiếm Lộ 4.\n[13/32] BẪY ĂN QUÂN (TRAPS):\n  Giăng bẫy dụ Pháo Đen ăn Tốt c3 để Pháo Đỏ phản đòn.\n[14/32] NGUY CƠ CHIẾU BÍ (CHECKMATE THREATS):\n  Chưa có nguy cơ chiếu bí tức thì (Depth safety = ok).\n[15/32] DƯƠNG ĐÔNG KÍCH TÂY (DIVERSION):\n  Điều Xe sang cánh trái mở rộng tầm khống chế cánh phải.\n[16/32] MẪU CHIẾN THUẬT (PATTERNS):\n  Pháo Đầu Mã Đội, Xe Chiếm Lộ Mở, Mã Quỳ Phòng Thủ.\n[17/32] PHỐI HỢP QUÂN CỜ (SYNERGY):\n  Pháo - Xe phối hợp khống chế Trục dọc Lộ 4 & Lộ 5.\n[18/32] ĐIỂM YẾU CẤU TRÚC (WEAKNESSES):\n  Đen hổng Tốt Trung Lộ e6.\n[19/32] 36 KẾ BINH PHÁP (STRATAGEMS):\n  Kế 1: Dục cầm cố túng — Mở đường dụ đối phương dâng cao.\n[20/32] THẾ TRẬN KINH ĐIỂN (FORMATIONS):\n  Pháo Đầu Đối Bình Phong Mã.\n[21/32] GIAI ĐOẠN KHAI NGUYÊN (TEMPO & PHASE):\n  Giai đoạn Opening (Nước thứ 6) — Giành 1 Nhịp Chuẩn.\n[22/32] PHẢN ĐÒN DỰ KIẾN (OPPONENT COUNTER):\n  Đen có thể nhảy Mã h9->g7 để củng cố Trung Lộ.\n[23/32] PHÂN TÍCH ƯU THẾ & BẤT LỢI:\n  Ưu thế: Chiếm Trung Lộ Lộ 5 | Bất lợi: Chưa xuất Xe cánh phải.\n[24/32] MA TRẬN TRỌNG SỐ QUYẾT ĐỊNH:\n  Độ chính xác (9/10) + An toàn (9/10) + Ngữ cảnh (9/10) - Rủi ro (2/10) = 25/40 (ĐẠT).\n[25/32] ĐÁNH GIÁ CANDIDATES (3 ứng viên):\n    + Ứng viên 1: h9g7 — Mã(h9->g7) nhảy Mã Biên ★BEST★ (18cp)\n    + Ứng viên 2: b0c2 — Mã(b0->c2) phát triển (10cp)\n    + Ứng viên 3: h0g2 — Mã(h0->g2) phát triển biên (5cp)\n[26/32] SO SÁNH & CHỌN BESTMOVE:\n  Chọn h9g7 — Mã(h9->g7) nhảy Mã Biên (18cp).\n[27/32] CENTIPAWN TỔNG HỢP: 18cp\n[28/32] XÁC MINH REGEX: h9g7 khớp ^[a-i][0-9][a-i][0-9]$ ✓\n[29/32] PHẢN ĐÒN TỐI ƯU (OPTIMAL COUNTER):\n  Đen bắt buộc phải chống Sĩ hoặc nhảy Mã b9->c7.\n[30/32] KIỂM TRA LUẬT CẤM LẶP NƯỚC:\n  Không vi phạm luật Lặp Nước / Chọi Tướng.\n[31/32] CHUỖI ĐỔI QUÂN (EXCHANGE CHAIN):\n  Đổi Pháo lấy Tốt Trung Lộ tạo ưu thế lâu dài.\n[32/32] THƯ VIỆN TÀN CUỘC TABLEBASE:\n  Bàn cờ 32 quân — Chưa sử dụng 5-piece Tablebase.\n</thought>"}, {"role": "user", "content": "Bàn cờ Turn 7:\nFEN: r1bakab1r/2n3n1/1c6/p1p1C1p1p/9/9/P1P1c1P1P/2N3N1C/9/R1BAKAB1R w - - 0 4\nLượt Đỏ đi."}, {"role": "assistant", "content": "<thought>\n[1/32] KIỂM KÊ QUÂN CỜ:\n  Đỏ: Xe(a0), Mã(b0), Tượng(c0), Sĩ(d0), Tướng(e0), Sĩ(f0), Tượng(g0), Mã(h0), Xe(i0), Pháo(e2), Pháo(h2), Tốt(a3), Tốt(c3), Tốt(e3), Tốt(g3), Tốt(i3)\n  Đen: Tốt(a6), Tốt(c6), Tốt(e6), Tốt(g6), Tốt(i6), Pháo(b7), Pháo(e7), Xe(a9), Mã(b9), Tượng(c9), Sĩ(d9), Tướng(e9), Sĩ(f9), Tượng(g9), Mã(h9), Xe(i9)\n[2/32] BÀN CỜ 2D:\n    a    b    c    d    e    f    g    h    i\n  ┌────┬────┬────┬────┬────┬────┬────┬────┬────┐\n9 │ 車 │ 馬 │ 象 │ 士 │ 將 │ 士 │ 象 │ 馬 │ 車 │\n  ├────┼────┼────┼────┼────┼────┼────┼────┼────┤\n8 │ ． │ ． │ ． │ ． │ ． │ ． │ ． │ ． │ ． │\n  ├────┼────┼────┼────┼────┼────┼────┼────┼────┤\n7 │ ． │ 砲 │ ． │ ． │ 砲 │ ． │ ． │ ． │ ． │\n  ├────┼────┼────┼────┼────┼────┼────┼────┼────┤\n6 │ 卒 │ ． │ 卒 │ ． │ 卒 │ ． │ 卒 │ ． │ 卒 │\n  ├────┼────┼────┼────┼────┼────┼────┼────┼────┤\n5 │ ． │ ． │ ． │ ． │ ． │ ． │ ． │ ． │ ． │\n  ├────┼────┼────┼────┼────┼────┼────┼────┼────┤  ═══ Sông Ngân Hà ═══\n4 │ ． │ ． │ ． │ ． │ ． │ ． │ ． │ ． │ ． │\n  ├────┼────┼────┼────┼────┼────┼────┼────┼────┤\n3 │ 兵 │ ． │ 兵 │ ． │ 兵 │ ． │ 兵 │ ． │ 兵 │\n  ├────┼────┼────┼────┼────┼────┼────┼────┼────┤\n2 │ ． │ ． │ ． │ ． │ 炮 │ ． │ ． │ 炮 │ ． │\n  ├────┼────┼────┼────┼────┼────┼────┼────┼────┤\n1 │ ． │ ． │ ． │ ． │ ． │ ． │ ． │ ． │ ． │\n  ├────┼────┼────┼────┼────┼────┼────┼────┼────┤\n0 │ 車 │ 馬 │ 相 │ 仕 │ 帥 │ 仕 │ 相 │ 馬 │ 車 │\n  └────┴────┴────┴────┴────┴────┴────┴────┴────┘\n    a    b    c    d    e    f    g    h    i\n[3/32] TƯƠNG QUAN VẬT CHẤT CHI TIẾT:\n  Đỏ: 480cp | Đen: 480cp | Chênh lệch: 35cp\n[4/32] PHÂN TÍCH 9 LỘ:\n  Lộ 1 (a): MỞ | Lộ 4 (d): CHIẾM ƯU | Lộ 5 (e): KHÓA TRUNG LỘ | Lộ 8 (h): TỰ DO\n[5/32] ĐÁNH GIÁ TRIỂN KHAI QUÂN:\n  Đỏ: 4/6 quân chủ lực đã phát triển | Đen: 3/6 quân chủ lực đã phát triển\n[6/32] ĐỘ ĐỘNG QUÂN CỜ (MOBILITY):\n  Đỏ: 38 nước đi hợp lệ | Đen: 34 nước đi hợp lệ\n[7/32] AN TOÀN TƯỚNG (KING SAFETY):\n  Đỏ: 95/100 (Sĩ Tượng bền vững) | Đen: 90/100 (Bị đe dọa Lộ Trung)\n[8/32] PHÂN TÍCH QUÂN BỊ TẤN CÔNG:\n  Tốt e6 Đen bị Pháo e2 Đỏ nhắm bắn trực tiếp.\n[9/32] QUÂN TREO KHÔNG NGUYÊN (HANGING PIECES):\n  Không có quân treo nghiêm trọng.\n[10/32] TRẠNG THÁI GHIM (PINNED PIECES):\n  Mã b9 Đen bị Pháo Đỏ dọa ghim khi qua sông.\n[11/32] PHÂN TÍCH ĐÒN KÉP (FORKS):\n  Pháo e2 tạo đòn đe dọa kép lên Trung Lộ và Tốt e6.\n[12/32] PHÂN TÍCH ĐÒN MỞ (DISCOVERED ATTACKS):\n  Mã c2 di chuyển sẽ mở đường cho Xe d1 chiếm Lộ 4.\n[13/32] BẪY ĂN QUÂN (TRAPS):\n  Giăng bẫy dụ Pháo Đen ăn Tốt c3 để Pháo Đỏ phản đòn.\n[14/32] NGUY CƠ CHIẾU BÍ (CHECKMATE THREATS):\n  Chưa có nguy cơ chiếu bí tức thì (Depth safety = ok).\n[15/32] DƯƠNG ĐÔNG KÍCH TÂY (DIVERSION):\n  Điều Xe sang cánh trái mở rộng tầm khống chế cánh phải.\n[16/32] MẪU CHIẾN THUẬT (PATTERNS):\n  Pháo Đầu Mã Đội, Xe Chiếm Lộ Mở, Mã Quỳ Phòng Thủ.\n[17/32] PHỐI HỢP QUÂN CỜ (SYNERGY):\n  Pháo - Xe phối hợp khống chế Trục dọc Lộ 4 & Lộ 5.\n[18/32] ĐIỂM YẾU CẤU TRÚC (WEAKNESSES):\n  Đen hổng Tốt Trung Lộ e6.\n[19/32] 36 KẾ BINH PHÁP (STRATAGEMS):\n  Kế 1: Dục cầm cố túng — Mở đường dụ đối phương dâng cao.\n[20/32] THẾ TRẬN KINH ĐIỂN (FORMATIONS):\n  Pháo Đầu Đối Bình Phong Mã.\n[21/32] GIAI ĐOẠN KHAI NGUYÊN (TEMPO & PHASE):\n  Giai đoạn Opening (Nước thứ 7) — Giành 1 Nhịp Chuẩn.\n[22/32] PHẢN ĐÒN DỰ KIẾN (OPPONENT COUNTER):\n  Đen có thể nhảy Mã h9->g7 để củng cố Trung Lộ.\n[23/32] PHÂN TÍCH ƯU THẾ & BẤT LỢI:\n  Ưu thế: Chiếm Trung Lộ Lộ 5 | Bất lợi: Chưa xuất Xe cánh phải.\n[24/32] MA TRẬN TRỌNG SỐ QUYẾT ĐỊNH:\n  Độ chính xác (9/10) + An toàn (9/10) + Ngữ cảnh (9/10) - Rủi ro (2/10) = 25/40 (ĐẠT).\n[25/32] ĐÁNH GIÁ CANDIDATES (3 ứng viên):\n    + Ứng viên 1: a0a1 — Xe(a0->a1) hoành Xe ★BEST★ (35cp)\n    + Ứng viên 2: b0c2 — Mã(b0->c2) phát triển (10cp)\n    + Ứng viên 3: h0g2 — Mã(h0->g2) phát triển biên (5cp)\n[26/32] SO SÁNH & CHỌN BESTMOVE:\n  Chọn a0a1 — Xe(a0->a1) hoành Xe (35cp).\n[27/32] CENTIPAWN TỔNG HỢP: 35cp\n[28/32] XÁC MINH REGEX: a0a1 khớp ^[a-i][0-9][a-i][0-9]$ ✓\n[29/32] PHẢN ĐÒN TỐI ƯU (OPTIMAL COUNTER):\n  Đen bắt buộc phải chống Sĩ hoặc nhảy Mã b9->c7.\n[30/32] KIỂM TRA LUẬT CẤM LẶP NƯỚC:\n  Không vi phạm luật Lặp Nước / Chọi Tướng.\n[31/32] CHUỖI ĐỔI QUÂN (EXCHANGE CHAIN):\n  Đổi Pháo lấy Tốt Trung Lộ tạo ưu thế lâu dài.\n[32/32] THƯ VIỆN TÀN CUỘC TABLEBASE:\n  Bàn cờ 32 quân — Chưa sử dụng 5-piece Tablebase.\n</thought>"}, {"role": "user", "content": "Bàn cờ Turn 8:\nFEN: r1bakab1r/2n3n1/1c6/p1p1C1p1p/9/9/P1P1c1P1P/2N3N1C/R1BAKAB1R/111111111 b - - 0 4\nLượt Đen đi."}, {"role": "assistant", "content": "<thought>\n[1/32] KIỂM KÊ QUÂN CỜ:\n  Đỏ: Xe(a0), Mã(b0), Tượng(c0), Sĩ(d0), Tướng(e0), Sĩ(f0), Tượng(g0), Mã(h0), Xe(i0), Pháo(e2), Pháo(h2), Tốt(a3), Tốt(c3), Tốt(e3), Tốt(g3), Tốt(i3)\n  Đen: Tốt(a6), Tốt(c6), Tốt(e6), Tốt(g6), Tốt(i6), Pháo(b7), Pháo(e7), Xe(a9), Mã(b9), Tượng(c9), Sĩ(d9), Tướng(e9), Sĩ(f9), Tượng(g9), Mã(h9), Xe(i9)\n[2/32] BÀN CỜ 2D:\n    a    b    c    d    e    f    g    h    i\n  ┌────┬────┬────┬────┬────┬────┬────┬────┬────┐\n9 │ 車 │ 馬 │ 象 │ 士 │ 將 │ 士 │ 象 │ 馬 │ 車 │\n  ├────┼────┼────┼────┼────┼────┼────┼────┼────┤\n8 │ ． │ ． │ ． │ ． │ ． │ ． │ ． │ ． │ ． │\n  ├────┼────┼────┼────┼────┼────┼────┼────┼────┤\n7 │ ． │ 砲 │ ． │ ． │ 砲 │ ． │ ． │ ． │ ． │\n  ├────┼────┼────┼────┼────┼────┼────┼────┼────┤\n6 │ 卒 │ ． │ 卒 │ ． │ 卒 │ ． │ 卒 │ ． │ 卒 │\n  ├────┼────┼────┼────┼────┼────┼────┼────┼────┤\n5 │ ． │ ． │ ． │ ． │ ． │ ． │ ． │ ． │ ． │\n  ├────┼────┼────┼────┼────┼────┼────┼────┼────┤  ═══ Sông Ngân Hà ═══\n4 │ ． │ ． │ ． │ ． │ ． │ ． │ ． │ ． │ ． │\n  ├────┼────┼────┼────┼────┼────┼────┼────┼────┤\n3 │ 兵 │ ． │ 兵 │ ． │ 兵 │ ． │ 兵 │ ． │ 兵 │\n  ├────┼────┼────┼────┼────┼────┼────┼────┼────┤\n2 │ ． │ ． │ ． │ ． │ 炮 │ ． │ ． │ 炮 │ ． │\n  ├────┼────┼────┼────┼────┼────┼────┼────┼────┤\n1 │ ． │ ． │ ． │ ． │ ． │ ． │ ． │ ． │ ． │\n  ├────┼────┼────┼────┼────┼────┼────┼────┼────┤\n0 │ 車 │ 馬 │ 相 │ 仕 │ 帥 │ 仕 │ 相 │ 馬 │ 車 │\n  └────┴────┴────┴────┴────┴────┴────┴────┴────┘\n    a    b    c    d    e    f    g    h    i\n[3/32] TƯƠNG QUAN VẬT CHẤT CHI TIẾT:\n  Đỏ: 480cp | Đen: 480cp | Chênh lệch: 30cp\n[4/32] PHÂN TÍCH 9 LỘ:\n  Lộ 1 (a): MỞ | Lộ 4 (d): CHIẾM ƯU | Lộ 5 (e): KHÓA TRUNG LỘ | Lộ 8 (h): TỰ DO\n[5/32] ĐÁNH GIÁ TRIỂN KHAI QUÂN:\n  Đỏ: 4/6 quân chủ lực đã phát triển | Đen: 3/6 quân chủ lực đã phát triển\n[6/32] ĐỘ ĐỘNG QUÂN CỜ (MOBILITY):\n  Đỏ: 38 nước đi hợp lệ | Đen: 34 nước đi hợp lệ\n[7/32] AN TOÀN TƯỚNG (KING SAFETY):\n  Đỏ: 95/100 (Sĩ Tượng bền vững) | Đen: 90/100 (Bị đe dọa Lộ Trung)\n[8/32] PHÂN TÍCH QUÂN BỊ TẤN CÔNG:\n  Tốt e6 Đen bị Pháo e2 Đỏ nhắm bắn trực tiếp.\n[9/32] QUÂN TREO KHÔNG NGUYÊN (HANGING PIECES):\n  Không có quân treo nghiêm trọng.\n[10/32] TRẠNG THÁI GHIM (PINNED PIECES):\n  Mã b9 Đen bị Pháo Đỏ dọa ghim khi qua sông.\n[11/32] PHÂN TÍCH ĐÒN KÉP (FORKS):\n  Pháo e2 tạo đòn đe dọa kép lên Trung Lộ và Tốt e6.\n[12/32] PHÂN TÍCH ĐÒN MỞ (DISCOVERED ATTACKS):\n  Mã c2 di chuyển sẽ mở đường cho Xe d1 chiếm Lộ 4.\n[13/32] BẪY ĂN QUÂN (TRAPS):\n  Giăng bẫy dụ Pháo Đen ăn Tốt c3 để Pháo Đỏ phản đòn.\n[14/32] NGUY CƠ CHIẾU BÍ (CHECKMATE THREATS):\n  Chưa có nguy cơ chiếu bí tức thì (Depth safety = ok).\n[15/32] DƯƠNG ĐÔNG KÍCH TÂY (DIVERSION):\n  Điều Xe sang cánh trái mở rộng tầm khống chế cánh phải.\n[16/32] MẪU CHIẾN THUẬT (PATTERNS):\n  Pháo Đầu Mã Đội, Xe Chiếm Lộ Mở, Mã Quỳ Phòng Thủ.\n[17/32] PHỐI HỢP QUÂN CỜ (SYNERGY):\n  Pháo - Xe phối hợp khống chế Trục dọc Lộ 4 & Lộ 5.\n[18/32] ĐIỂM YẾU CẤU TRÚC (WEAKNESSES):\n  Đen hổng Tốt Trung Lộ e6.\n[19/32] 36 KẾ BINH PHÁP (STRATAGEMS):\n  Kế 1: Dục cầm cố túng — Mở đường dụ đối phương dâng cao.\n[20/32] THẾ TRẬN KINH ĐIỂN (FORMATIONS):\n  Pháo Đầu Đối Bình Phong Mã.\n[21/32] GIAI ĐOẠN KHAI NGUYÊN (TEMPO & PHASE):\n  Giai đoạn Opening (Nước thứ 8) — Giành 1 Nhịp Chuẩn.\n[22/32] PHẢN ĐÒN DỰ KIẾN (OPPONENT COUNTER):\n  Đen có thể nhảy Mã h9->g7 để củng cố Trung Lộ.\n[23/32] PHÂN TÍCH ƯU THẾ & BẤT LỢI:\n  Ưu thế: Chiếm Trung Lộ Lộ 5 | Bất lợi: Chưa xuất Xe cánh phải.\n[24/32] MA TRẬN TRỌNG SỐ QUYẾT ĐỊNH:\n  Độ chính xác (9/10) + An toàn (9/10) + Ngữ cảnh (9/10) - Rủi ro (2/10) = 25/40 (ĐẠT).\n[25/32] ĐÁNH GIÁ CANDIDATES (3 ứng viên):\n    + Ứng viên 1: a9a8 — Xe(a9->a8) hoành Xe ★BEST★ (30cp)\n    + Ứng viên 2: b0c2 — Mã(b0->c2) phát triển (10cp)\n    + Ứng viên 3: h0g2 — Mã(h0->g2) phát triển biên (5cp)\n[26/32] SO SÁNH & CHỌN BESTMOVE:\n  Chọn a9a8 — Xe(a9->a8) hoành Xe (30cp).\n[27/32] CENTIPAWN TỔNG HỢP: 30cp\n[28/32] XÁC MINH REGEX: a9a8 khớp ^[a-i][0-9][a-i][0-9]$ ✓\n[29/32] PHẢN ĐÒN TỐI ƯU (OPTIMAL COUNTER):\n  Đen bắt buộc phải chống Sĩ hoặc nhảy Mã b9->c7.\n[30/32] KIỂM TRA LUẬT CẤM LẶP NƯỚC:\n  Không vi phạm luật Lặp Nước / Chọi Tướng.\n[31/32] CHUỖI ĐỔI QUÂN (EXCHANGE CHAIN):\n  Đổi Pháo lấy Tốt Trung Lộ tạo ưu thế lâu dài.\n[32/32] THƯ VIỆN TÀN CUỘC TABLEBASE:\n  Bàn cờ 32 quân — Chưa sử dụng 5-piece Tablebase.\n</thought>"}, {"role": "user", "content": "Bàn cờ Turn 9:\nFEN: 111111111/r1bakab1r/2n3n1/1c6/p1p1C1p1p/9/P1P1c1P1P/2N3N1C/R1BAKAB1R/111111111 w - - 0 5\nLượt Đỏ đi."}, {"role": "assistant", "content": "<thought>\n[1/32] KIỂM KÊ QUÂN CỜ:\n  Đỏ: Xe(a0), Mã(b0), Tượng(c0), Sĩ(d0), Tướng(e0), Sĩ(f0), Tượng(g0), Mã(h0), Xe(i0), Pháo(e2), Pháo(h2), Tốt(a3), Tốt(c3), Tốt(e3), Tốt(g3), Tốt(i3)\n  Đen: Tốt(a6), Tốt(c6), Tốt(e6), Tốt(g6), Tốt(i6), Pháo(b7), Pháo(e7), Xe(a9), Mã(b9), Tượng(c9), Sĩ(d9), Tướng(e9), Sĩ(f9), Tượng(g9), Mã(h9), Xe(i9)\n[2/32] BÀN CỜ 2D:\n    a    b    c    d    e    f    g    h    i\n  ┌────┬────┬────┬────┬────┬────┬────┬────┬────┐\n9 │ 車 │ 馬 │ 象 │ 士 │ 將 │ 士 │ 象 │ 馬 │ 車 │\n  ├────┼────┼────┼────┼────┼────┼────┼────┼────┤\n8 │ ． │ ． │ ． │ ． │ ． │ ． │ ． │ ． │ ． │\n  ├────┼────┼────┼────┼────┼────┼────┼────┼────┤\n7 │ ． │ 砲 │ ． │ ． │ 砲 │ ． │ ． │ ． │ ． │\n  ├────┼────┼────┼────┼────┼────┼────┼────┼────┤\n6 │ 卒 │ ． │ 卒 │ ． │ 卒 │ ． │ 卒 │ ． │ 卒 │\n  ├────┼────┼────┼────┼────┼────┼────┼────┼────┤\n5 │ ． │ ． │ ． │ ． │ ． │ ． │ ． │ ． │ ． │\n  ├────┼────┼────┼────┼────┼────┼────┼────┼────┤  ═══ Sông Ngân Hà ═══\n4 │ ． │ ． │ ． │ ． │ ． │ ． │ ． │ ． │ ． │\n  ├────┼────┼────┼────┼────┼────┼────┼────┼────┤\n3 │ 兵 │ ． │ 兵 │ ． │ 兵 │ ． │ 兵 │ ． │ 兵 │\n  ├────┼────┼────┼────┼────┼────┼────┼────┼────┤\n2 │ ． │ ． │ ． │ ． │ 炮 │ ． │ ． │ 炮 │ ． │\n  ├────┼────┼────┼────┼────┼────┼────┼────┼────┤\n1 │ ． │ ． │ ． │ ． │ ． │ ． │ ． │ ． │ ． │\n  ├────┼────┼────┼────┼────┼────┼────┼────┼────┤\n0 │ 車 │ 馬 │ 相 │ 仕 │ 帥 │ 仕 │ 相 │ 馬 │ 車 │\n  └────┴────┴────┴────┴────┴────┴────┴────┴────┘\n    a    b    c    d    e    f    g    h    i\n[3/32] TƯƠNG QUAN VẬT CHẤT CHI TIẾT:\n  Đỏ: 480cp | Đen: 480cp | Chênh lệch: 55cp\n[4/32] PHÂN TÍCH 9 LỘ:\n  Lộ 1 (a): MỞ | Lộ 4 (d): CHIẾM ƯU | Lộ 5 (e): KHÓA TRUNG LỘ | Lộ 8 (h): TỰ DO\n[5/32] ĐÁNH GIÁ TRIỂN KHAI QUÂN:\n  Đỏ: 4/6 quân chủ lực đã phát triển | Đen: 3/6 quân chủ lực đã phát triển\n[6/32] ĐỘ ĐỘNG QUÂN CỜ (MOBILITY):\n  Đỏ: 38 nước đi hợp lệ | Đen: 34 nước đi hợp lệ\n[7/32] AN TOÀN TƯỚNG (KING SAFETY):\n  Đỏ: 95/100 (Sĩ Tượng bền vững) | Đen: 90/100 (Bị đe dọa Lộ Trung)\n[8/32] PHÂN TÍCH QUÂN BỊ TẤN CÔNG:\n  Tốt e6 Đen bị Pháo e2 Đỏ nhắm bắn trực tiếp.\n[9/32] QUÂN TREO KHÔNG NGUYÊN (HANGING PIECES):\n  Không có quân treo nghiêm trọng.\n[10/32] TRẠNG THÁI GHIM (PINNED PIECES):\n  Mã b9 Đen bị Pháo Đỏ dọa ghim khi qua sông.\n[11/32] PHÂN TÍCH ĐÒN KÉP (FORKS):\n  Pháo e2 tạo đòn đe dọa kép lên Trung Lộ và Tốt e6.\n[12/32] PHÂN TÍCH ĐÒN MỞ (DISCOVERED ATTACKS):\n  Mã c2 di chuyển sẽ mở đường cho Xe d1 chiếm Lộ 4.\n[13/32] BẪY ĂN QUÂN (TRAPS):\n  Giăng bẫy dụ Pháo Đen ăn Tốt c3 để Pháo Đỏ phản đòn.\n[14/32] NGUY CƠ CHIẾU BÍ (CHECKMATE THREATS):\n  Chưa có nguy cơ chiếu bí tức thì (Depth safety = ok).\n[15/32] DƯƠNG ĐÔNG KÍCH TÂY (DIVERSION):\n  Điều Xe sang cánh trái mở rộng tầm khống chế cánh phải.\n[16/32] MẪU CHIẾN THUẬT (PATTERNS):\n  Pháo Đầu Mã Đội, Xe Chiếm Lộ Mở, Mã Quỳ Phòng Thủ.\n[17/32] PHỐI HỢP QUÂN CỜ (SYNERGY):\n  Pháo - Xe phối hợp khống chế Trục dọc Lộ 4 & Lộ 5.\n[18/32] ĐIỂM YẾU CẤU TRÚC (WEAKNESSES):\n  Đen hổng Tốt Trung Lộ e6.\n[19/32] 36 KẾ BINH PHÁP (STRATAGEMS):\n  Kế 1: Dục cầm cố túng — Mở đường dụ đối phương dâng cao.\n[20/32] THẾ TRẬN KINH ĐIỂN (FORMATIONS):\n  Pháo Đầu Đối Bình Phong Mã.\n[21/32] GIAI ĐOẠN KHAI NGUYÊN (TEMPO & PHASE):\n  Giai đoạn Opening (Nước thứ 9) — Giành 1 Nhịp Chuẩn.\n[22/32] PHẢN ĐÒN DỰ KIẾN (OPPONENT COUNTER):\n  Đen có thể nhảy Mã h9->g7 để củng cố Trung Lộ.\n[23/32] PHÂN TÍCH ƯU THẾ & BẤT LỢI:\n  Ưu thế: Chiếm Trung Lộ Lộ 5 | Bất lợi: Chưa xuất Xe cánh phải.\n[24/32] MA TRẬN TRỌNG SỐ QUYẾT ĐỊNH:\n  Độ chính xác (9/10) + An toàn (9/10) + Ngữ cảnh (9/10) - Rủi ro (2/10) = 25/40 (ĐẠT).\n[25/32] ĐÁNH GIÁ CANDIDATES (3 ứng viên):\n    + Ứng viên 1: a1d1 — Xe(a1->d1) chiếm Lộ 4 ★BEST★ (55cp)\n    + Ứng viên 2: b0c2 — Mã(b0->c2) phát triển (10cp)\n    + Ứng viên 3: h0g2 — Mã(h0->g2) phát triển biên (5cp)\n[26/32] SO SÁNH & CHỌN BESTMOVE:\n  Chọn a1d1 — Xe(a1->d1) chiếm Lộ 4 (55cp).\n[27/32] CENTIPAWN TỔNG HỢP: 55cp\n[28/32] XÁC MINH REGEX: a1d1 khớp ^[a-i][0-9][a-i][0-9]$ ✓\n[29/32] PHẢN ĐÒN TỐI ƯU (OPTIMAL COUNTER):\n  Đen bắt buộc phải chống Sĩ hoặc nhảy Mã b9->c7.\n[30/32] KIỂM TRA LUẬT CẤM LẶP NƯỚC:\n  Không vi phạm luật Lặp Nước / Chọi Tướng.\n[31/32] CHUỖI ĐỔI QUÂN (EXCHANGE CHAIN):\n  Đổi Pháo lấy Tốt Trung Lộ tạo ưu thế lâu dài.\n[32/32] THƯ VIỆN TÀN CUỘC TABLEBASE:\n  Bàn cờ 32 quân — Chưa sử dụng 5-piece Tablebase.\n</thought>"}, {"role": "user", "content": "Bàn cờ Turn 10:\nFEN: 111111111/r1bakab1r/2n3n1/1c6/p1p1C1p1p/9/P1P1c1P1P/3R2N1C/2BAKAB1R/111111111 b - - 0 5\nLượt Đen đi."}, {"role": "assistant", "content": "<thought>\n[1/32] KIỂM KÊ QUÂN CỜ:\n  Đỏ: Xe(a0), Mã(b0), Tượng(c0), Sĩ(d0), Tướng(e0), Sĩ(f0), Tượng(g0), Mã(h0), Xe(i0), Pháo(e2), Pháo(h2), Tốt(a3), Tốt(c3), Tốt(e3), Tốt(g3), Tốt(i3)\n  Đen: Tốt(a6), Tốt(c6), Tốt(e6), Tốt(g6), Tốt(i6), Pháo(b7), Pháo(e7), Xe(a9), Mã(b9), Tượng(c9), Sĩ(d9), Tướng(e9), Sĩ(f9), Tượng(g9), Mã(h9), Xe(i9)\n[2/32] BÀN CỜ 2D:\n    a    b    c    d    e    f    g    h    i\n  ┌────┬────┬────┬────┬────┬────┬────┬────┬────┐\n9 │ 車 │ 馬 │ 象 │ 士 │ 將 │ 士 │ 象 │ 馬 │ 車 │\n  ├────┼────┼────┼────┼────┼────┼────┼────┼────┤\n8 │ ． │ ． │ ． │ ． │ ． │ ． │ ． │ ． │ ． │\n  ├────┼────┼────┼────┼────┼────┼────┼────┼────┤\n7 │ ． │ 砲 │ ． │ ． │ 砲 │ ． │ ． │ ． │ ． │\n  ├────┼────┼────┼────┼────┼────┼────┼────┼────┤\n6 │ 卒 │ ． │ 卒 │ ． │ 卒 │ ． │ 卒 │ ． │ 卒 │\n  ├────┼────┼────┼────┼────┼────┼────┼────┼────┤\n5 │ ． │ ． │ ． │ ． │ ． │ ． │ ． │ ． │ ． │\n  ├────┼────┼────┼────┼────┼────┼────┼────┼────┤  ═══ Sông Ngân Hà ═══\n4 │ ． │ ． │ ． │ ． │ ． │ ． │ ． │ ． │ ． │\n  ├────┼────┼────┼────┼────┼────┼────┼────┼────┤\n3 │ 兵 │ ． │ 兵 │ ． │ 兵 │ ． │ 兵 │ ． │ 兵 │\n  ├────┼────┼────┼────┼────┼────┼────┼────┼────┤\n2 │ ． │ ． │ ． │ ． │ 炮 │ ． │ ． │ 炮 │ ． │\n  ├────┼────┼────┼────┼────┼────┼────┼────┼────┤\n1 │ ． │ ． │ ． │ ． │ ． │ ． │ ． │ ． │ ． │\n  ├────┼────┼────┼────┼────┼────┼────┼────┼────┤\n0 │ 車 │ 馬 │ 相 │ 仕 │ 帥 │ 仕 │ 相 │ 馬 │ 車 │\n  └────┴────┴────┴────┴────┴────┴────┴────┴────┘\n    a    b    c    d    e    f    g    h    i\n[3/32] TƯƠNG QUAN VẬT CHẤT CHI TIẾT:\n  Đỏ: 480cp | Đen: 480cp | Chênh lệch: 45cp\n[4/32] PHÂN TÍCH 9 LỘ:\n  Lộ 1 (a): MỞ | Lộ 4 (d): CHIẾM ƯU | Lộ 5 (e): KHÓA TRUNG LỘ | Lộ 8 (h): TỰ DO\n[5/32] ĐÁNH GIÁ TRIỂN KHAI QUÂN:\n  Đỏ: 4/6 quân chủ lực đã phát triển | Đen: 3/6 quân chủ lực đã phát triển\n[6/32] ĐỘ ĐỘNG QUÂN CỜ (MOBILITY):\n  Đỏ: 38 nước đi hợp lệ | Đen: 34 nước đi hợp lệ\n[7/32] AN TOÀN TƯỚNG (KING SAFETY):\n  Đỏ: 95/100 (Sĩ Tượng bền vững) | Đen: 90/100 (Bị đe dọa Lộ Trung)\n[8/32] PHÂN TÍCH QUÂN BỊ TẤN CÔNG:\n  Tốt e6 Đen bị Pháo e2 Đỏ nhắm bắn trực tiếp.\n[9/32] QUÂN TREO KHÔNG NGUYÊN (HANGING PIECES):\n  Không có quân treo nghiêm trọng.\n[10/32] TRẠNG THÁI GHIM (PINNED PIECES):\n  Mã b9 Đen bị Pháo Đỏ dọa ghim khi qua sông.\n[11/32] PHÂN TÍCH ĐÒN KÉP (FORKS):\n  Pháo e2 tạo đòn đe dọa kép lên Trung Lộ và Tốt e6.\n[12/32] PHÂN TÍCH ĐÒN MỞ (DISCOVERED ATTACKS):\n  Mã c2 di chuyển sẽ mở đường cho Xe d1 chiếm Lộ 4.\n[13/32] BẪY ĂN QUÂN (TRAPS):\n  Giăng bẫy dụ Pháo Đen ăn Tốt c3 để Pháo Đỏ phản đòn.\n[14/32] NGUY CƠ CHIẾU BÍ (CHECKMATE THREATS):\n  Chưa có nguy cơ chiếu bí tức thì (Depth safety = ok).\n[15/32] DƯƠNG ĐÔNG KÍCH TÂY (DIVERSION):\n  Điều Xe sang cánh trái mở rộng tầm khống chế cánh phải.\n[16/32] MẪU CHIẾN THUẬT (PATTERNS):\n  Pháo Đầu Mã Đội, Xe Chiếm Lộ Mở, Mã Quỳ Phòng Thủ.\n[17/32] PHỐI HỢP QUÂN CỜ (SYNERGY):\n  Pháo - Xe phối hợp khống chế Trục dọc Lộ 4 & Lộ 5.\n[18/32] ĐIỂM YẾU CẤU TRÚC (WEAKNESSES):\n  Đen hổng Tốt Trung Lộ e6.\n[19/32] 36 KẾ BINH PHÁP (STRATAGEMS):\n  Kế 1: Dục cầm cố túng — Mở đường dụ đối phương dâng cao.\n[20/32] THẾ TRẬN KINH ĐIỂN (FORMATIONS):\n  Pháo Đầu Đối Bình Phong Mã.\n[21/32] GIAI ĐOẠN KHAI NGUYÊN (TEMPO & PHASE):\n  Giai đoạn Opening (Nước thứ 10) — Giành 1 Nhịp Chuẩn.\n[22/32] PHẢN ĐÒN DỰ KIẾN (OPPONENT COUNTER):\n  Đen có thể nhảy Mã h9->g7 để củng cố Trung Lộ.\n[23/32] PHÂN TÍCH ƯU THẾ & BẤT LỢI:\n  Ưu thế: Chiếm Trung Lộ Lộ 5 | Bất lợi: Chưa xuất Xe cánh phải.\n[24/32] MA TRẬN TRỌNG SỐ QUYẾT ĐỊNH:\n  Độ chính xác (9/10) + An toàn (9/10) + Ngữ cảnh (9/10) - Rủi ro (2/10) = 25/40 (ĐẠT).\n[25/32] ĐÁNH GIÁ CANDIDATES (3 ứng viên):\n    + Ứng viên 1: a8d8 — Xe(a8->d8) đối Xe Lộ 4 ★BEST★ (45cp)\n    + Ứng viên 2: b0c2 — Mã(b0->c2) phát triển (10cp)\n    + Ứng viên 3: h0g2 — Mã(h0->g2) phát triển biên (5cp)\n[26/32] SO SÁNH & CHỌN BESTMOVE:\n  Chọn a8d8 — Xe(a8->d8) đối Xe Lộ 4 (45cp).\n[27/32] CENTIPAWN TỔNG HỢP: 45cp\n[28/32] XÁC MINH REGEX: a8d8 khớp ^[a-i][0-9][a-i][0-9]$ ✓\n[29/32] PHẢN ĐÒN TỐI ƯU (OPTIMAL COUNTER):\n  Đen bắt buộc phải chống Sĩ hoặc nhảy Mã b9->c7.\n[30/32] KIỂM TRA LUẬT CẤM LẶP NƯỚC:\n  Không vi phạm luật Lặp Nước / Chọi Tướng.\n[31/32] CHUỖI ĐỔI QUÂN (EXCHANGE CHAIN):\n  Đổi Pháo lấy Tốt Trung Lộ tạo ưu thế lâu dài.\n[32/32] THƯ VIỆN TÀN CUỘC TABLEBASE:\n  Bàn cờ 32 quân — Chưa sử dụng 5-piece Tablebase.\n</thought>"}, {"role": "user", "content": "Bàn cờ Turn 11:\nFEN: rnbakabnr/9/1c2c4/p1p1p1p1p/9/9/P1P1P1P1P/4C2C1/9/RNBAKABNR w - - 0 1\nLượt Đỏ đi."}, {"role": "assistant", "content": "<thought>\n[1/32] KIỂM KÊ QUÂN CỜ:\n  Đỏ: Xe(a0), Mã(b0), Tượng(c0), Sĩ(d0), Tướng(e0), Sĩ(f0), Tượng(g0), Mã(h0), Xe(i0), Pháo(e2), Pháo(h2), Tốt(a3), Tốt(c3), Tốt(e3), Tốt(g3), Tốt(i3)\n  Đen: Tốt(a6), Tốt(c6), Tốt(e6), Tốt(g6), Tốt(i6), Pháo(b7), Pháo(e7), Xe(a9), Mã(b9), Tượng(c9), Sĩ(d9), Tướng(e9), Sĩ(f9), Tượng(g9), Mã(h9), Xe(i9)\n[2/32] BÀN CỜ 2D:\n    a    b    c    d    e    f    g    h    i\n  ┌────┬────┬────┬────┬────┬────┬────┬────┬────┐\n9 │ 車 │ 馬 │ 象 │ 士 │ 將 │ 士 │ 象 │ 馬 │ 車 │\n  ├────┼────┼────┼────┼────┼────┼────┼────┼────┤\n8 │ ． │ ． │ ． │ ． │ ． │ ． │ ． │ ． │ ． │\n  ├────┼────┼────┼────┼────┼────┼────┼────┼────┤\n7 │ ． │ 砲 │ ． │ ． │ 砲 │ ． │ ． │ ． │ ． │\n  ├────┼────┼────┼────┼────┼────┼────┼────┼────┤\n6 │ 卒 │ ． │ 卒 │ ． │ 卒 │ ． │ 卒 │ ． │ 卒 │\n  ├────┼────┼────┼────┼────┼────┼────┼────┼────┤\n5 │ ． │ ． │ ． │ ． │ ． │ ． │ ． │ ． │ ． │\n  ├────┼────┼────┼────┼────┼────┼────┼────┼────┤  ═══ Sông Ngân Hà ═══\n4 │ ． │ ． │ ． │ ． │ ． │ ． │ ． │ ． │ ． │\n  ├────┼────┼────┼────┼────┼────┼────┼────┼────┤\n3 │ 兵 │ ． │ 兵 │ ． │ 兵 │ ． │ 兵 │ ． │ 兵 │\n  ├────┼────┼────┼────┼────┼────┼────┼────┼────┤\n2 │ ． │ ． │ ． │ ． │ 炮 │ ． │ ． │ 炮 │ ． │\n  ├────┼────┼────┼────┼────┼────┼────┼────┼────┤\n1 │ ． │ ． │ ． │ ． │ ． │ ． │ ． │ ． │ ． │\n  ├────┼────┼────┼────┼────┼────┼────┼────┼────┤\n0 │ 車 │ 馬 │ 相 │ 仕 │ 帥 │ 仕 │ 相 │ 馬 │ 車 │\n  └────┴────┴────┴────┴────┴────┴────┴────┴────┘\n    a    b    c    d    e    f    g    h    i\n[3/32] TƯƠNG QUAN VẬT CHẤT CHI TIẾT:\n  Đỏ: 480cp | Đen: 480cp | Chênh lệch: 0cp\n[4/32] PHÂN TÍCH 9 LỘ:\n  Lộ 1 (a): MỞ | Lộ 4 (d): CHIẾM ƯU | Lộ 5 (e): KHÓA TRUNG LỘ | Lộ 8 (h): TỰ DO\n[5/32] ĐÁNH GIÁ TRIỂN KHAI QUÂN:\n  Đỏ: 4/6 quân chủ lực đã phát triển | Đen: 3/6 quân chủ lực đã phát triển\n[6/32] ĐỘ ĐỘNG QUÂN CỜ (MOBILITY):\n  Đỏ: 38 nước đi hợp lệ | Đen: 34 nước đi hợp lệ\n[7/32] AN TOÀN TƯỚNG (KING SAFETY):\n  Đỏ: 95/100 (Sĩ Tượng bền vững) | Đen: 90/100 (Bị đe dọa Lộ Trung)\n[8/32] PHÂN TÍCH QUÂN BỊ TẤN CÔNG:\n  Tốt e6 Đen bị Pháo e2 Đỏ nhắm bắn trực tiếp.\n[9/32] QUÂN TREO KHÔNG NGUYÊN (HANGING PIECES):\n  Không có quân treo nghiêm trọng.\n[10/32] TRẠNG THÁI GHIM (PINNED PIECES):\n  Mã b9 Đen bị Pháo Đỏ dọa ghim khi qua sông.\n[11/32] PHÂN TÍCH ĐÒN KÉP (FORKS):\n  Pháo e2 tạo đòn đe dọa kép lên Trung Lộ và Tốt e6.\n[12/32] PHÂN TÍCH ĐÒN MỞ (DISCOVERED ATTACKS):\n  Mã c2 di chuyển sẽ mở đường cho Xe d1 chiếm Lộ 4.\n[13/32] BẪY ĂN QUÂN (TRAPS):\n  Giăng bẫy dụ Pháo Đen ăn Tốt c3 để Pháo Đỏ phản đòn.\n[14/32] NGUY CƠ CHIẾU BÍ (CHECKMATE THREATS):\n  Chưa có nguy cơ chiếu bí tức thì (Depth safety = ok).\n[15/32] DƯƠNG ĐÔNG KÍCH TÂY (DIVERSION):\n  Điều Xe sang cánh trái mở rộng tầm khống chế cánh phải.\n[16/32] MẪU CHIẾN THUẬT (PATTERNS):\n  Pháo Đầu Mã Đội, Xe Chiếm Lộ Mở, Mã Quỳ Phòng Thủ.\n[17/32] PHỐI HỢP QUÂN CỜ (SYNERGY):\n  Pháo - Xe phối hợp khống chế Trục dọc Lộ 4 & Lộ 5.\n[18/32] ĐIỂM YẾU CẤU TRÚC (WEAKNESSES):\n  Đen hổng Tốt Trung Lộ e6.\n[19/32] 36 KẾ BINH PHÁP (STRATAGEMS):\n  Kế 1: Dục cầm cố túng — Mở đường dụ đối phương dâng cao.\n[20/32] THẾ TRẬN KINH ĐIỂN (FORMATIONS):\n  Pháo Đầu Đối Bình Phong Mã.\n[21/32] GIAI ĐOẠN KHAI NGUYÊN (TEMPO & PHASE):\n  Giai đoạn Opening (Nước thứ 11) — Giành 1 Nhịp Chuẩn.\n[22/32] PHẢN ĐÒN DỰ KIẾN (OPPONENT COUNTER):\n  Đen có thể nhảy Mã h9->g7 để củng cố Trung Lộ.\n[23/32] PHÂN TÍCH ƯU THẾ & BẤT LỢI:\n  Ưu thế: Chiếm Trung Lộ Lộ 5 | Bất lợi: Chưa xuất Xe cánh phải.\n[24/32] MA TRẬN TRỌNG SỐ QUYẾT ĐỊNH:\n  Độ chính xác (9/10) + An toàn (9/10) + Ngữ cảnh (9/10) - Rủi ro (2/10) = 25/40 (ĐẠT).\n[25/32] ĐÁNH GIÁ CANDIDATES (3 ứng viên):\n    + Ứng viên 1: e2e6 — Pháo(e2->e6) ăn Tốt(e6) ★BEST★ (0cp)\n    + Ứng viên 2: b0c2 — Mã(b0->c2) phát triển (10cp)\n    + Ứng viên 3: h0g2 — Mã(h0->g2) phát triển biên (5cp)\n[26/32] SO SÁNH & CHỌN BESTMOVE:\n  Chọn e2e6 — Pháo(e2->e6) ăn Tốt(e6) (0cp).\n[27/32] CENTIPAWN TỔNG HỢP: 0cp\n[28/32] XÁC MINH REGEX: e2e6 khớp ^[a-i][0-9][a-i][0-9]$ ✓\n[29/32] PHẢN ĐÒN TỐI ƯU (OPTIMAL COUNTER):\n  Đen bắt buộc phải chống Sĩ hoặc nhảy Mã b9->c7.\n[30/32] KIỂM TRA LUẬT CẤM LẶP NƯỚC:\n  Không vi phạm luật Lặp Nước / Chọi Tướng.\n[31/32] CHUỖI ĐỔI QUÂN (EXCHANGE CHAIN):\n  Đổi Pháo lấy Tốt Trung Lộ tạo ưu thế lâu dài.\n[32/32] THƯ VIỆN TÀN CUỘC TABLEBASE:\n  Bàn cờ 32 quân — Chưa sử dụng 5-piece Tablebase.\n</thought>"}, {"role": "user", "content": "Bàn cờ Turn 12:\nFEN: rnbakabnr/9/1c2c4/p1p1C1p1p/9/9/P1P1P1P1P/7C1/9/RNBAKABNR b - - 0 1\nLượt Đen đi."}, {"role": "assistant", "content": "<thought>\n[1/32] KIỂM KÊ QUÂN CỜ:\n  Đỏ: Xe(a0), Mã(b0), Tượng(c0), Sĩ(d0), Tướng(e0), Sĩ(f0), Tượng(g0), Mã(h0), Xe(i0), Pháo(e2), Pháo(h2), Tốt(a3), Tốt(c3), Tốt(e3), Tốt(g3), Tốt(i3)\n  Đen: Tốt(a6), Tốt(c6), Tốt(e6), Tốt(g6), Tốt(i6), Pháo(b7), Pháo(e7), Xe(a9), Mã(b9), Tượng(c9), Sĩ(d9), Tướng(e9), Sĩ(f9), Tượng(g9), Mã(h9), Xe(i9)\n[2/32] BÀN CỜ 2D:\n    a    b    c    d    e    f    g    h    i\n  ┌────┬────┬────┬────┬────┬────┬────┬────┬────┐\n9 │ 車 │ 馬 │ 象 │ 士 │ 將 │ 士 │ 象 │ 馬 │ 車 │\n  ├────┼────┼────┼────┼────┼────┼────┼────┼────┤\n8 │ ． │ ． │ ． │ ． │ ． │ ． │ ． │ ． │ ． │\n  ├────┼────┼────┼────┼────┼────┼────┼────┼────┤\n7 │ ． │ 砲 │ ． │ ． │ 砲 │ ． │ ． │ ． │ ． │\n  ├────┼────┼────┼────┼────┼────┼────┼────┼────┤\n6 │ 卒 │ ． │ 卒 │ ． │ 卒 │ ． │ 卒 │ ． │ 卒 │\n  ├────┼────┼────┼────┼────┼────┼────┼────┼────┤\n5 │ ． │ ． │ ． │ ． │ ． │ ． │ ． │ ． │ ． │\n  ├────┼────┼────┼────┼────┼────┼────┼────┼────┤  ═══ Sông Ngân Hà ═══\n4 │ ． │ ． │ ． │ ． │ ． │ ． │ ． │ ． │ ． │\n  ├────┼────┼────┼────┼────┼────┼────┼────┼────┤\n3 │ 兵 │ ． │ 兵 │ ． │ 兵 │ ． │ 兵 │ ． │ 兵 │\n  ├────┼────┼────┼────┼────┼────┼────┼────┼────┤\n2 │ ． │ ． │ ． │ ． │ 炮 │ ． │ ． │ 炮 │ ． │\n  ├────┼────┼────┼────┼────┼────┼────┼────┼────┤\n1 │ ． │ ． │ ． │ ． │ ． │ ． │ ． │ ． │ ． │\n  ├────┼────┼────┼────┼────┼────┼────┼────┼────┤\n0 │ 車 │ 馬 │ 相 │ 仕 │ 帥 │ 仕 │ 相 │ 馬 │ 車 │\n  └────┴────┴────┴────┴────┴────┴────┴────┴────┘\n    a    b    c    d    e    f    g    h    i\n[3/32] TƯƠNG QUAN VẬT CHẤT CHI TIẾT:\n  Đỏ: 480cp | Đen: 480cp | Chênh lệch: 0cp\n[4/32] PHÂN TÍCH 9 LỘ:\n  Lộ 1 (a): MỞ | Lộ 4 (d): CHIẾM ƯU | Lộ 5 (e): KHÓA TRUNG LỘ | Lộ 8 (h): TỰ DO\n[5/32] ĐÁNH GIÁ TRIỂN KHAI QUÂN:\n  Đỏ: 4/6 quân chủ lực đã phát triển | Đen: 3/6 quân chủ lực đã phát triển\n[6/32] ĐỘ ĐỘNG QUÂN CỜ (MOBILITY):\n  Đỏ: 38 nước đi hợp lệ | Đen: 34 nước đi hợp lệ\n[7/32] AN TOÀN TƯỚNG (KING SAFETY):\n  Đỏ: 95/100 (Sĩ Tượng bền vững) | Đen: 90/100 (Bị đe dọa Lộ Trung)\n[8/32] PHÂN TÍCH QUÂN BỊ TẤN CÔNG:\n  Tốt e6 Đen bị Pháo e2 Đỏ nhắm bắn trực tiếp.\n[9/32] QUÂN TREO KHÔNG NGUYÊN (HANGING PIECES):\n  Không có quân treo nghiêm trọng.\n[10/32] TRẠNG THÁI GHIM (PINNED PIECES):\n  Mã b9 Đen bị Pháo Đỏ dọa ghim khi qua sông.\n[11/32] PHÂN TÍCH ĐÒN KÉP (FORKS):\n  Pháo e2 tạo đòn đe dọa kép lên Trung Lộ và Tốt e6.\n[12/32] PHÂN TÍCH ĐÒN MỞ (DISCOVERED ATTACKS):\n  Mã c2 di chuyển sẽ mở đường cho Xe d1 chiếm Lộ 4.\n[13/32] BẪY ĂN QUÂN (TRAPS):\n  Giăng bẫy dụ Pháo Đen ăn Tốt c3 để Pháo Đỏ phản đòn.\n[14/32] NGUY CƠ CHIẾU BÍ (CHECKMATE THREATS):\n  Chưa có nguy cơ chiếu bí tức thì (Depth safety = ok).\n[15/32] DƯƠNG ĐÔNG KÍCH TÂY (DIVERSION):\n  Điều Xe sang cánh trái mở rộng tầm khống chế cánh phải.\n[16/32] MẪU CHIẾN THUẬT (PATTERNS):\n  Pháo Đầu Mã Đội, Xe Chiếm Lộ Mở, Mã Quỳ Phòng Thủ.\n[17/32] PHỐI HỢP QUÂN CỜ (SYNERGY):\n  Pháo - Xe phối hợp khống chế Trục dọc Lộ 4 & Lộ 5.\n[18/32] ĐIỂM YẾU CẤU TRÚC (WEAKNESSES):\n  Đen hổng Tốt Trung Lộ e6.\n[19/32] 36 KẾ BINH PHÁP (STRATAGEMS):\n  Kế 1: Dục cầm cố túng — Mở đường dụ đối phương dâng cao.\n[20/32] THẾ TRẬN KINH ĐIỂN (FORMATIONS):\n  Pháo Đầu Đối Bình Phong Mã.\n[21/32] GIAI ĐOẠN KHAI NGUYÊN (TEMPO & PHASE):\n  Giai đoạn Opening (Nước thứ 12) — Giành 1 Nhịp Chuẩn.\n[22/32] PHẢN ĐÒN DỰ KIẾN (OPPONENT COUNTER):\n  Đen có thể nhảy Mã h9->g7 để củng cố Trung Lộ.\n[23/32] PHÂN TÍCH ƯU THẾ & BẤT LỢI:\n  Ưu thế: Chiếm Trung Lộ Lộ 5 | Bất lợi: Chưa xuất Xe cánh phải.\n[24/32] MA TRẬN TRỌNG SỐ QUYẾT ĐỊNH:\n  Độ chính xác (9/10) + An toàn (9/10) + Ngữ cảnh (9/10) - Rủi ro (2/10) = 25/40 (ĐẠT).\n[25/32] ĐÁNH GIÁ CANDIDATES (3 ứng viên):\n    + Ứng viên 1: e7e3 — Pháo(e7->e3) ăn Tốt(e3) ★BEST★ (0cp)\n    + Ứng viên 2: b0c2 — Mã(b0->c2) phát triển (10cp)\n    + Ứng viên 3: h0g2 — Mã(h0->g2) phát triển biên (5cp)\n[26/32] SO SÁNH & CHỌN BESTMOVE:\n  Chọn e7e3 — Pháo(e7->e3) ăn Tốt(e3) (0cp).\n[27/32] CENTIPAWN TỔNG HỢP: 0cp\n[28/32] XÁC MINH REGEX: e7e3 khớp ^[a-i][0-9][a-i][0-9]$ ✓\n[29/32] PHẢN ĐÒN TỐI ƯU (OPTIMAL COUNTER):\n  Đen bắt buộc phải chống Sĩ hoặc nhảy Mã b9->c7.\n[30/32] KIỂM TRA LUẬT CẤM LẶP NƯỚC:\n  Không vi phạm luật Lặp Nước / Chọi Tướng.\n[31/32] CHUỖI ĐỔI QUÂN (EXCHANGE CHAIN):\n  Đổi Pháo lấy Tốt Trung Lộ tạo ưu thế lâu dài.\n[32/32] THƯ VIỆN TÀN CUỘC TABLEBASE:\n  Bàn cờ 32 quân — Chưa sử dụng 5-piece Tablebase.\n</thought>"}, {"role": "user", "content": "Bàn cờ Turn 13:\nFEN: rnbakabnr/9/1c6/p1p1C1p1p/9/9/P1P1c1P1P/7C1/9/RNBAKABNR w - - 0 2\nLượt Đỏ đi."}, {"role": "assistant", "content": "<thought>\n[1/32] KIỂM KÊ QUÂN CỜ:\n  Đỏ: Xe(a0), Mã(b0), Tượng(c0), Sĩ(d0), Tướng(e0), Sĩ(f0), Tượng(g0), Mã(h0), Xe(i0), Pháo(e2), Pháo(h2), Tốt(a3), Tốt(c3), Tốt(e3), Tốt(g3), Tốt(i3)\n  Đen: Tốt(a6), Tốt(c6), Tốt(e6), Tốt(g6), Tốt(i6), Pháo(b7), Pháo(e7), Xe(a9), Mã(b9), Tượng(c9), Sĩ(d9), Tướng(e9), Sĩ(f9), Tượng(g9), Mã(h9), Xe(i9)\n[2/32] BÀN CỜ 2D:\n    a    b    c    d    e    f    g    h    i\n  ┌────┬────┬────┬────┬────┬────┬────┬────┬────┐\n9 │ 車 │ 馬 │ 象 │ 士 │ 將 │ 士 │ 象 │ 馬 │ 車 │\n  ├────┼────┼────┼────┼────┼────┼────┼────┼────┤\n8 │ ． │ ． │ ． │ ． │ ． │ ． │ ． │ ． │ ． │\n  ├────┼────┼────┼────┼────┼────┼────┼────┼────┤\n7 │ ． │ 砲 │ ． │ ． │ 砲 │ ． │ ． │ ． │ ． │\n  ├────┼────┼────┼────┼────┼────┼────┼────┼────┤\n6 │ 卒 │ ． │ 卒 │ ． │ 卒 │ ． │ 卒 │ ． │ 卒 │\n  ├────┼────┼────┼────┼────┼────┼────┼────┼────┤\n5 │ ． │ ． │ ． │ ． │ ． │ ． │ ． │ ． │ ． │\n  ├────┼────┼────┼────┼────┼────┼────┼────┼────┤  ═══ Sông Ngân Hà ═══\n4 │ ． │ ． │ ． │ ． │ ． │ ． │ ． │ ． │ ． │\n  ├────┼────┼────┼────┼────┼────┼────┼────┼────┤\n3 │ 兵 │ ． │ 兵 │ ． │ 兵 │ ． │ 兵 │ ． │ 兵 │\n  ├────┼────┼────┼────┼────┼────┼────┼────┼────┤\n2 │ ． │ ． │ ． │ ． │ 炮 │ ． │ ． │ 炮 │ ． │\n  ├────┼────┼────┼────┼────┼────┼────┼────┼────┤\n1 │ ． │ ． │ ． │ ． │ ． │ ． │ ． │ ． │ ． │\n  ├────┼────┼────┼────┼────┼────┼────┼────┼────┤\n0 │ 車 │ 馬 │ 相 │ 仕 │ 帥 │ 仕 │ 相 │ 馬 │ 車 │\n  └────┴────┴────┴────┴────┴────┴────┴────┴────┘\n    a    b    c    d    e    f    g    h    i\n[3/32] TƯƠNG QUAN VẬT CHẤT CHI TIẾT:\n  Đỏ: 480cp | Đen: 480cp | Chênh lệch: 15cp\n[4/32] PHÂN TÍCH 9 LỘ:\n  Lộ 1 (a): MỞ | Lộ 4 (d): CHIẾM ƯU | Lộ 5 (e): KHÓA TRUNG LỘ | Lộ 8 (h): TỰ DO\n[5/32] ĐÁNH GIÁ TRIỂN KHAI QUÂN:\n  Đỏ: 4/6 quân chủ lực đã phát triển | Đen: 3/6 quân chủ lực đã phát triển\n[6/32] ĐỘ ĐỘNG QUÂN CỜ (MOBILITY):\n  Đỏ: 38 nước đi hợp lệ | Đen: 34 nước đi hợp lệ\n[7/32] AN TOÀN TƯỚNG (KING SAFETY):\n  Đỏ: 95/100 (Sĩ Tượng bền vững) | Đen: 90/100 (Bị đe dọa Lộ Trung)\n[8/32] PHÂN TÍCH QUÂN BỊ TẤN CÔNG:\n  Tốt e6 Đen bị Pháo e2 Đỏ nhắm bắn trực tiếp.\n[9/32] QUÂN TREO KHÔNG NGUYÊN (HANGING PIECES):\n  Không có quân treo nghiêm trọng.\n[10/32] TRẠNG THÁI GHIM (PINNED PIECES):\n  Mã b9 Đen bị Pháo Đỏ dọa ghim khi qua sông.\n[11/32] PHÂN TÍCH ĐÒN KÉP (FORKS):\n  Pháo e2 tạo đòn đe dọa kép lên Trung Lộ và Tốt e6.\n[12/32] PHÂN TÍCH ĐÒN MỞ (DISCOVERED ATTACKS):\n  Mã c2 di chuyển sẽ mở đường cho Xe d1 chiếm Lộ 4.\n[13/32] BẪY ĂN QUÂN (TRAPS):\n  Giăng bẫy dụ Pháo Đen ăn Tốt c3 để Pháo Đỏ phản đòn.\n[14/32] NGUY CƠ CHIẾU BÍ (CHECKMATE THREATS):\n  Chưa có nguy cơ chiếu bí tức thì (Depth safety = ok).\n[15/32] DƯƠNG ĐÔNG KÍCH TÂY (DIVERSION):\n  Điều Xe sang cánh trái mở rộng tầm khống chế cánh phải.\n[16/32] MẪU CHIẾN THUẬT (PATTERNS):\n  Pháo Đầu Mã Đội, Xe Chiếm Lộ Mở, Mã Quỳ Phòng Thủ.\n[17/32] PHỐI HỢP QUÂN CỜ (SYNERGY):\n  Pháo - Xe phối hợp khống chế Trục dọc Lộ 4 & Lộ 5.\n[18/32] ĐIỂM YẾU CẤU TRÚC (WEAKNESSES):\n  Đen hổng Tốt Trung Lộ e6.\n[19/32] 36 KẾ BINH PHÁP (STRATAGEMS):\n  Kế 1: Dục cầm cố túng — Mở đường dụ đối phương dâng cao.\n[20/32] THẾ TRẬN KINH ĐIỂN (FORMATIONS):\n  Pháo Đầu Đối Bình Phong Mã.\n[21/32] GIAI ĐOẠN KHAI NGUYÊN (TEMPO & PHASE):\n  Giai đoạn Opening (Nước thứ 13) — Giành 1 Nhịp Chuẩn.\n[22/32] PHẢN ĐÒN DỰ KIẾN (OPPONENT COUNTER):\n  Đen có thể nhảy Mã h9->g7 để củng cố Trung Lộ.\n[23/32] PHÂN TÍCH ƯU THẾ & BẤT LỢI:\n  Ưu thế: Chiếm Trung Lộ Lộ 5 | Bất lợi: Chưa xuất Xe cánh phải.\n[24/32] MA TRẬN TRỌNG SỐ QUYẾT ĐỊNH:\n  Độ chính xác (9/10) + An toàn (9/10) + Ngữ cảnh (9/10) - Rủi ro (2/10) = 25/40 (ĐẠT).\n[25/32] ĐÁNH GIÁ CANDIDATES (3 ứng viên):\n    + Ứng viên 1: b0c2 — Mã(b0->c2) phát triển ★BEST★ (15cp)\n    + Ứng viên 2: b0c2 — Mã(b0->c2) phát triển (10cp)\n    + Ứng viên 3: h0g2 — Mã(h0->g2) phát triển biên (5cp)\n[26/32] SO SÁNH & CHỌN BESTMOVE:\n  Chọn b0c2 — Mã(b0->c2) phát triển (15cp).\n[27/32] CENTIPAWN TỔNG HỢP: 15cp\n[28/32] XÁC MINH REGEX: b0c2 khớp ^[a-i][0-9][a-i][0-9]$ ✓\n[29/32] PHẢN ĐÒN TỐI ƯU (OPTIMAL COUNTER):\n  Đen bắt buộc phải chống Sĩ hoặc nhảy Mã b9->c7.\n[30/32] KIỂM TRA LUẬT CẤM LẶP NƯỚC:\n  Không vi phạm luật Lặp Nước / Chọi Tướng.\n[31/32] CHUỖI ĐỔI QUÂN (EXCHANGE CHAIN):\n  Đổi Pháo lấy Tốt Trung Lộ tạo ưu thế lâu dài.\n[32/32] THƯ VIỆN TÀN CUỘC TABLEBASE:\n  Bàn cờ 32 quân — Chưa sử dụng 5-piece Tablebase.\n</thought>"}, {"role": "user", "content": "Bàn cờ Turn 14:\nFEN: rnbakabnr/9/1c6/p1p1C1p1p/9/9/P1P1c1P1P/2N4C1/9/R1BAKABNR b - - 0 2\nLượt Đen đi."}, {"role": "assistant", "content": "<thought>\n[1/32] KIỂM KÊ QUÂN CỜ:\n  Đỏ: Xe(a0), Mã(b0), Tượng(c0), Sĩ(d0), Tướng(e0), Sĩ(f0), Tượng(g0), Mã(h0), Xe(i0), Pháo(e2), Pháo(h2), Tốt(a3), Tốt(c3), Tốt(e3), Tốt(g3), Tốt(i3)\n  Đen: Tốt(a6), Tốt(c6), Tốt(e6), Tốt(g6), Tốt(i6), Pháo(b7), Pháo(e7), Xe(a9), Mã(b9), Tượng(c9), Sĩ(d9), Tướng(e9), Sĩ(f9), Tượng(g9), Mã(h9), Xe(i9)\n[2/32] BÀN CỜ 2D:\n    a    b    c    d    e    f    g    h    i\n  ┌────┬────┬────┬────┬────┬────┬────┬────┬────┐\n9 │ 車 │ 馬 │ 象 │ 士 │ 將 │ 士 │ 象 │ 馬 │ 車 │\n  ├────┼────┼────┼────┼────┼────┼────┼────┼────┤\n8 │ ． │ ． │ ． │ ． │ ． │ ． │ ． │ ． │ ． │\n  ├────┼────┼────┼────┼────┼────┼────┼────┼────┤\n7 │ ． │ 砲 │ ． │ ． │ 砲 │ ． │ ． │ ． │ ． │\n  ├────┼────┼────┼────┼────┼────┼────┼────┼────┤\n6 │ 卒 │ ． │ 卒 │ ． │ 卒 │ ． │ 卒 │ ． │ 卒 │\n  ├────┼────┼────┼────┼────┼────┼────┼────┼────┤\n5 │ ． │ ． │ ． │ ． │ ． │ ． │ ． │ ． │ ． │\n  ├────┼────┼────┼────┼────┼────┼────┼────┼────┤  ═══ Sông Ngân Hà ═══\n4 │ ． │ ． │ ． │ ． │ ． │ ． │ ． │ ． │ ． │\n  ├────┼────┼────┼────┼────┼────┼────┼────┼────┤\n3 │ 兵 │ ． │ 兵 │ ． │ 兵 │ ． │ 兵 │ ． │ 兵 │\n  ├────┼────┼────┼────┼────┼────┼────┼────┼────┤\n2 │ ． │ ． │ ． │ ． │ 炮 │ ． │ ． │ 炮 │ ． │\n  ├────┼────┼────┼────┼────┼────┼────┼────┼────┤\n1 │ ． │ ． │ ． │ ． │ ． │ ． │ ． │ ． │ ． │\n  ├────┼────┼────┼────┼────┼────┼────┼────┼────┤\n0 │ 車 │ 馬 │ 相 │ 仕 │ 帥 │ 仕 │ 相 │ 馬 │ 車 │\n  └────┴────┴────┴────┴────┴────┴────┴────┴────┘\n    a    b    c    d    e    f    g    h    i\n[3/32] TƯƠNG QUAN VẬT CHẤT CHI TIẾT:\n  Đỏ: 480cp | Đen: 480cp | Chênh lệch: 10cp\n[4/32] PHÂN TÍCH 9 LỘ:\n  Lộ 1 (a): MỞ | Lộ 4 (d): CHIẾM ƯU | Lộ 5 (e): KHÓA TRUNG LỘ | Lộ 8 (h): TỰ DO\n[5/32] ĐÁNH GIÁ TRIỂN KHAI QUÂN:\n  Đỏ: 4/6 quân chủ lực đã phát triển | Đen: 3/6 quân chủ lực đã phát triển\n[6/32] ĐỘ ĐỘNG QUÂN CỜ (MOBILITY):\n  Đỏ: 38 nước đi hợp lệ | Đen: 34 nước đi hợp lệ\n[7/32] AN TOÀN TƯỚNG (KING SAFETY):\n  Đỏ: 95/100 (Sĩ Tượng bền vững) | Đen: 90/100 (Bị đe dọa Lộ Trung)\n[8/32] PHÂN TÍCH QUÂN BỊ TẤN CÔNG:\n  Tốt e6 Đen bị Pháo e2 Đỏ nhắm bắn trực tiếp.\n[9/32] QUÂN TREO KHÔNG NGUYÊN (HANGING PIECES):\n  Không có quân treo nghiêm trọng.\n[10/32] TRẠNG THÁI GHIM (PINNED PIECES):\n  Mã b9 Đen bị Pháo Đỏ dọa ghim khi qua sông.\n[11/32] PHÂN TÍCH ĐÒN KÉP (FORKS):\n  Pháo e2 tạo đòn đe dọa kép lên Trung Lộ và Tốt e6.\n[12/32] PHÂN TÍCH ĐÒN MỞ (DISCOVERED ATTACKS):\n  Mã c2 di chuyển sẽ mở đường cho Xe d1 chiếm Lộ 4.\n[13/32] BẪY ĂN QUÂN (TRAPS):\n  Giăng bẫy dụ Pháo Đen ăn Tốt c3 để Pháo Đỏ phản đòn.\n[14/32] NGUY CƠ CHIẾU BÍ (CHECKMATE THREATS):\n  Chưa có nguy cơ chiếu bí tức thì (Depth safety = ok).\n[15/32] DƯƠNG ĐÔNG KÍCH TÂY (DIVERSION):\n  Điều Xe sang cánh trái mở rộng tầm khống chế cánh phải.\n[16/32] MẪU CHIẾN THUẬT (PATTERNS):\n  Pháo Đầu Mã Đội, Xe Chiếm Lộ Mở, Mã Quỳ Phòng Thủ.\n[17/32] PHỐI HỢP QUÂN CỜ (SYNERGY):\n  Pháo - Xe phối hợp khống chế Trục dọc Lộ 4 & Lộ 5.\n[18/32] ĐIỂM YẾU CẤU TRÚC (WEAKNESSES):\n  Đen hổng Tốt Trung Lộ e6.\n[19/32] 36 KẾ BINH PHÁP (STRATAGEMS):\n  Kế 1: Dục cầm cố túng — Mở đường dụ đối phương dâng cao.\n[20/32] THẾ TRẬN KINH ĐIỂN (FORMATIONS):\n  Pháo Đầu Đối Bình Phong Mã.\n[21/32] GIAI ĐOẠN KHAI NGUYÊN (TEMPO & PHASE):\n  Giai đoạn Opening (Nước thứ 14) — Giành 1 Nhịp Chuẩn.\n[22/32] PHẢN ĐÒN DỰ KIẾN (OPPONENT COUNTER):\n  Đen có thể nhảy Mã h9->g7 để củng cố Trung Lộ.\n[23/32] PHÂN TÍCH ƯU THẾ & BẤT LỢI:\n  Ưu thế: Chiếm Trung Lộ Lộ 5 | Bất lợi: Chưa xuất Xe cánh phải.\n[24/32] MA TRẬN TRỌNG SỐ QUYẾT ĐỊNH:\n  Độ chính xác (9/10) + An toàn (9/10) + Ngữ cảnh (9/10) - Rủi ro (2/10) = 25/40 (ĐẠT).\n[25/32] ĐÁNH GIÁ CANDIDATES (3 ứng viên):\n    + Ứng viên 1: b9c7 — Mã(b9->c7) nhảy Mã Quỳ ★BEST★ (10cp)\n    + Ứng viên 2: b0c2 — Mã(b0->c2) phát triển (10cp)\n    + Ứng viên 3: h0g2 — Mã(h0->g2) phát triển biên (5cp)\n[26/32] SO SÁNH & CHỌN BESTMOVE:\n  Chọn b9c7 — Mã(b9->c7) nhảy Mã Quỳ (10cp).\n[27/32] CENTIPAWN TỔNG HỢP: 10cp\n[28/32] XÁC MINH REGEX: b9c7 khớp ^[a-i][0-9][a-i][0-9]$ ✓\n[29/32] PHẢN ĐÒN TỐI ƯU (OPTIMAL COUNTER):\n  Đen bắt buộc phải chống Sĩ hoặc nhảy Mã b9->c7.\n[30/32] KIỂM TRA LUẬT CẤM LẶP NƯỚC:\n  Không vi phạm luật Lặp Nước / Chọi Tướng.\n[31/32] CHUỖI ĐỔI QUÂN (EXCHANGE CHAIN):\n  Đổi Pháo lấy Tốt Trung Lộ tạo ưu thế lâu dài.\n[32/32] THƯ VIỆN TÀN CUỘC TABLEBASE:\n  Bàn cờ 32 quân — Chưa sử dụng 5-piece Tablebase.\n</thought>"}, {"role": "user", "content": "Bàn cờ Turn 15:\nFEN: r1bakabnr/2n6/1c6/p1p1C1p1p/9/9/P1P1c1P1P/2N4C1/9/R1BAKABNR w - - 0 3\nLượt Đỏ đi."}, {"role": "assistant", "content": "<thought>\n[1/32] KIỂM KÊ QUÂN CỜ:\n  Đỏ: Xe(a0), Mã(b0), Tượng(c0), Sĩ(d0), Tướng(e0), Sĩ(f0), Tượng(g0), Mã(h0), Xe(i0), Pháo(e2), Pháo(h2), Tốt(a3), Tốt(c3), Tốt(e3), Tốt(g3), Tốt(i3)\n  Đen: Tốt(a6), Tốt(c6), Tốt(e6), Tốt(g6), Tốt(i6), Pháo(b7), Pháo(e7), Xe(a9), Mã(b9), Tượng(c9), Sĩ(d9), Tướng(e9), Sĩ(f9), Tượng(g9), Mã(h9), Xe(i9)\n[2/32] BÀN CỜ 2D:\n    a    b    c    d    e    f    g    h    i\n  ┌────┬────┬────┬────┬────┬────┬────┬────┬────┐\n9 │ 車 │ 馬 │ 象 │ 士 │ 將 │ 士 │ 象 │ 馬 │ 車 │\n  ├────┼────┼────┼────┼────┼────┼────┼────┼────┤\n8 │ ． │ ． │ ． │ ． │ ． │ ． │ ． │ ． │ ． │\n  ├────┼────┼────┼────┼────┼────┼────┼────┼────┤\n7 │ ． │ 砲 │ ． │ ． │ 砲 │ ． │ ． │ ． │ ． │\n  ├────┼────┼────┼────┼────┼────┼────┼────┼────┤\n6 │ 卒 │ ． │ 卒 │ ． │ 卒 │ ． │ 卒 │ ． │ 卒 │\n  ├────┼────┼────┼────┼────┼────┼────┼────┼────┤\n5 │ ． │ ． │ ． │ ． │ ． │ ． │ ． │ ． │ ． │\n  ├────┼────┼────┼────┼────┼────┼────┼────┼────┤  ═══ Sông Ngân Hà ═══\n4 │ ． │ ． │ ． │ ． │ ． │ ． │ ． │ ． │ ． │\n  ├────┼────┼────┼────┼────┼────┼────┼────┼────┤\n3 │ 兵 │ ． │ 兵 │ ． │ 兵 │ ． │ 兵 │ ． │ 兵 │\n  ├────┼────┼────┼────┼────┼────┼────┼────┼────┤\n2 │ ． │ ． │ ． │ ． │ 炮 │ ． │ ． │ 炮 │ ． │\n  ├────┼────┼────┼────┼────┼────┼────┼────┼────┤\n1 │ ． │ ． │ ． │ ． │ ． │ ． │ ． │ ． │ ． │\n  ├────┼────┼────┼────┼────┼────┼────┼────┼────┤\n0 │ 車 │ 馬 │ 相 │ 仕 │ 帥 │ 仕 │ 相 │ 馬 │ 車 │\n  └────┴────┴────┴────┴────┴────┴────┴────┴────┘\n    a    b    c    d    e    f    g    h    i\n[3/32] TƯƠNG QUAN VẬT CHẤT CHI TIẾT:\n  Đỏ: 480cp | Đen: 480cp | Chênh lệch: 20cp\n[4/32] PHÂN TÍCH 9 LỘ:\n  Lộ 1 (a): MỞ | Lộ 4 (d): CHIẾM ƯU | Lộ 5 (e): KHÓA TRUNG LỘ | Lộ 8 (h): TỰ DO\n[5/32] ĐÁNH GIÁ TRIỂN KHAI QUÂN:\n  Đỏ: 4/6 quân chủ lực đã phát triển | Đen: 3/6 quân chủ lực đã phát triển\n[6/32] ĐỘ ĐỘNG QUÂN CỜ (MOBILITY):\n  Đỏ: 38 nước đi hợp lệ | Đen: 34 nước đi hợp lệ\n[7/32] AN TOÀN TƯỚNG (KING SAFETY):\n  Đỏ: 95/100 (Sĩ Tượng bền vững) | Đen: 90/100 (Bị đe dọa Lộ Trung)\n[8/32] PHÂN TÍCH QUÂN BỊ TẤN CÔNG:\n  Tốt e6 Đen bị Pháo e2 Đỏ nhắm bắn trực tiếp.\n[9/32] QUÂN TREO KHÔNG NGUYÊN (HANGING PIECES):\n  Không có quân treo nghiêm trọng.\n[10/32] TRẠNG THÁI GHIM (PINNED PIECES):\n  Mã b9 Đen bị Pháo Đỏ dọa ghim khi qua sông.\n[11/32] PHÂN TÍCH ĐÒN KÉP (FORKS):\n  Pháo e2 tạo đòn đe dọa kép lên Trung Lộ và Tốt e6.\n[12/32] PHÂN TÍCH ĐÒN MỞ (DISCOVERED ATTACKS):\n  Mã c2 di chuyển sẽ mở đường cho Xe d1 chiếm Lộ 4.\n[13/32] BẪY ĂN QUÂN (TRAPS):\n  Giăng bẫy dụ Pháo Đen ăn Tốt c3 để Pháo Đỏ phản đòn.\n[14/32] NGUY CƠ CHIẾU BÍ (CHECKMATE THREATS):\n  Chưa có nguy cơ chiếu bí tức thì (Depth safety = ok).\n[15/32] DƯƠNG ĐÔNG KÍCH TÂY (DIVERSION):\n  Điều Xe sang cánh trái mở rộng tầm khống chế cánh phải.\n[16/32] MẪU CHIẾN THUẬT (PATTERNS):\n  Pháo Đầu Mã Đội, Xe Chiếm Lộ Mở, Mã Quỳ Phòng Thủ.\n[17/32] PHỐI HỢP QUÂN CỜ (SYNERGY):\n  Pháo - Xe phối hợp khống chế Trục dọc Lộ 4 & Lộ 5.\n[18/32] ĐIỂM YẾU CẤU TRÚC (WEAKNESSES):\n  Đen hổng Tốt Trung Lộ e6.\n[19/32] 36 KẾ BINH PHÁP (STRATAGEMS):\n  Kế 1: Dục cầm cố túng — Mở đường dụ đối phương dâng cao.\n[20/32] THẾ TRẬN KINH ĐIỂN (FORMATIONS):\n  Pháo Đầu Đối Bình Phong Mã.\n[21/32] GIAI ĐOẠN KHAI NGUYÊN (TEMPO & PHASE):\n  Giai đoạn Opening (Nước thứ 15) — Giành 1 Nhịp Chuẩn.\n[22/32] PHẢN ĐÒN DỰ KIẾN (OPPONENT COUNTER):\n  Đen có thể nhảy Mã h9->g7 để củng cố Trung Lộ.\n[23/32] PHÂN TÍCH ƯU THẾ & BẤT LỢI:\n  Ưu thế: Chiếm Trung Lộ Lộ 5 | Bất lợi: Chưa xuất Xe cánh phải.\n[24/32] MA TRẬN TRỌNG SỐ QUYẾT ĐỊNH:\n  Độ chính xác (9/10) + An toàn (9/10) + Ngữ cảnh (9/10) - Rủi ro (2/10) = 25/40 (ĐẠT).\n[25/32] ĐÁNH GIÁ CANDIDATES (3 ứng viên):\n    + Ứng viên 1: h0g2 — Mã(h0->g2) phát triển Mã Biên ★BEST★ (20cp)\n    + Ứng viên 2: b0c2 — Mã(b0->c2) phát triển (10cp)\n    + Ứng viên 3: h0g2 — Mã(h0->g2) phát triển biên (5cp)\n[26/32] SO SÁNH & CHỌN BESTMOVE:\n  Chọn h0g2 — Mã(h0->g2) phát triển Mã Biên (20cp).\n[27/32] CENTIPAWN TỔNG HỢP: 20cp\n[28/32] XÁC MINH REGEX: h0g2 khớp ^[a-i][0-9][a-i][0-9]$ ✓\n[29/32] PHẢN ĐÒN TỐI ƯU (OPTIMAL COUNTER):\n  Đen bắt buộc phải chống Sĩ hoặc nhảy Mã b9->c7.\n[30/32] KIỂM TRA LUẬT CẤM LẶP NƯỚC:\n  Không vi phạm luật Lặp Nước / Chọi Tướng.\n[31/32] CHUỖI ĐỔI QUÂN (EXCHANGE CHAIN):\n  Đổi Pháo lấy Tốt Trung Lộ tạo ưu thế lâu dài.\n[32/32] THƯ VIỆN TÀN CUỘC TABLEBASE:\n  Bàn cờ 32 quân — Chưa sử dụng 5-piece Tablebase.\n</thought>"}, {"role": "user", "content": "Bàn cờ Turn 16:\nFEN: r1bakabnr/2n6/1c6/p1p1C1p1p/9/9/P1P1c1P1P/2N3N1C/9/R1BAKAB1R b - - 0 3\nLượt Đen đi."}, {"role": "assistant", "content": "<thought>\n[1/32] KIỂM KÊ QUÂN CỜ:\n  Đỏ: Xe(a0), Mã(b0), Tượng(c0), Sĩ(d0), Tướng(e0), Sĩ(f0), Tượng(g0), Mã(h0), Xe(i0), Pháo(e2), Pháo(h2), Tốt(a3), Tốt(c3), Tốt(e3), Tốt(g3), Tốt(i3)\n  Đen: Tốt(a6), Tốt(c6), Tốt(e6), Tốt(g6), Tốt(i6), Pháo(b7), Pháo(e7), Xe(a9), Mã(b9), Tượng(c9), Sĩ(d9), Tướng(e9), Sĩ(f9), Tượng(g9), Mã(h9), Xe(i9)\n[2/32] BÀN CỜ 2D:\n    a    b    c    d    e    f    g    h    i\n  ┌────┬────┬────┬────┬────┬────┬────┬────┬────┐\n9 │ 車 │ 馬 │ 象 │ 士 │ 將 │ 士 │ 象 │ 馬 │ 車 │\n  ├────┼────┼────┼────┼────┼────┼────┼────┼────┤\n8 │ ． │ ． │ ． │ ． │ ． │ ． │ ． │ ． │ ． │\n  ├────┼────┼────┼────┼────┼────┼────┼────┼────┤\n7 │ ． │ 砲 │ ． │ ． │ 砲 │ ． │ ． │ ． │ ． │\n  ├────┼────┼────┼────┼────┼────┼────┼────┼────┤\n6 │ 卒 │ ． │ 卒 │ ． │ 卒 │ ． │ 卒 │ ． │ 卒 │\n  ├────┼────┼────┼────┼────┼────┼────┼────┼────┤\n5 │ ． │ ． │ ． │ ． │ ． │ ． │ ． │ ． │ ． │\n  ├────┼────┼────┼────┼────┼────┼────┼────┼────┤  ═══ Sông Ngân Hà ═══\n4 │ ． │ ． │ ． │ ． │ ． │ ． │ ． │ ． │ ． │\n  ├────┼────┼────┼────┼────┼────┼────┼────┼────┤\n3 │ 兵 │ ． │ 兵 │ ． │ 兵 │ ． │ 兵 │ ． │ 兵 │\n  ├────┼────┼────┼────┼────┼────┼────┼────┼────┤\n2 │ ． │ ． │ ． │ ． │ 炮 │ ． │ ． │ 炮 │ ． │\n  ├────┼────┼────┼────┼────┼────┼────┼────┼────┤\n1 │ ． │ ． │ ． │ ． │ ． │ ． │ ． │ ． │ ． │\n  ├────┼────┼────┼────┼────┼────┼────┼────┼────┤\n0 │ 車 │ 馬 │ 相 │ 仕 │ 帥 │ 仕 │ 相 │ 馬 │ 車 │\n  └────┴────┴────┴────┴────┴────┴────┴────┴────┘\n    a    b    c    d    e    f    g    h    i\n[3/32] TƯƠNG QUAN VẬT CHẤT CHI TIẾT:\n  Đỏ: 480cp | Đen: 480cp | Chênh lệch: 18cp\n[4/32] PHÂN TÍCH 9 LỘ:\n  Lộ 1 (a): MỞ | Lộ 4 (d): CHIẾM ƯU | Lộ 5 (e): KHÓA TRUNG LỘ | Lộ 8 (h): TỰ DO\n[5/32] ĐÁNH GIÁ TRIỂN KHAI QUÂN:\n  Đỏ: 4/6 quân chủ lực đã phát triển | Đen: 3/6 quân chủ lực đã phát triển\n[6/32] ĐỘ ĐỘNG QUÂN CỜ (MOBILITY):\n  Đỏ: 38 nước đi hợp lệ | Đen: 34 nước đi hợp lệ\n[7/32] AN TOÀN TƯỚNG (KING SAFETY):\n  Đỏ: 95/100 (Sĩ Tượng bền vững) | Đen: 90/100 (Bị đe dọa Lộ Trung)\n[8/32] PHÂN TÍCH QUÂN BỊ TẤN CÔNG:\n  Tốt e6 Đen bị Pháo e2 Đỏ nhắm bắn trực tiếp.\n[9/32] QUÂN TREO KHÔNG NGUYÊN (HANGING PIECES):\n  Không có quân treo nghiêm trọng.\n[10/32] TRẠNG THÁI GHIM (PINNED PIECES):\n  Mã b9 Đen bị Pháo Đỏ dọa ghim khi qua sông.\n[11/32] PHÂN TÍCH ĐÒN KÉP (FORKS):\n  Pháo e2 tạo đòn đe dọa kép lên Trung Lộ và Tốt e6.\n[12/32] PHÂN TÍCH ĐÒN MỞ (DISCOVERED ATTACKS):\n  Mã c2 di chuyển sẽ mở đường cho Xe d1 chiếm Lộ 4.\n[13/32] BẪY ĂN QUÂN (TRAPS):\n  Giăng bẫy dụ Pháo Đen ăn Tốt c3 để Pháo Đỏ phản đòn.\n[14/32] NGUY CƠ CHIẾU BÍ (CHECKMATE THREATS):\n  Chưa có nguy cơ chiếu bí tức thì (Depth safety = ok).\n[15/32] DƯƠNG ĐÔNG KÍCH TÂY (DIVERSION):\n  Điều Xe sang cánh trái mở rộng tầm khống chế cánh phải.\n[16/32] MẪU CHIẾN THUẬT (PATTERNS):\n  Pháo Đầu Mã Đội, Xe Chiếm Lộ Mở, Mã Quỳ Phòng Thủ.\n[17/32] PHỐI HỢP QUÂN CỜ (SYNERGY):\n  Pháo - Xe phối hợp khống chế Trục dọc Lộ 4 & Lộ 5.\n[18/32] ĐIỂM YẾU CẤU TRÚC (WEAKNESSES):\n  Đen hổng Tốt Trung Lộ e6.\n[19/32] 36 KẾ BINH PHÁP (STRATAGEMS):\n  Kế 1: Dục cầm cố túng — Mở đường dụ đối phương dâng cao.\n[20/32] THẾ TRẬN KINH ĐIỂN (FORMATIONS):\n  Pháo Đầu Đối Bình Phong Mã.\n[21/32] GIAI ĐOẠN KHAI NGUYÊN (TEMPO & PHASE):\n  Giai đoạn Opening (Nước thứ 16) — Giành 1 Nhịp Chuẩn.\n[22/32] PHẢN ĐÒN DỰ KIẾN (OPPONENT COUNTER):\n  Đen có thể nhảy Mã h9->g7 để củng cố Trung Lộ.\n[23/32] PHÂN TÍCH ƯU THẾ & BẤT LỢI:\n  Ưu thế: Chiếm Trung Lộ Lộ 5 | Bất lợi: Chưa xuất Xe cánh phải.\n[24/32] MA TRẬN TRỌNG SỐ QUYẾT ĐỊNH:\n  Độ chính xác (9/10) + An toàn (9/10) + Ngữ cảnh (9/10) - Rủi ro (2/10) = 25/40 (ĐẠT).\n[25/32] ĐÁNH GIÁ CANDIDATES (3 ứng viên):\n    + Ứng viên 1: h9g7 — Mã(h9->g7) nhảy Mã Biên ★BEST★ (18cp)\n    + Ứng viên 2: b0c2 — Mã(b0->c2) phát triển (10cp)\n    + Ứng viên 3: h0g2 — Mã(h0->g2) phát triển biên (5cp)\n[26/32] SO SÁNH & CHỌN BESTMOVE:\n  Chọn h9g7 — Mã(h9->g7) nhảy Mã Biên (18cp).\n[27/32] CENTIPAWN TỔNG HỢP: 18cp\n[28/32] XÁC MINH REGEX: h9g7 khớp ^[a-i][0-9][a-i][0-9]$ ✓\n[29/32] PHẢN ĐÒN TỐI ƯU (OPTIMAL COUNTER):\n  Đen bắt buộc phải chống Sĩ hoặc nhảy Mã b9->c7.\n[30/32] KIỂM TRA LUẬT CẤM LẶP NƯỚC:\n  Không vi phạm luật Lặp Nước / Chọi Tướng.\n[31/32] CHUỖI ĐỔI QUÂN (EXCHANGE CHAIN):\n  Đổi Pháo lấy Tốt Trung Lộ tạo ưu thế lâu dài.\n[32/32] THƯ VIỆN TÀN CUỘC TABLEBASE:\n  Bàn cờ 32 quân — Chưa sử dụng 5-piece Tablebase.\n</thought>"}, {"role": "user", "content": "Bàn cờ Turn 17:\nFEN: r1bakab1r/2n3n1/1c6/p1p1C1p1p/9/9/P1P1c1P1P/2N3N1C/9/R1BAKAB1R w - - 0 4\nLượt Đỏ đi."}, {"role": "assistant", "content": "<thought>\n[1/32] KIỂM KÊ QUÂN CỜ:\n  Đỏ: Xe(a0), Mã(b0), Tượng(c0), Sĩ(d0), Tướng(e0), Sĩ(f0), Tượng(g0), Mã(h0), Xe(i0), Pháo(e2), Pháo(h2), Tốt(a3), Tốt(c3), Tốt(e3), Tốt(g3), Tốt(i3)\n  Đen: Tốt(a6), Tốt(c6), Tốt(e6), Tốt(g6), Tốt(i6), Pháo(b7), Pháo(e7), Xe(a9), Mã(b9), Tượng(c9), Sĩ(d9), Tướng(e9), Sĩ(f9), Tượng(g9), Mã(h9), Xe(i9)\n[2/32] BÀN CỜ 2D:\n    a    b    c    d    e    f    g    h    i\n  ┌────┬────┬────┬────┬────┬────┬────┬────┬────┐\n9 │ 車 │ 馬 │ 象 │ 士 │ 將 │ 士 │ 象 │ 馬 │ 車 │\n  ├────┼────┼────┼────┼────┼────┼────┼────┼────┤\n8 │ ． │ ． │ ． │ ． │ ． │ ． │ ． │ ． │ ． │\n  ├────┼────┼────┼────┼────┼────┼────┼────┼────┤\n7 │ ． │ 砲 │ ． │ ． │ 砲 │ ． │ ． │ ． │ ． │\n  ├────┼────┼────┼────┼────┼────┼────┼────┼────┤\n6 │ 卒 │ ． │ 卒 │ ． │ 卒 │ ． │ 卒 │ ． │ 卒 │\n  ├────┼────┼────┼────┼────┼────┼────┼────┼────┤\n5 │ ． │ ． │ ． │ ． │ ． │ ． │ ． │ ． │ ． │\n  ├────┼────┼────┼────┼────┼────┼────┼────┼────┤  ═══ Sông Ngân Hà ═══\n4 │ ． │ ． │ ． │ ． │ ． │ ． │ ． │ ． │ ． │\n  ├────┼────┼────┼────┼────┼────┼────┼────┼────┤\n3 │ 兵 │ ． │ 兵 │ ． │ 兵 │ ． │ 兵 │ ． │ 兵 │\n  ├────┼────┼────┼────┼────┼────┼────┼────┼────┤\n2 │ ． │ ． │ ． │ ． │ 炮 │ ． │ ． │ 炮 │ ． │\n  ├────┼────┼────┼────┼────┼────┼────┼────┼────┤\n1 │ ． │ ． │ ． │ ． │ ． │ ． │ ． │ ． │ ． │\n  ├────┼────┼────┼────┼────┼────┼────┼────┼────┤\n0 │ 車 │ 馬 │ 相 │ 仕 │ 帥 │ 仕 │ 相 │ 馬 │ 車 │\n  └────┴────┴────┴────┴────┴────┴────┴────┴────┘\n    a    b    c    d    e    f    g    h    i\n[3/32] TƯƠNG QUAN VẬT CHẤT CHI TIẾT:\n  Đỏ: 480cp | Đen: 480cp | Chênh lệch: 35cp\n[4/32] PHÂN TÍCH 9 LỘ:\n  Lộ 1 (a): MỞ | Lộ 4 (d): CHIẾM ƯU | Lộ 5 (e): KHÓA TRUNG LỘ | Lộ 8 (h): TỰ DO\n[5/32] ĐÁNH GIÁ TRIỂN KHAI QUÂN:\n  Đỏ: 4/6 quân chủ lực đã phát triển | Đen: 3/6 quân chủ lực đã phát triển\n[6/32] ĐỘ ĐỘNG QUÂN CỜ (MOBILITY):\n  Đỏ: 38 nước đi hợp lệ | Đen: 34 nước đi hợp lệ\n[7/32] AN TOÀN TƯỚNG (KING SAFETY):\n  Đỏ: 95/100 (Sĩ Tượng bền vững) | Đen: 90/100 (Bị đe dọa Lộ Trung)\n[8/32] PHÂN TÍCH QUÂN BỊ TẤN CÔNG:\n  Tốt e6 Đen bị Pháo e2 Đỏ nhắm bắn trực tiếp.\n[9/32] QUÂN TREO KHÔNG NGUYÊN (HANGING PIECES):\n  Không có quân treo nghiêm trọng.\n[10/32] TRẠNG THÁI GHIM (PINNED PIECES):\n  Mã b9 Đen bị Pháo Đỏ dọa ghim khi qua sông.\n[11/32] PHÂN TÍCH ĐÒN KÉP (FORKS):\n  Pháo e2 tạo đòn đe dọa kép lên Trung Lộ và Tốt e6.\n[12/32] PHÂN TÍCH ĐÒN MỞ (DISCOVERED ATTACKS):\n  Mã c2 di chuyển sẽ mở đường cho Xe d1 chiếm Lộ 4.\n[13/32] BẪY ĂN QUÂN (TRAPS):\n  Giăng bẫy dụ Pháo Đen ăn Tốt c3 để Pháo Đỏ phản đòn.\n[14/32] NGUY CƠ CHIẾU BÍ (CHECKMATE THREATS):\n  Chưa có nguy cơ chiếu bí tức thì (Depth safety = ok).\n[15/32] DƯƠNG ĐÔNG KÍCH TÂY (DIVERSION):\n  Điều Xe sang cánh trái mở rộng tầm khống chế cánh phải.\n[16/32] MẪU CHIẾN THUẬT (PATTERNS):\n  Pháo Đầu Mã Đội, Xe Chiếm Lộ Mở, Mã Quỳ Phòng Thủ.\n[17/32] PHỐI HỢP QUÂN CỜ (SYNERGY):\n  Pháo - Xe phối hợp khống chế Trục dọc Lộ 4 & Lộ 5.\n[18/32] ĐIỂM YẾU CẤU TRÚC (WEAKNESSES):\n  Đen hổng Tốt Trung Lộ e6.\n[19/32] 36 KẾ BINH PHÁP (STRATAGEMS):\n  Kế 1: Dục cầm cố túng — Mở đường dụ đối phương dâng cao.\n[20/32] THẾ TRẬN KINH ĐIỂN (FORMATIONS):\n  Pháo Đầu Đối Bình Phong Mã.\n[21/32] GIAI ĐOẠN KHAI NGUYÊN (TEMPO & PHASE):\n  Giai đoạn Opening (Nước thứ 17) — Giành 1 Nhịp Chuẩn.\n[22/32] PHẢN ĐÒN DỰ KIẾN (OPPONENT COUNTER):\n  Đen có thể nhảy Mã h9->g7 để củng cố Trung Lộ.\n[23/32] PHÂN TÍCH ƯU THẾ & BẤT LỢI:\n  Ưu thế: Chiếm Trung Lộ Lộ 5 | Bất lợi: Chưa xuất Xe cánh phải.\n[24/32] MA TRẬN TRỌNG SỐ QUYẾT ĐỊNH:\n  Độ chính xác (9/10) + An toàn (9/10) + Ngữ cảnh (9/10) - Rủi ro (2/10) = 25/40 (ĐẠT).\n[25/32] ĐÁNH GIÁ CANDIDATES (3 ứng viên):\n    + Ứng viên 1: a0a1 — Xe(a0->a1) hoành Xe ★BEST★ (35cp)\n    + Ứng viên 2: b0c2 — Mã(b0->c2) phát triển (10cp)\n    + Ứng viên 3: h0g2 — Mã(h0->g2) phát triển biên (5cp)\n[26/32] SO SÁNH & CHỌN BESTMOVE:\n  Chọn a0a1 — Xe(a0->a1) hoành Xe (35cp).\n[27/32] CENTIPAWN TỔNG HỢP: 35cp\n[28/32] XÁC MINH REGEX: a0a1 khớp ^[a-i][0-9][a-i][0-9]$ ✓\n[29/32] PHẢN ĐÒN TỐI ƯU (OPTIMAL COUNTER):\n  Đen bắt buộc phải chống Sĩ hoặc nhảy Mã b9->c7.\n[30/32] KIỂM TRA LUẬT CẤM LẶP NƯỚC:\n  Không vi phạm luật Lặp Nước / Chọi Tướng.\n[31/32] CHUỖI ĐỔI QUÂN (EXCHANGE CHAIN):\n  Đổi Pháo lấy Tốt Trung Lộ tạo ưu thế lâu dài.\n[32/32] THƯ VIỆN TÀN CUỘC TABLEBASE:\n  Bàn cờ 32 quân — Chưa sử dụng 5-piece Tablebase.\n</thought>"}, {"role": "user", "content": "Bàn cờ Turn 18:\nFEN: r1bakab1r/2n3n1/1c6/p1p1C1p1p/9/9/P1P1c1P1P/2N3N1C/R1BAKAB1R/111111111 b - - 0 4\nLượt Đen đi."}, {"role": "assistant", "content": "<thought>\n[1/32] KIỂM KÊ QUÂN CỜ:\n  Đỏ: Xe(a0), Mã(b0), Tượng(c0), Sĩ(d0), Tướng(e0), Sĩ(f0), Tượng(g0), Mã(h0), Xe(i0), Pháo(e2), Pháo(h2), Tốt(a3), Tốt(c3), Tốt(e3), Tốt(g3), Tốt(i3)\n  Đen: Tốt(a6), Tốt(c6), Tốt(e6), Tốt(g6), Tốt(i6), Pháo(b7), Pháo(e7), Xe(a9), Mã(b9), Tượng(c9), Sĩ(d9), Tướng(e9), Sĩ(f9), Tượng(g9), Mã(h9), Xe(i9)\n[2/32] BÀN CỜ 2D:\n    a    b    c    d    e    f    g    h    i\n  ┌────┬────┬────┬────┬────┬────┬────┬────┬────┐\n9 │ 車 │ 馬 │ 象 │ 士 │ 將 │ 士 │ 象 │ 馬 │ 車 │\n  ├────┼────┼────┼────┼────┼────┼────┼────┼────┤\n8 │ ． │ ． │ ． │ ． │ ． │ ． │ ． │ ． │ ． │\n  ├────┼────┼────┼────┼────┼────┼────┼────┼────┤\n7 │ ． │ 砲 │ ． │ ． │ 砲 │ ． │ ． │ ． │ ． │\n  ├────┼────┼────┼────┼────┼────┼────┼────┼────┤\n6 │ 卒 │ ． │ 卒 │ ． │ 卒 │ ． │ 卒 │ ． │ 卒 │\n  ├────┼────┼────┼────┼────┼────┼────┼────┼────┤\n5 │ ． │ ． │ ． │ ． │ ． │ ． │ ． │ ． │ ． │\n  ├────┼────┼────┼────┼────┼────┼────┼────┼────┤  ═══ Sông Ngân Hà ═══\n4 │ ． │ ． │ ． │ ． │ ． │ ． │ ． │ ． │ ． │\n  ├────┼────┼────┼────┼────┼────┼────┼────┼────┤\n3 │ 兵 │ ． │ 兵 │ ． │ 兵 │ ． │ 兵 │ ． │ 兵 │\n  ├────┼────┼────┼────┼────┼────┼────┼────┼────┤\n2 │ ． │ ． │ ． │ ． │ 炮 │ ． │ ． │ 炮 │ ． │\n  ├────┼────┼────┼────┼────┼────┼────┼────┼────┤\n1 │ ． │ ． │ ． │ ． │ ． │ ． │ ． │ ． │ ． │\n  ├────┼────┼────┼────┼────┼────┼────┼────┼────┤\n0 │ 車 │ 馬 │ 相 │ 仕 │ 帥 │ 仕 │ 相 │ 馬 │ 車 │\n  └────┴────┴────┴────┴────┴────┴────┴────┴────┘\n    a    b    c    d    e    f    g    h    i\n[3/32] TƯƠNG QUAN VẬT CHẤT CHI TIẾT:\n  Đỏ: 480cp | Đen: 480cp | Chênh lệch: 30cp\n[4/32] PHÂN TÍCH 9 LỘ:\n  Lộ 1 (a): MỞ | Lộ 4 (d): CHIẾM ƯU | Lộ 5 (e): KHÓA TRUNG LỘ | Lộ 8 (h): TỰ DO\n[5/32] ĐÁNH GIÁ TRIỂN KHAI QUÂN:\n  Đỏ: 4/6 quân chủ lực đã phát triển | Đen: 3/6 quân chủ lực đã phát triển\n[6/32] ĐỘ ĐỘNG QUÂN CỜ (MOBILITY):\n  Đỏ: 38 nước đi hợp lệ | Đen: 34 nước đi hợp lệ\n[7/32] AN TOÀN TƯỚNG (KING SAFETY):\n  Đỏ: 95/100 (Sĩ Tượng bền vững) | Đen: 90/100 (Bị đe dọa Lộ Trung)\n[8/32] PHÂN TÍCH QUÂN BỊ TẤN CÔNG:\n  Tốt e6 Đen bị Pháo e2 Đỏ nhắm bắn trực tiếp.\n[9/32] QUÂN TREO KHÔNG NGUYÊN (HANGING PIECES):\n  Không có quân treo nghiêm trọng.\n[10/32] TRẠNG THÁI GHIM (PINNED PIECES):\n  Mã b9 Đen bị Pháo Đỏ dọa ghim khi qua sông.\n[11/32] PHÂN TÍCH ĐÒN KÉP (FORKS):\n  Pháo e2 tạo đòn đe dọa kép lên Trung Lộ và Tốt e6.\n[12/32] PHÂN TÍCH ĐÒN MỞ (DISCOVERED ATTACKS):\n  Mã c2 di chuyển sẽ mở đường cho Xe d1 chiếm Lộ 4.\n[13/32] BẪY ĂN QUÂN (TRAPS):\n  Giăng bẫy dụ Pháo Đen ăn Tốt c3 để Pháo Đỏ phản đòn.\n[14/32] NGUY CƠ CHIẾU BÍ (CHECKMATE THREATS):\n  Chưa có nguy cơ chiếu bí tức thì (Depth safety = ok).\n[15/32] DƯƠNG ĐÔNG KÍCH TÂY (DIVERSION):\n  Điều Xe sang cánh trái mở rộng tầm khống chế cánh phải.\n[16/32] MẪU CHIẾN THUẬT (PATTERNS):\n  Pháo Đầu Mã Đội, Xe Chiếm Lộ Mở, Mã Quỳ Phòng Thủ.\n[17/32] PHỐI HỢP QUÂN CỜ (SYNERGY):\n  Pháo - Xe phối hợp khống chế Trục dọc Lộ 4 & Lộ 5.\n[18/32] ĐIỂM YẾU CẤU TRÚC (WEAKNESSES):\n  Đen hổng Tốt Trung Lộ e6.\n[19/32] 36 KẾ BINH PHÁP (STRATAGEMS):\n  Kế 1: Dục cầm cố túng — Mở đường dụ đối phương dâng cao.\n[20/32] THẾ TRẬN KINH ĐIỂN (FORMATIONS):\n  Pháo Đầu Đối Bình Phong Mã.\n[21/32] GIAI ĐOẠN KHAI NGUYÊN (TEMPO & PHASE):\n  Giai đoạn Opening (Nước thứ 18) — Giành 1 Nhịp Chuẩn.\n[22/32] PHẢN ĐÒN DỰ KIẾN (OPPONENT COUNTER):\n  Đen có thể nhảy Mã h9->g7 để củng cố Trung Lộ.\n[23/32] PHÂN TÍCH ƯU THẾ & BẤT LỢI:\n  Ưu thế: Chiếm Trung Lộ Lộ 5 | Bất lợi: Chưa xuất Xe cánh phải.\n[24/32] MA TRẬN TRỌNG SỐ QUYẾT ĐỊNH:\n  Độ chính xác (9/10) + An toàn (9/10) + Ngữ cảnh (9/10) - Rủi ro (2/10) = 25/40 (ĐẠT).\n[25/32] ĐÁNH GIÁ CANDIDATES (3 ứng viên):\n    + Ứng viên 1: a9a8 — Xe(a9->a8) hoành Xe ★BEST★ (30cp)\n    + Ứng viên 2: b0c2 — Mã(b0->c2) phát triển (10cp)\n    + Ứng viên 3: h0g2 — Mã(h0->g2) phát triển biên (5cp)\n[26/32] SO SÁNH & CHỌN BESTMOVE:\n  Chọn a9a8 — Xe(a9->a8) hoành Xe (30cp).\n[27/32] CENTIPAWN TỔNG HỢP: 30cp\n[28/32] XÁC MINH REGEX: a9a8 khớp ^[a-i][0-9][a-i][0-9]$ ✓\n[29/32] PHẢN ĐÒN TỐI ƯU (OPTIMAL COUNTER):\n  Đen bắt buộc phải chống Sĩ hoặc nhảy Mã b9->c7.\n[30/32] KIỂM TRA LUẬT CẤM LẶP NƯỚC:\n  Không vi phạm luật Lặp Nước / Chọi Tướng.\n[31/32] CHUỖI ĐỔI QUÂN (EXCHANGE CHAIN):\n  Đổi Pháo lấy Tốt Trung Lộ tạo ưu thế lâu dài.\n[32/32] THƯ VIỆN TÀN CUỘC TABLEBASE:\n  Bàn cờ 32 quân — Chưa sử dụng 5-piece Tablebase.\n</thought>"}, {"role": "user", "content": "Bàn cờ Turn 19:\nFEN: 111111111/r1bakab1r/2n3n1/1c6/p1p1C1p1p/9/P1P1c1P1P/2N3N1C/R1BAKAB1R/111111111 w - - 0 5\nLượt Đỏ đi."}, {"role": "assistant", "content": "<thought>\n[1/32] KIỂM KÊ QUÂN CỜ:\n  Đỏ: Xe(a0), Mã(b0), Tượng(c0), Sĩ(d0), Tướng(e0), Sĩ(f0), Tượng(g0), Mã(h0), Xe(i0), Pháo(e2), Pháo(h2), Tốt(a3), Tốt(c3), Tốt(e3), Tốt(g3), Tốt(i3)\n  Đen: Tốt(a6), Tốt(c6), Tốt(e6), Tốt(g6), Tốt(i6), Pháo(b7), Pháo(e7), Xe(a9), Mã(b9), Tượng(c9), Sĩ(d9), Tướng(e9), Sĩ(f9), Tượng(g9), Mã(h9), Xe(i9)\n[2/32] BÀN CỜ 2D:\n    a    b    c    d    e    f    g    h    i\n  ┌────┬────┬────┬────┬────┬────┬────┬────┬────┐\n9 │ 車 │ 馬 │ 象 │ 士 │ 將 │ 士 │ 象 │ 馬 │ 車 │\n  ├────┼────┼────┼────┼────┼────┼────┼────┼────┤\n8 │ ． │ ． │ ． │ ． │ ． │ ． │ ． │ ． │ ． │\n  ├────┼────┼────┼────┼────┼────┼────┼────┼────┤\n7 │ ． │ 砲 │ ． │ ． │ 砲 │ ． │ ． │ ． │ ． │\n  ├────┼────┼────┼────┼────┼────┼────┼────┼────┤\n6 │ 卒 │ ． │ 卒 │ ． │ 卒 │ ． │ 卒 │ ． │ 卒 │\n  ├────┼────┼────┼────┼────┼────┼────┼────┼────┤\n5 │ ． │ ． │ ． │ ． │ ． │ ． │ ． │ ． │ ． │\n  ├────┼────┼────┼────┼────┼────┼────┼────┼────┤  ═══ Sông Ngân Hà ═══\n4 │ ． │ ． │ ． │ ． │ ． │ ． │ ． │ ． │ ． │\n  ├────┼────┼────┼────┼────┼────┼────┼────┼────┤\n3 │ 兵 │ ． │ 兵 │ ． │ 兵 │ ． │ 兵 │ ． │ 兵 │\n  ├────┼────┼────┼────┼────┼────┼────┼────┼────┤\n2 │ ． │ ． │ ． │ ． │ 炮 │ ． │ ． │ 炮 │ ． │\n  ├────┼────┼────┼────┼────┼────┼────┼────┼────┤\n1 │ ． │ ． │ ． │ ． │ ． │ ． │ ． │ ． │ ． │\n  ├────┼────┼────┼────┼────┼────┼────┼────┼────┤\n0 │ 車 │ 馬 │ 相 │ 仕 │ 帥 │ 仕 │ 相 │ 馬 │ 車 │\n  └────┴────┴────┴────┴────┴────┴────┴────┴────┘\n    a    b    c    d    e    f    g    h    i\n[3/32] TƯƠNG QUAN VẬT CHẤT CHI TIẾT:\n  Đỏ: 480cp | Đen: 480cp | Chênh lệch: 55cp\n[4/32] PHÂN TÍCH 9 LỘ:\n  Lộ 1 (a): MỞ | Lộ 4 (d): CHIẾM ƯU | Lộ 5 (e): KHÓA TRUNG LỘ | Lộ 8 (h): TỰ DO\n[5/32] ĐÁNH GIÁ TRIỂN KHAI QUÂN:\n  Đỏ: 4/6 quân chủ lực đã phát triển | Đen: 3/6 quân chủ lực đã phát triển\n[6/32] ĐỘ ĐỘNG QUÂN CỜ (MOBILITY):\n  Đỏ: 38 nước đi hợp lệ | Đen: 34 nước đi hợp lệ\n[7/32] AN TOÀN TƯỚNG (KING SAFETY):\n  Đỏ: 95/100 (Sĩ Tượng bền vững) | Đen: 90/100 (Bị đe dọa Lộ Trung)\n[8/32] PHÂN TÍCH QUÂN BỊ TẤN CÔNG:\n  Tốt e6 Đen bị Pháo e2 Đỏ nhắm bắn trực tiếp.\n[9/32] QUÂN TREO KHÔNG NGUYÊN (HANGING PIECES):\n  Không có quân treo nghiêm trọng.\n[10/32] TRẠNG THÁI GHIM (PINNED PIECES):\n  Mã b9 Đen bị Pháo Đỏ dọa ghim khi qua sông.\n[11/32] PHÂN TÍCH ĐÒN KÉP (FORKS):\n  Pháo e2 tạo đòn đe dọa kép lên Trung Lộ và Tốt e6.\n[12/32] PHÂN TÍCH ĐÒN MỞ (DISCOVERED ATTACKS):\n  Mã c2 di chuyển sẽ mở đường cho Xe d1 chiếm Lộ 4.\n[13/32] BẪY ĂN QUÂN (TRAPS):\n  Giăng bẫy dụ Pháo Đen ăn Tốt c3 để Pháo Đỏ phản đòn.\n[14/32] NGUY CƠ CHIẾU BÍ (CHECKMATE THREATS):\n  Chưa có nguy cơ chiếu bí tức thì (Depth safety = ok).\n[15/32] DƯƠNG ĐÔNG KÍCH TÂY (DIVERSION):\n  Điều Xe sang cánh trái mở rộng tầm khống chế cánh phải.\n[16/32] MẪU CHIẾN THUẬT (PATTERNS):\n  Pháo Đầu Mã Đội, Xe Chiếm Lộ Mở, Mã Quỳ Phòng Thủ.\n[17/32] PHỐI HỢP QUÂN CỜ (SYNERGY):\n  Pháo - Xe phối hợp khống chế Trục dọc Lộ 4 & Lộ 5.\n[18/32] ĐIỂM YẾU CẤU TRÚC (WEAKNESSES):\n  Đen hổng Tốt Trung Lộ e6.\n[19/32] 36 KẾ BINH PHÁP (STRATAGEMS):\n  Kế 1: Dục cầm cố túng — Mở đường dụ đối phương dâng cao.\n[20/32] THẾ TRẬN KINH ĐIỂN (FORMATIONS):\n  Pháo Đầu Đối Bình Phong Mã.\n[21/32] GIAI ĐOẠN KHAI NGUYÊN (TEMPO & PHASE):\n  Giai đoạn Opening (Nước thứ 19) — Giành 1 Nhịp Chuẩn.\n[22/32] PHẢN ĐÒN DỰ KIẾN (OPPONENT COUNTER):\n  Đen có thể nhảy Mã h9->g7 để củng cố Trung Lộ.\n[23/32] PHÂN TÍCH ƯU THẾ & BẤT LỢI:\n  Ưu thế: Chiếm Trung Lộ Lộ 5 | Bất lợi: Chưa xuất Xe cánh phải.\n[24/32] MA TRẬN TRỌNG SỐ QUYẾT ĐỊNH:\n  Độ chính xác (9/10) + An toàn (9/10) + Ngữ cảnh (9/10) - Rủi ro (2/10) = 25/40 (ĐẠT).\n[25/32] ĐÁNH GIÁ CANDIDATES (3 ứng viên):\n    + Ứng viên 1: a1d1 — Xe(a1->d1) chiếm Lộ 4 ★BEST★ (55cp)\n    + Ứng viên 2: b0c2 — Mã(b0->c2) phát triển (10cp)\n    + Ứng viên 3: h0g2 — Mã(h0->g2) phát triển biên (5cp)\n[26/32] SO SÁNH & CHỌN BESTMOVE:\n  Chọn a1d1 — Xe(a1->d1) chiếm Lộ 4 (55cp).\n[27/32] CENTIPAWN TỔNG HỢP: 55cp\n[28/32] XÁC MINH REGEX: a1d1 khớp ^[a-i][0-9][a-i][0-9]$ ✓\n[29/32] PHẢN ĐÒN TỐI ƯU (OPTIMAL COUNTER):\n  Đen bắt buộc phải chống Sĩ hoặc nhảy Mã b9->c7.\n[30/32] KIỂM TRA LUẬT CẤM LẶP NƯỚC:\n  Không vi phạm luật Lặp Nước / Chọi Tướng.\n[31/32] CHUỖI ĐỔI QUÂN (EXCHANGE CHAIN):\n  Đổi Pháo lấy Tốt Trung Lộ tạo ưu thế lâu dài.\n[32/32] THƯ VIỆN TÀN CUỘC TABLEBASE:\n  Bàn cờ 32 quân — Chưa sử dụng 5-piece Tablebase.\n</thought>"}, {"role": "user", "content": "Bàn cờ Turn 20:\nFEN: 111111111/r1bakab1r/2n3n1/1c6/p1p1C1p1p/9/P1P1c1P1P/3R2N1C/2BAKAB1R/111111111 b - - 0 5\nLượt Đen đi."}, {"role": "assistant", "content": "<thought>\n[1/32] KIỂM KÊ QUÂN CỜ:\n  Đỏ: Xe(a0), Mã(b0), Tượng(c0), Sĩ(d0), Tướng(e0), Sĩ(f0), Tượng(g0), Mã(h0), Xe(i0), Pháo(e2), Pháo(h2), Tốt(a3), Tốt(c3), Tốt(e3), Tốt(g3), Tốt(i3)\n  Đen: Tốt(a6), Tốt(c6), Tốt(e6), Tốt(g6), Tốt(i6), Pháo(b7), Pháo(e7), Xe(a9), Mã(b9), Tượng(c9), Sĩ(d9), Tướng(e9), Sĩ(f9), Tượng(g9), Mã(h9), Xe(i9)\n[2/32] BÀN CỜ 2D:\n    a    b    c    d    e    f    g    h    i\n  ┌────┬────┬────┬────┬────┬────┬────┬────┬────┐\n9 │ 車 │ 馬 │ 象 │ 士 │ 將 │ 士 │ 象 │ 馬 │ 車 │\n  ├────┼────┼────┼────┼────┼────┼────┼────┼────┤\n8 │ ． │ ． │ ． │ ． │ ． │ ． │ ． │ ． │ ． │\n  ├────┼────┼────┼────┼────┼────┼────┼────┼────┤\n7 │ ． │ 砲 │ ． │ ． │ 砲 │ ． │ ． │ ． │ ． │\n  ├────┼────┼────┼────┼────┼────┼────┼────┼────┤\n6 │ 卒 │ ． │ 卒 │ ． │ 卒 │ ． │ 卒 │ ． │ 卒 │\n  ├────┼────┼────┼────┼────┼────┼────┼────┼────┤\n5 │ ． │ ． │ ． │ ． │ ． │ ． │ ． │ ． │ ． │\n  ├────┼────┼────┼────┼────┼────┼────┼────┼────┤  ═══ Sông Ngân Hà ═══\n4 │ ． │ ． │ ． │ ． │ ． │ ． │ ． │ ． │ ． │\n  ├────┼────┼────┼────┼────┼────┼────┼────┼────┤\n3 │ 兵 │ ． │ 兵 │ ． │ 兵 │ ． │ 兵 │ ． │ 兵 │\n  ├────┼────┼────┼────┼────┼────┼────┼────┼────┤\n2 │ ． │ ． │ ． │ ． │ 炮 │ ． │ ． │ 炮 │ ． │\n  ├────┼────┼────┼────┼────┼────┼────┼────┼────┤\n1 │ ． │ ． │ ． │ ． │ ． │ ． │ ． │ ． │ ． │\n  ├────┼────┼────┼────┼────┼────┼────┼────┼────┤\n0 │ 車 │ 馬 │ 相 │ 仕 │ 帥 │ 仕 │ 相 │ 馬 │ 車 │\n  └────┴────┴────┴────┴────┴────┴────┴────┴────┘\n    a    b    c    d    e    f    g    h    i\n[3/32] TƯƠNG QUAN VẬT CHẤT CHI TIẾT:\n  Đỏ: 480cp | Đen: 480cp | Chênh lệch: 45cp\n[4/32] PHÂN TÍCH 9 LỘ:\n  Lộ 1 (a): MỞ | Lộ 4 (d): CHIẾM ƯU | Lộ 5 (e): KHÓA TRUNG LỘ | Lộ 8 (h): TỰ DO\n[5/32] ĐÁNH GIÁ TRIỂN KHAI QUÂN:\n  Đỏ: 4/6 quân chủ lực đã phát triển | Đen: 3/6 quân chủ lực đã phát triển\n[6/32] ĐỘ ĐỘNG QUÂN CỜ (MOBILITY):\n  Đỏ: 38 nước đi hợp lệ | Đen: 34 nước đi hợp lệ\n[7/32] AN TOÀN TƯỚNG (KING SAFETY):\n  Đỏ: 95/100 (Sĩ Tượng bền vững) | Đen: 90/100 (Bị đe dọa Lộ Trung)\n[8/32] PHÂN TÍCH QUÂN BỊ TẤN CÔNG:\n  Tốt e6 Đen bị Pháo e2 Đỏ nhắm bắn trực tiếp.\n[9/32] QUÂN TREO KHÔNG NGUYÊN (HANGING PIECES):\n  Không có quân treo nghiêm trọng.\n[10/32] TRẠNG THÁI GHIM (PINNED PIECES):\n  Mã b9 Đen bị Pháo Đỏ dọa ghim khi qua sông.\n[11/32] PHÂN TÍCH ĐÒN KÉP (FORKS):\n  Pháo e2 tạo đòn đe dọa kép lên Trung Lộ và Tốt e6.\n[12/32] PHÂN TÍCH ĐÒN MỞ (DISCOVERED ATTACKS):\n  Mã c2 di chuyển sẽ mở đường cho Xe d1 chiếm Lộ 4.\n[13/32] BẪY ĂN QUÂN (TRAPS):\n  Giăng bẫy dụ Pháo Đen ăn Tốt c3 để Pháo Đỏ phản đòn.\n[14/32] NGUY CƠ CHIẾU BÍ (CHECKMATE THREATS):\n  Chưa có nguy cơ chiếu bí tức thì (Depth safety = ok).\n[15/32] DƯƠNG ĐÔNG KÍCH TÂY (DIVERSION):\n  Điều Xe sang cánh trái mở rộng tầm khống chế cánh phải.\n[16/32] MẪU CHIẾN THUẬT (PATTERNS):\n  Pháo Đầu Mã Đội, Xe Chiếm Lộ Mở, Mã Quỳ Phòng Thủ.\n[17/32] PHỐI HỢP QUÂN CỜ (SYNERGY):\n  Pháo - Xe phối hợp khống chế Trục dọc Lộ 4 & Lộ 5.\n[18/32] ĐIỂM YẾU CẤU TRÚC (WEAKNESSES):\n  Đen hổng Tốt Trung Lộ e6.\n[19/32] 36 KẾ BINH PHÁP (STRATAGEMS):\n  Kế 1: Dục cầm cố túng — Mở đường dụ đối phương dâng cao.\n[20/32] THẾ TRẬN KINH ĐIỂN (FORMATIONS):\n  Pháo Đầu Đối Bình Phong Mã.\n[21/32] GIAI ĐOẠN KHAI NGUYÊN (TEMPO & PHASE):\n  Giai đoạn Opening (Nước thứ 20) — Giành 1 Nhịp Chuẩn.\n[22/32] PHẢN ĐÒN DỰ KIẾN (OPPONENT COUNTER):\n  Đen có thể nhảy Mã h9->g7 để củng cố Trung Lộ.\n[23/32] PHÂN TÍCH ƯU THẾ & BẤT LỢI:\n  Ưu thế: Chiếm Trung Lộ Lộ 5 | Bất lợi: Chưa xuất Xe cánh phải.\n[24/32] MA TRẬN TRỌNG SỐ QUYẾT ĐỊNH:\n  Độ chính xác (9/10) + An toàn (9/10) + Ngữ cảnh (9/10) - Rủi ro (2/10) = 25/40 (ĐẠT).\n[25/32] ĐÁNH GIÁ CANDIDATES (3 ứng viên):\n    + Ứng viên 1: a8d8 — Xe(a8->d8) đối Xe Lộ 4 ★BEST★ (45cp)\n    + Ứng viên 2: b0c2 — Mã(b0->c2) phát triển (10cp)\n    + Ứng viên 3: h0g2 — Mã(h0->g2) phát triển biên (5cp)\n[26/32] SO SÁNH & CHỌN BESTMOVE:\n  Chọn a8d8 — Xe(a8->d8) đối Xe Lộ 4 (45cp).\n[27/32] CENTIPAWN TỔNG HỢP: 45cp\n[28/32] XÁC MINH REGEX: a8d8 khớp ^[a-i][0-9][a-i][0-9]$ ✓\n[29/32] PHẢN ĐÒN TỐI ƯU (OPTIMAL COUNTER):\n  Đen bắt buộc phải chống Sĩ hoặc nhảy Mã b9->c7.\n[30/32] KIỂM TRA LUẬT CẤM LẶP NƯỚC:\n  Không vi phạm luật Lặp Nước / Chọi Tướng.\n[31/32] CHUỖI ĐỔI QUÂN (EXCHANGE CHAIN):\n  Đổi Pháo lấy Tốt Trung Lộ tạo ưu thế lâu dài.\n[32/32] THƯ VIỆN TÀN CUỘC TABLEBASE:\n  Bàn cờ 32 quân — Chưa sử dụng 5-piece Tablebase.\n</thought>"}]}, {"game_id": "xiangqi_master_game_002", "total_plies": 28, "outcome": "draw", "stamp": 1786400500, "messages": [{"role": "system", "content": "Bạn là Xiangqi-R1 Master v5.0 — mô hình suy luận cờ Tướng siêu việt được huấn luyện phân tích chiều sâu chiến thuật 32 chiều kích."}, {"role": "user", "content": "Bàn cờ Turn 1:\nFEN: rnbakabnr/9/1c2c4/p1p1p1p1p/9/9/P1P1P1P1P/4C2C1/9/RNBAKABNR w - - 0 1\nLượt Đỏ đi."}, {"role": "assistant", "content": "<thought>\n[1/32] KIỂM KÊ QUÂN CỜ:\n  Đỏ: 16 quân | Đen: 16 quân\n[2/32] BÀN CỜ 2D:\n    a  b  c  d  e  f  g  h  i\n0   R  N  B  A  K  A  B  N  R\n[26/32] SO SÁNH & CHỌN BESTMOVE:\n  Chọn b0c2 — Mã(b0->c2) phát triển (10cp).\n[27/32] CENTIPAWN TỔNG HỢP: 10cp\n[28/32] XÁC MINH: b0c2 khớp regex ^[a-i][0-9][a-i][0-9]$ ✓\n</thought>"}, {"role": "user", "content": "Bàn cờ Turn 2:\nFEN: rnbakabnr/9/1c2c4/p1p1p1p1p/9/9/P1P1P1P1P/4C2C1/9/RNBAKABNR w - - 0 1\nLượt Đen đi."}, {"role": "assistant", "content": "<thought>\n[1/32] KIỂM KÊ QUÂN CỜ:\n  Đỏ: 16 quân | Đen: 16 quân\n[2/32] BÀN CỜ 2D:\n    a  b  c  d  e  f  g  h  i\n0   R  N  B  A  K  A  B  N  R\n[26/32] SO SÁNH & CHỌN BESTMOVE:\n  Chọn b0c2 — Mã(b0->c2) phát triển (10cp).\n[27/32] CENTIPAWN TỔNG HỢP: 10cp\n[28/32] XÁC MINH: b0c2 khớp regex ^[a-i][0-9][a-i][0-9]$ ✓\n</thought>"}, {"role": "user", "content": "Bàn cờ Turn 3:\nFEN: rnbakabnr/9/1c2c4/p1p1p1p1p/9/9/P1P1P1P1P/4C2C1/9/RNBAKABNR w - - 0 1\nLượt Đỏ đi."}, {"role": "assistant", "content": "<thought>\n[1/32] KIỂM KÊ QUÂN CỜ:\n  Đỏ: 16 quân | Đen: 16 quân\n[2/32] BÀN CỜ 2D:\n    a  b  c  d  e  f  g  h  i\n0   R  N  B  A  K  A  B  N  R\n[26/32] SO SÁNH & CHỌN BESTMOVE:\n  Chọn b0c2 — Mã(b0->c2) phát triển (10cp).\n[27/32] CENTIPAWN TỔNG HỢP: 10cp\n[28/32] XÁC MINH: b0c2 khớp regex ^[a-i][0-9][a-i][0-9]$ ✓\n</thought>"}, {"role": "user", "content": "Bàn cờ Turn 4:\nFEN: rnbakabnr/9/1c2c4/p1p1p1p1p/9/9/P1P1P1P1P/4C2C1/9/RNBAKABNR w - - 0 1\nLượt Đen đi."}, {"role": "assistant", "content": "<thought>\n[1/32] KIỂM KÊ QUÂN CỜ:\n  Đỏ: 16 quân | Đen: 16 quân\n[2/32] BÀN CỜ 2D:\n    a  b  c  d  e  f  g  h  i\n0   R  N  B  A  K  A  B  N  R\n[26/32] SO SÁNH & CHỌN BESTMOVE:\n  Chọn b0c2 — Mã(b0->c2) phát triển (10cp).\n[27/32] CENTIPAWN TỔNG HỢP: 10cp\n[28/32] XÁC MINH: b0c2 khớp regex ^[a-i][0-9][a-i][0-9]$ ✓\n</thought>"}, {"role": "user", "content": "Bàn cờ Turn 5:\nFEN: rnbakabnr/9/1c2c4/p1p1p1p1p/9/9/P1P1P1P1P/4C2C1/9/RNBAKABNR w - - 0 1\nLượt Đỏ đi."}, {"role": "assistant", "content": "<thought>\n[1/32] KIỂM KÊ QUÂN CỜ:\n  Đỏ: 16 quân | Đen: 16 quân\n[2/32] BÀN CỜ 2D:\n    a  b  c  d  e  f  g  h  i\n0   R  N  B  A  K  A  B  N  R\n[26/32] SO SÁNH & CHỌN BESTMOVE:\n  Chọn b0c2 — Mã(b0->c2) phát triển (10cp).\n[27/32] CENTIPAWN TỔNG HỢP: 10cp\n[28/32] XÁC MINH: b0c2 khớp regex ^[a-i][0-9][a-i][0-9]$ ✓\n</thought>"}, {"role": "user", "content": "Bàn cờ Turn 6:\nFEN: rnbakabnr/9/1c2c4/p1p1p1p1p/9/9/P1P1P1P1P/4C2C1/9/RNBAKABNR w - - 0 1\nLượt Đen đi."}, {"role": "assistant", "content": "<thought>\n[1/32] KIỂM KÊ QUÂN CỜ:\n  Đỏ: 16 quân | Đen: 16 quân\n[2/32] BÀN CỜ 2D:\n    a  b  c  d  e  f  g  h  i\n0   R  N  B  A  K  A  B  N  R\n[26/32] SO SÁNH & CHỌN BESTMOVE:\n  Chọn b0c2 — Mã(b0->c2) phát triển (10cp).\n[27/32] CENTIPAWN TỔNG HỢP: 10cp\n[28/32] XÁC MINH: b0c2 khớp regex ^[a-i][0-9][a-i][0-9]$ ✓\n</thought>"}, {"role": "user", "content": "Bàn cờ Turn 7:\nFEN: rnbakabnr/9/1c2c4/p1p1p1p1p/9/9/P1P1P1P1P/4C2C1/9/RNBAKABNR w - - 0 1\nLượt Đỏ đi."}, {"role": "assistant", "content": "<thought>\n[1/32] KIỂM KÊ QUÂN CỜ:\n  Đỏ: 16 quân | Đen: 16 quân\n[2/32] BÀN CỜ 2D:\n    a  b  c  d  e  f  g  h  i\n0   R  N  B  A  K  A  B  N  R\n[26/32] SO SÁNH & CHỌN BESTMOVE:\n  Chọn b0c2 — Mã(b0->c2) phát triển (10cp).\n[27/32] CENTIPAWN TỔNG HỢP: 10cp\n[28/32] XÁC MINH: b0c2 khớp regex ^[a-i][0-9][a-i][0-9]$ ✓\n</thought>"}, {"role": "user", "content": "Bàn cờ Turn 8:\nFEN: rnbakabnr/9/1c2c4/p1p1p1p1p/9/9/P1P1P1P1P/4C2C1/9/RNBAKABNR w - - 0 1\nLượt Đen đi."}, {"role": "assistant", "content": "<thought>\n[1/32] KIỂM KÊ QUÂN CỜ:\n  Đỏ: 16 quân | Đen: 16 quân\n[2/32] BÀN CỜ 2D:\n    a  b  c  d  e  f  g  h  i\n0   R  N  B  A  K  A  B  N  R\n[26/32] SO SÁNH & CHỌN BESTMOVE:\n  Chọn b0c2 — Mã(b0->c2) phát triển (10cp).\n[27/32] CENTIPAWN TỔNG HỢP: 10cp\n[28/32] XÁC MINH: b0c2 khớp regex ^[a-i][0-9][a-i][0-9]$ ✓\n</thought>"}, {"role": "user", "content": "Bàn cờ Turn 9:\nFEN: rnbakabnr/9/1c2c4/p1p1p1p1p/9/9/P1P1P1P1P/4C2C1/9/RNBAKABNR w - - 0 1\nLượt Đỏ đi."}, {"role": "assistant", "content": "<thought>\n[1/32] KIỂM KÊ QUÂN CỜ:\n  Đỏ: 16 quân | Đen: 16 quân\n[2/32] BÀN CỜ 2D:\n    a  b  c  d  e  f  g  h  i\n0   R  N  B  A  K  A  B  N  R\n[26/32] SO SÁNH & CHỌN BESTMOVE:\n  Chọn b0c2 — Mã(b0->c2) phát triển (10cp).\n[27/32] CENTIPAWN TỔNG HỢP: 10cp\n[28/32] XÁC MINH: b0c2 khớp regex ^[a-i][0-9][a-i][0-9]$ ✓\n</thought>"}, {"role": "user", "content": "Bàn cờ Turn 10:\nFEN: rnbakabnr/9/1c2c4/p1p1p1p1p/9/9/P1P1P1P1P/4C2C1/9/RNBAKABNR w - - 0 1\nLượt Đen đi."}, {"role": "assistant", "content": "<thought>\n[1/32] KIỂM KÊ QUÂN CỜ:\n  Đỏ: 16 quân | Đen: 16 quân\n[2/32] BÀN CỜ 2D:\n    a  b  c  d  e  f  g  h  i\n0   R  N  B  A  K  A  B  N  R\n[26/32] SO SÁNH & CHỌN BESTMOVE:\n  Chọn b0c2 — Mã(b0->c2) phát triển (10cp).\n[27/32] CENTIPAWN TỔNG HỢP: 10cp\n[28/32] XÁC MINH: b0c2 khớp regex ^[a-i][0-9][a-i][0-9]$ ✓\n</thought>"}, {"role": "user", "content": "Bàn cờ Turn 11:\nFEN: rnbakabnr/9/1c2c4/p1p1p1p1p/9/9/P1P1P1P1P/4C2C1/9/RNBAKABNR w - - 0 1\nLượt Đỏ đi."}, {"role": "assistant", "content": "<thought>\n[1/32] KIỂM KÊ QUÂN CỜ:\n  Đỏ: 16 quân | Đen: 16 quân\n[2/32] BÀN CỜ 2D:\n    a  b  c  d  e  f  g  h  i\n0   R  N  B  A  K  A  B  N  R\n[26/32] SO SÁNH & CHỌN BESTMOVE:\n  Chọn b0c2 — Mã(b0->c2) phát triển (10cp).\n[27/32] CENTIPAWN TỔNG HỢP: 10cp\n[28/32] XÁC MINH: b0c2 khớp regex ^[a-i][0-9][a-i][0-9]$ ✓\n</thought>"}, {"role": "user", "content": "Bàn cờ Turn 12:\nFEN: rnbakabnr/9/1c2c4/p1p1p1p1p/9/9/P1P1P1P1P/4C2C1/9/RNBAKABNR w - - 0 1\nLượt Đen đi."}, {"role": "assistant", "content": "<thought>\n[1/32] KIỂM KÊ QUÂN CỜ:\n  Đỏ: 16 quân | Đen: 16 quân\n[2/32] BÀN CỜ 2D:\n    a  b  c  d  e  f  g  h  i\n0   R  N  B  A  K  A  B  N  R\n[26/32] SO SÁNH & CHỌN BESTMOVE:\n  Chọn b0c2 — Mã(b0->c2) phát triển (10cp).\n[27/32] CENTIPAWN TỔNG HỢP: 10cp\n[28/32] XÁC MINH: b0c2 khớp regex ^[a-i][0-9][a-i][0-9]$ ✓\n</thought>"}, {"role": "user", "content": "Bàn cờ Turn 13:\nFEN: rnbakabnr/9/1c2c4/p1p1p1p1p/9/9/P1P1P1P1P/4C2C1/9/RNBAKABNR w - - 0 1\nLượt Đỏ đi."}, {"role": "assistant", "content": "<thought>\n[1/32] KIỂM KÊ QUÂN CỜ:\n  Đỏ: 16 quân | Đen: 16 quân\n[2/32] BÀN CỜ 2D:\n    a  b  c  d  e  f  g  h  i\n0   R  N  B  A  K  A  B  N  R\n[26/32] SO SÁNH & CHỌN BESTMOVE:\n  Chọn b0c2 — Mã(b0->c2) phát triển (10cp).\n[27/32] CENTIPAWN TỔNG HỢP: 10cp\n[28/32] XÁC MINH: b0c2 khớp regex ^[a-i][0-9][a-i][0-9]$ ✓\n</thought>"}, {"role": "user", "content": "Bàn cờ Turn 14:\nFEN: rnbakabnr/9/1c2c4/p1p1p1p1p/9/9/P1P1P1P1P/4C2C1/9/RNBAKABNR w - - 0 1\nLượt Đen đi."}, {"role": "assistant", "content": "<thought>\n[1/32] KIỂM KÊ QUÂN CỜ:\n  Đỏ: 16 quân | Đen: 16 quân\n[2/32] BÀN CỜ 2D:\n    a  b  c  d  e  f  g  h  i\n0   R  N  B  A  K  A  B  N  R\n[26/32] SO SÁNH & CHỌN BESTMOVE:\n  Chọn b0c2 — Mã(b0->c2) phát triển (10cp).\n[27/32] CENTIPAWN TỔNG HỢP: 10cp\n[28/32] XÁC MINH: b0c2 khớp regex ^[a-i][0-9][a-i][0-9]$ ✓\n</thought>"}]}];
+
+        // Batch File Listener (Supports multiple files!)
         document.getElementById('jsonlFileInput').addEventListener('change', function(e) {
-            const file = e.target.files[0];
-            if (!file) return;
+            const files = Array.from(e.target.files);
+            if (!files || files.length === 0) return;
 
-            const reader = new FileReader();
-            reader.onload = function(evt) {
-                try {
-                    const text = evt.target.result;
-                    const lines = text.split(/\r?\n/).filter(l => l.trim().length > 0);
-                    const parsedGames = [];
+            let parsedGames = [];
+            let filesProcessed = 0;
 
-                    for (let i = 0; i < lines.length; i++) {
-                        try {
-                            const obj = JSON.parse(lines[i]);
-                            if (obj.messages && Array.isArray(obj.messages)) {
-                                parsedGames.push(obj);
-                            }
-                        } catch (err) {
-                            console.warn("Skipping invalid JSON line #", i + 1);
+            files.forEach(file => {
+                const reader = new FileReader();
+                reader.onload = function(evt) {
+                    try {
+                        const text = evt.target.result;
+                        const lines = text.split(/\r?\n/).filter(l => l.trim().length > 0);
+                        lines.forEach((line, lineIdx) => {
+                            try {
+                                const obj = JSON.parse(line);
+                                if (obj.messages && Array.isArray(obj.messages)) {
+                                    parsedGames.push(obj);
+                                }
+                            } catch (e) {}
+                        });
+                    } catch (err) {}
+
+                    filesProcessed++;
+                    if (filesProcessed === files.length) {
+                        if (parsedGames.length === 0) {
+                            alert("❌ Không tìm thấy bản ghi JSON valid nào trong (các) file đã chọn!");
+                            return;
                         }
+                        loadedGamesList = parsedGames;
+                        populateGameSelector();
+                        alert("✅ Đã nạp thành công " + parsedGames.length + " ván cờ từ " + files.length + " file!");
                     }
-
-                    if (parsedGames.length === 0) {
-                        alert("❌ Không tìm thấy bản ghi JSON valid nào trong file!");
-                        return;
-                    }
-
-                    loadedGamesList = parsedGames;
-                    populateGameSelector();
-                    alert("✅ Đã nạp thành công " + parsedGames.length + " ván cờ từ file: " + file.name);
-                } catch (err) {
-                    alert("❌ Lỗi đọc file JSONL: " + err.message);
-                }
-            };
-            reader.readAsText(file);
+                };
+                reader.readAsText(file);
+            });
         });
 
+        function openPasteModal() {
+            document.getElementById('pasteModal').style.display = 'flex';
+        }
+        function closePasteModal() {
+            document.getElementById('pasteModal').style.display = 'none';
+        }
+
+        function processPastedJsonl() {
+            const rawText = document.getElementById('pasteTextarea').value;
+            if (!rawText.trim()) return;
+
+            const lines = rawText.split(/\r?\n/).filter(l => l.trim().length > 0);
+            const parsedGames = [];
+
+            lines.forEach(line => {
+                try {
+                    const obj = JSON.parse(line);
+                    if (obj.messages && Array.isArray(obj.messages)) {
+                        parsedGames.push(obj);
+                    }
+                } catch (e) {}
+            });
+
+            if (parsedGames.length === 0) {
+                alert("❌ Không tìm thấy JSON Record hợp lệ trong văn bản đã dán!");
+                return;
+            }
+
+            loadedGamesList = parsedGames;
+            populateGameSelector();
+            closePasteModal();
+            alert("✅ Đã nạp thành công " + parsedGames.length + " ván cờ từ văn bản dán!");
+        }
+
         function loadDefaultSample() {
-            loadedGamesList = [DEFAULT_SINGLE_GAME];
+            loadedGamesList = DEFAULT_SAMPLE_DATASET;
             populateGameSelector();
         }
 
@@ -407,7 +600,8 @@
                 const gameId = game.game_id || ("Game_" + (idx + 1));
                 const convMsgs = (game.messages || []).filter(m => m.role === 'user' || m.role === 'assistant');
                 const plies = game.total_plies || convMsgs.length;
-                opt.textContent = "Game #" + (idx + 1) + " (ID: " + gameId + " — " + plies + " Plies)";
+                const outcome = game.outcome || "in_progress";
+                opt.textContent = "Game #" + (idx + 1) + " (ID: " + gameId + " — " + plies + " Plies — " + outcome + ")";
                 selectEl.appendChild(opt);
             });
 
@@ -417,6 +611,7 @@
         }
 
         function onGameChange(val) {
+            stopAutoPlay();
             activeGameIndex = parseInt(val);
             loadActiveGame(activeGameIndex);
         }
@@ -437,12 +632,74 @@
             slider.max = Math.max(1, totalTurns);
             slider.value = 1;
 
+            // Build Sparkline Chart
+            renderSparklineChart(convMsgs);
+
             activeTurnIndex = 0;
             renderTurnStep(0);
         }
 
+        function renderSparklineChart(convMsgs) {
+            const chartEl = document.getElementById('sparklineChart');
+            chartEl.innerHTML = '';
+
+            const totalTurns = Math.floor(convMsgs.length / 2);
+            for (let t = 0; t < totalTurns; t++) {
+                const assistantMsg = convMsgs[t * 2 + 1];
+                let cpEval = 0;
+                if (assistantMsg) {
+                    const match = assistantMsg.content.match(/CENTIPAWN TỔNG HỢP:\s*([+-]?\d+)cp/i);
+                    if (match) cpEval = parseInt(match[1]);
+                }
+
+                const bar = document.createElement('div');
+                bar.className = 'sparkline-bar';
+                bar.dataset.turn = t;
+                bar.title = "Turn " + (t + 1) + ": " + cpEval + "cp";
+
+                // Height normalized between 10% and 100%
+                const absVal = Math.min(Math.abs(cpEval), 500);
+                const heightPercent = Math.max(15, Math.floor((absVal / 500) * 100));
+                bar.style.height = heightPercent + '%';
+
+                if (cpEval >= 0) {
+                    bar.style.background = '#10b981';
+                } else {
+                    bar.style.background = '#06b6d4';
+                }
+
+                bar.onclick = function() {
+                    jumpToTurn(t);
+                };
+
+                chartEl.appendChild(bar);
+            }
+        }
+
+        function highlightSparklineBar(turnIdx) {
+            document.querySelectorAll('.sparkline-bar').forEach(b => {
+                if (parseInt(b.dataset.turn) === turnIdx) {
+                    b.classList.add('active');
+                } else {
+                    b.classList.remove('active');
+                }
+            });
+        }
+
         function onSliderMove(val) {
             activeTurnIndex = parseInt(val) - 1;
+            renderTurnStep(activeTurnIndex);
+        }
+
+        function jumpToTurn(idx) {
+            const game = loadedGamesList[activeGameIndex];
+            if (!game) return;
+            const convMsgs = (game.messages || []).filter(m => m.role === 'user' || m.role === 'assistant');
+            const totalTurns = Math.floor(convMsgs.length / 2);
+
+            if (idx === -1) idx = totalTurns - 1;
+            activeTurnIndex = Math.max(0, Math.min(idx, totalTurns - 1));
+            document.getElementById('turnSlider').value = activeTurnIndex + 1;
             renderTurnStep(activeTurnIndex);
         }
 
@@ -464,6 +721,53 @@
                 activeTurnIndex++;
                 document.getElementById('turnSlider').value = activeTurnIndex + 1;
                 renderTurnStep(activeTurnIndex);
+            } else {
+                stopAutoPlay();
+            }
+        }
+
+        function toggleAutoPlay() {
+            if (autoPlayTimer) {
+                stopAutoPlay();
+            } else {
+                startAutoPlay();
+            }
+        }
+
+        function startAutoPlay() {
+            const btn = document.getElementById('playPauseBtn');
+            btn.textContent = '⏸ Pause';
+            btn.classList.replace('btn-primary', 'btn-purple');
+
+            autoPlayTimer = setInterval(() => {
+                const game = loadedGamesList[activeGameIndex];
+                if (!game) return stopAutoPlay();
+                const convMsgs = (game.messages || []).filter(m => m.role === 'user' || m.role === 'assistant');
+                const totalTurns = Math.floor(convMsgs.length / 2);
+
+                if (activeTurnIndex < totalTurns - 1) {
+                    nextTurnStep();
+                } else {
+                    stopAutoPlay();
+                }
+            }, autoPlaySpeed);
+        }
+
+        function stopAutoPlay() {
+            if (autoPlayTimer) {
+                clearInterval(autoPlayTimer);
+                autoPlayTimer = null;
+            }
+            const btn = document.getElementById('playPauseBtn');
+            btn.textContent = '▶ Play';
+            btn.classList.replace('btn-purple', 'btn-primary');
+        }
+
+        function onSpeedChange(val) {
+            autoPlaySpeed = parseInt(val);
+            if (autoPlayTimer) {
+                stopAutoPlay();
+                startAutoPlay();
             }
         }
 
@@ -475,6 +779,7 @@
             const totalTurns = Math.floor(convMsgs.length / 2);
 
             document.getElementById('turnCounter').textContent = "Turn " + (turnIdx + 1) + " / " + totalTurns;
+            highlightSparklineBar(turnIdx);
 
             const userMsg = convMsgs[turnIdx * 2];
             const assistantMsg = convMsgs[turnIdx * 2 + 1];
@@ -508,8 +813,95 @@
             if (moveMatch) bestMove = moveMatch[1];
 
             drawXiangqiBoard(fen, bestMove);
+            renderGraveyard(fen);
+            renderCandidatesTable(assistantMsg.content);
             render32DThoughtCards(assistantMsg.content);
             document.getElementById('rawRecordJsonBox').textContent = JSON.stringify(game, null, 2);
+        }
+
+        function renderGraveyard(fen) {
+            const currentCounts = { 'R': 0, 'N': 0, 'B': 0, 'A': 0, 'K': 0, 'C': 0, 'P': 0, 'r': 0, 'n': 0, 'b': 0, 'a': 0, 'k': 0, 'c': 0, 'p': 0 };
+            const fenBoard = fen.split(' ')[0];
+
+            for (let i = 0; i < fenBoard.length; i++) {
+                const char = fenBoard[i];
+                if (currentCounts.hasOwnProperty(char)) {
+                    currentCounts[char]++;
+                }
+            }
+
+            const redGraveEl = document.getElementById('redGraveyard');
+            const blackGraveEl = document.getElementById('blackGraveyard');
+            redGraveEl.innerHTML = '';
+            blackGraveEl.innerHTML = '';
+
+            // Red Captured
+            ['R', 'N', 'B', 'A', 'C', 'P'].forEach(p => {
+                const missing = INITIAL_PIECE_COUNTS[p] - (currentCounts[p] || 0);
+                for (let m = 0; m < missing; m++) {
+                    const span = document.createElement('span');
+                    span.className = 'graveyard-piece';
+                    span.style.color = '#ef4444';
+                    span.textContent = PIECES_MAP[p].name;
+                    redGraveEl.appendChild(span);
+                }
+            });
+
+            // Black Captured
+            ['r', 'n', 'b', 'a', 'c', 'p'].forEach(p => {
+                const missing = INITIAL_PIECE_COUNTS[p] - (currentCounts[p] || 0);
+                for (let m = 0; m < missing; m++) {
+                    const span = document.createElement('span');
+                    span.className = 'graveyard-piece';
+                    span.style.color = '#38bdf8';
+                    span.textContent = PIECES_MAP[p].name;
+                    blackGraveEl.appendChild(span);
+                }
+            });
+        }
+
+        function renderCandidatesTable(thoughtText) {
+            const tbody = document.getElementById('candidatesTableBody');
+            tbody.innerHTML = '';
+
+            const candSection = thoughtText.match(/\[25\/32\][^
+]+(?:
+(?!\[26\/32\])[^
+]+)*/);
+            if (!candSection) {
+                tbody.innerHTML = '<tr><td colspan="4" style="color: #64748b; text-align: center;">Chưa tìm thấy khối Candidates [25/32].</td></tr>';
+                return;
+            }
+
+            const lines = candSection[0].split('\n').filter(l => l.includes('Ứng viên') || l.includes('Candidate'));
+            lines.forEach((line, idx) => {
+                const match = line.match(/\+?\s*Ứng viên\s*\d+:\s*([a-i][0-9][a-i][0-9])?\s*—?\s*([^★
+(]+)?(?:\(([^)]+)\))?/);
+                const tr = document.createElement('tr');
+                if (idx === 0) tr.style.background = 'rgba(16, 185, 129, 0.1)';
+
+                const moveTd = document.createElement('td');
+                moveTd.style.fontWeight = '700';
+                moveTd.style.color = idx === 0 ? '#34d399' : '#e2e8f0';
+                moveTd.textContent = match && match[1] ? match[1] : (idx === 0 ? "★Best" : `Alt #${idx+1}`);
+
+                const descTd = document.createElement('td');
+                descTd.textContent = match && match[2] ? match[2].trim() : line.trim();
+
+                const evalTd = document.createElement('td');
+                evalTd.style.color = '#f59e0b';
+                evalTd.textContent = match && match[3] ? match[3].trim() : '-';
+
+                const intentTd = document.createElement('td');
+                intentTd.style.color = '#94a3b8';
+                intentTd.textContent = idx === 0 ? "Nước đi tối ưu nhất được chọn" : "Ứng viên thay thế";
+
+                tr.appendChild(moveTd);
+                tr.appendChild(descTd);
+                tr.appendChild(evalTd);
+                tr.appendChild(intentTd);
+                tbody.appendChild(tr);
+            });
         }
 
         function drawXiangqiBoard(fen, bestMove) {
@@ -577,8 +969,20 @@
             const dimBlocks = thoughtText.match(/\[\d+\/32\][^\n]+(?:\n(?!\[\d+\/32\])[^\n]+)*/g);
 
             if (!dimBlocks) {
-                container.innerHTML = '<div style="font-size: 0.75rem; color: #6b7280; padding: 1rem;">Không thể phân tách các khối [X/32] từ suy tưởng.</div>';
+                container.innerHTML = '<div style="font-size: 0.75rem; color: #64748b; padding: 1rem;">Không thể phân tách các khối [X/32] từ suy tưởng.</div>';
+                document.getElementById('dimComplianceBadge').textContent = '0/32 Missing';
+                document.getElementById('dimComplianceBadge').style.background = 'rgba(239, 68, 68, 0.2)';
+                document.getElementById('dimComplianceBadge').style.color = '#fca5a5';
                 return;
+            }
+
+            document.getElementById('dimComplianceBadge').textContent = dimBlocks.length + '/32 Complete';
+            if (dimBlocks.length === 32) {
+                document.getElementById('dimComplianceBadge').style.background = 'rgba(16, 185, 129, 0.2)';
+                document.getElementById('dimComplianceBadge').style.color = '#34d399';
+            } else {
+                document.getElementById('dimComplianceBadge').style.background = 'rgba(245, 158, 11, 0.2)';
+                document.getElementById('dimComplianceBadge').style.color = '#fcd34d';
             }
 
             dimBlocks.forEach(block => {
@@ -657,9 +1061,24 @@
             });
         }
 
+        // Global Keyboard Shortcuts
         window.addEventListener('keydown', function(e) {
-            if (e.key === 'ArrowLeft') prevTurnStep();
-            else if (e.key === 'ArrowRight') nextTurnStep();
+            if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+
+            if (e.key === 'ArrowLeft') {
+                prevTurnStep();
+            } else if (e.key === 'ArrowRight') {
+                nextTurnStep();
+            } else if (e.key === ' ') {
+                e.preventDefault();
+                toggleAutoPlay();
+            } else if (e.key === 'ArrowUp') {
+                e.preventDefault();
+                if (activeGameIndex > 0) onGameChange(activeGameIndex - 1);
+            } else if (e.key === 'ArrowDown') {
+                e.preventDefault();
+                if (activeGameIndex < loadedGamesList.length - 1) onGameChange(activeGameIndex + 1);
+            }
         });
 
         window.addEventListener('DOMContentLoaded', () => {
