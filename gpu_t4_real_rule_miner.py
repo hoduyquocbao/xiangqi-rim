@@ -1510,9 +1510,16 @@ def mine(target_games: int = 1000, depth: int = 12):
     out_file = out_dir / f"jrcp5_d12_node_{node_id}_{start_stamp}_chunk_{chunk_idx:04d}.jsonl"
 
     sieve_set = set()
-    token = os.environ.get("HF_TOKEN")
-    api = HfApi() if (token and HfApi) else None
-    dataset_repo = "hoduyquocbao/xiangqi-r1-nnue-dataset"
+    token = os.environ.get("HF_TOKEN") or os.environ.get("HUGGINGFACE_TOKEN")
+    if not token:
+        try:
+            from google.colab import userdata
+            token = userdata.get('HF_TOKEN') or userdata.get('HUGGINGFACE_TOKEN')
+        except Exception:
+            pass
+
+    dataset_repo = os.environ.get("DATASET_REPO", "hoduyquocbao/xiangqi-r1-master-dataset")
+    api = HfApi(token=token) if (token and HfApi) else None
     last_push_time = time.time()
 
     import platform
