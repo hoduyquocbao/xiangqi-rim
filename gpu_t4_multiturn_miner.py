@@ -3484,85 +3484,21 @@ def mine_multiturn(target_games=None, parallel_slots=None, depth=None):
             print(f"   ├─ PyTorch Minimax : Đánh giá {len(all_tensors):,} FENs trong {eval_ms:.1f}ms ({len(all_tensors)/max(1, eval_ms):.1f} FENs/ms) trên Tensor Cores", flush=True)
             print(f"   └─ Bộ Nhớ Lưu Trữ  : Chunk #{chunk_idx:04d} ({file_mb_hb:.2f} MB) | HF Hub: {'✅ SYNCED' if api else 'LOCAL'}", flush=True)
 
-        # [VÒNG LẶP/XỬ LÝ] Duyệt qua từng phần tử trong `s, legal, move_tree_map_4ply in slot_info`
-        for s, legal, move_tree_map_4ply in slot_info:
-            # [BIẾN/HẰNG SỐ/THUỘC TÍNH] Thiết lập giá trị cho `best_move`
-            best_move = None
-            # [BIẾN/HẰNG SỐ/THUỘC TÍNH] Thiết lập giá trị cho `best_minimax_score`
-            best_minimax_score = -999999 if boards[s].turn == 0 else 999999
-
-            # [VÒNG LẶP/XỬ LÝ] Duyệt qua từng phần tử trong `m1, m2_tree_list in move_tree_map_4ply`
-            for m1, m2_tree_list in move_tree_map_4ply:
-                # [BIẾN/HẰNG SỐ/THUỘC TÍNH] Thiết lập giá trị cho `m2_scores`
-                m2_scores = []
-                # [VÒNG LẶP/XỬ LÝ] Duyệt qua từng phần tử trong `m2, m3_tree_list in m2_tree_list`
-                for m2, m3_tree_list in m2_tree_list:
-                    # [BIẾN/HẰNG SỐ/THUỘC TÍNH] Thiết lập giá trị cho `m3_scores`
-                    m3_scores = []
-                    # [VÒNG LẶP/XỬ LÝ] Duyệt qua từng phần tử trong `m3, off_4p, count_4p in m3_tree_list`
-                    for m3, off_4p, count_4p in m3_tree_list:
-                        # [BIẾN/HẰNG SỐ/THUỘC TÍNH] Thiết lập giá trị cho `scores_4p`
-                        scores_4p = all_scores[off_4p : off_4p + count_4p]
-                        # [BIẾN/HẰNG SỐ/THUỘC TÍNH] Thiết lập giá trị cho `s4_eval`
-                        s4_eval = torch.min(scores_4p) if boards[s].turn == 0 else torch.max(scores_4p)
-                        # [DANH SÁCH/MẢNG] Nạp phần tử vào cấu trúc dữ liệu `m3_scores`
-                        m3_scores.append(s4_eval)
-
-                    # [RẼ NHÁNH ĐIỀU KIỆN] Kiểm tra điều kiện: `m3_scores`
-                    if m3_scores:
-                        # [BIẾN/HẰNG SỐ/THUỘC TÍNH] Thiết lập giá trị cho `m3_tensor`
-                        m3_tensor = torch.stack(m3_scores) if isinstance(m3_scores[0], torch.Tensor) else torch.tensor(m3_scores, device=device)
-                        # [BIẾN/HẰNG SỐ/THUỘC TÍNH] Thiết lập giá trị cho `s3_eval`
-                        s3_eval = torch.max(m3_tensor) if boards[s].turn == 0 else torch.min(m3_tensor)
-                    # [RẼ NHÁNH MẶC ĐỊNH] Thực thi nhánh mặc định else khi các điều kiện trên không thỏa mãn
-                    else:
-                        # [BIẾN/HẰNG SỐ/THUỘC TÍNH] Thiết lập giá trị cho `s3_eval`
-                        s3_eval = torch.tensor(0.0, device=device)
-                    # [DANH SÁCH/MẢNG] Nạp phần tử vào cấu trúc dữ liệu `m2_scores`
-                    m2_scores.append(s3_eval)
-
-                # [RẼ NHÁNH ĐIỀU KIỆN] Kiểm tra điều kiện: `m2_scores`
-                if m2_scores:
-                    # [BIẾN/HẰNG SỐ/THUỘC TÍNH] Thiết lập giá trị cho `m2_tensor`
-                    m2_tensor = torch.stack(m2_scores)
-                    # [BIẾN/HẰNG SỐ/THUỘC TÍNH] Thiết lập giá trị cho `s2_eval`
-                    s2_eval = torch.min(m2_tensor) if boards[s].turn == 0 else torch.max(m2_tensor)
-                # [RẼ NHÁNH MẶC ĐỊNH] Thực thi nhánh mặc định else khi các điều kiện trên không thỏa mãn
-                else:
-                    # [BIẾN/HẰNG SỐ/THUỘC TÍNH] Thiết lập giá trị cho `s2_eval`
-                    s2_eval = torch.tensor(0.0, device=device)
-
-                # [BIẾN/HẰNG SỐ/THUỘC TÍNH] Thiết lập giá trị cho `s2_val`
-                s2_val = int(s2_eval.item())
-                # [RẼ NHÁNH ĐIỀU KIỆN] Kiểm tra điều kiện: `boards[s].turn == 0`
-                if boards[s].turn == 0:
-                    # [RẼ NHÁNH ĐIỀU KIỆN] Kiểm tra điều kiện: `s2_val > best_minimax_score`
-                    if s2_val > best_minimax_score:
-                        # [BIẾN/HẰNG SỐ/THUỘC TÍNH] Thiết lập giá trị cho `best_minimax_score`
-                        best_minimax_score = s2_val
-                        # [BIẾN/HẰNG SỐ/THUỘC TÍNH] Thiết lập giá trị cho `best_move`
-                        best_move = m1
-                # [RẼ NHÁNH MẶC ĐỊNH] Thực thi nhánh mặc định else khi các điều kiện trên không thỏa mãn
-                else:
-                    # [RẼ NHÁNH ĐIỀU KIỆN] Kiểm tra điều kiện: `s2_val < best_minimax_score`
-                    if s2_val < best_minimax_score:
-                        # [BIẾN/HẰNG SỐ/THUỘC TÍNH] Thiết lập giá trị cho `best_minimax_score`
-                        best_minimax_score = s2_val
-                        # [BIẾN/HẰNG SỐ/THUỘC TÍNH] Thiết lập giá trị cho `best_move`
-                        best_move = m1
-
-            # [RẼ NHÁNH ĐIỀU KIỆN] Kiểm tra điều kiện: `best_move is None`
-            if best_move is None:
-                # [BIẾN/HẰNG SỐ/THUỘC TÍNH] Thiết lập giá trị cho `best_move`
-                best_move = legal[0]
-                # [BIẾN/HẰNG SỐ/THUỘC TÍNH] Thiết lập giá trị cho `best_score`
+        # [VÒNG LẶP/XỬ LÝ] Duyệt qua từng phần tử trong `s, legal, start_idx, count in slot_info`
+        for s, legal, start_idx, count in slot_info:
+            if not legal or count == 0:
+                best_move = random.choice(legal) if legal else None
                 best_score = 0
-            # [RẼ NHÁNH MẶC ĐỊNH] Thực thi nhánh mặc định else khi các điều kiện trên không thỏa mãn
             else:
-                # [BIẾN/HẰNG SỐ/THUỘC TÍNH] Thiết lập giá trị cho `best_score`
-                best_score = int(best_minimax_score)
+                move_scores = all_scores[start_idx : start_idx + count]
+                turn = boards[s].turn
+                if turn == 0:
+                    best_idx = torch.argmax(move_scores).item()
+                else:
+                    best_idx = torch.argmin(move_scores).item()
+                best_move = legal[best_idx]
+                best_score = int(move_scores[best_idx].item())
 
-            # [BIẾN/HẰNG SỐ/THUỘC TÍNH] Thiết lập giá trị cho `encoded_move`
             encoded_move = best_move.encode()
             
             # GENERATE AUTHENTIC ULTRA-DEEP 32D THOUGHT CHAIN FOR THIS MOVE
