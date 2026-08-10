@@ -3218,7 +3218,7 @@ def mine_multiturn(target_games=None, parallel_slots=None, depth=None):
         # [BẮT LỖI/THỬ NGHIỆM] Thử nghiệm thực thi đoạn mã trong khối try
         try:
             # [BIẾN/HẰNG SỐ/THUỘC TÍNH] Thiết lập giá trị cho `evaluator`
-            evaluator = torch.compile(evaluator, mode='reduce-overhead')
+            evaluator = torch.compile(evaluator)
         # [XỬ LÝ NGOẠI LỆ] Bắt ngoại lệ và xử lý lỗi: `except Exception`
         except Exception:
             pass
@@ -3454,7 +3454,7 @@ def mine_multiturn(target_games=None, parallel_slots=None, depth=None):
                     # [QUẢN LÝ TÀI NGUYÊN] Mở và quản lý ngữ cảnh tài nguyên: `torch.amp.autocast('cuda')`
                     with torch.amp.autocast('cuda'):
                         # [BIẾN/HẰNG SỐ/THUỘC TÍNH] Thiết lập giá trị cho `sub_scores`
-                        sub_scores = evaluator(sub_batch).squeeze(-1)
+                        sub_scores = evaluator(sub_batch).squeeze(-1).clone()
                 # [DANH SÁCH/MẢNG] Nạp phần tử vào cấu trúc dữ liệu `score_list`
                 score_list.append(sub_scores)
             # [BIẾN/HẰNG SỐ/THUỘC TÍNH] Thiết lập giá trị cho `all_scores`
