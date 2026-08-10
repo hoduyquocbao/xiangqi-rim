@@ -3044,8 +3044,16 @@ def make_sample(board, encoded_move, best_score, legal_moves, ply, depth, histor
     return sample, thought_str
 
 # ==============================================================================
-# PHẦN VI: VÒNG LẶP MINING CHÍNH THỨC & NHỊP ĐẬP REAL-TIME PROGRESS LOGGING
+# PHẦN VI: VÒNG LẶP MINING CHÍNH THỨC & BẢNG ĐIỀU CHỈNH BẰNG CHUỘT
 # ==============================================================================
+# @markdown ### 🎛️ Chọn số ván chạy song song đồng thời (Kéo/Chọn bằng chuột):
+PARALLEL_SLOTS = 256  #@param [64, 128, 256, 512, 1024] {type:"raw"}
+
+# @markdown ### 🎯 Chọn tổng số ván mục tiêu cần khai thác (Kéo/Chọn bằng chuột):
+TARGET_GAMES = 1000  #@param [100, 256, 500, 1000, 5000, 10000] {type:"raw"}
+
+# @markdown ### 🧠 Điều chỉnh độ sâu tìm kiếm Minimax Tensor Engine (Con trượt chuột):
+MINIMAX_DEPTH = 12  #@param {type:"slider", min:4, max:20, step:1}
 
 
 
