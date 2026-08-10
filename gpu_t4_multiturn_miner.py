@@ -3205,6 +3205,12 @@ def mine_multiturn(target_games=None, parallel_slots=None, depth=None):
     # [BIẾN/HẰNG SỐ/THUỘC TÍNH] Thiết lập giá trị cho `device`
     device = torch.device('cuda:0')
     torch.cuda.set_device(0)
+
+    # Enable Ultimate PyTorch GPU Acceleration Flags
+    torch.set_float32_matmul_precision('high')
+    if hasattr(torch.backends, 'cudnn'):
+        torch.backends.cudnn.benchmark = True
+        torch.backends.cudnn.deterministic = False
     # [BIẾN/HẰNG SỐ/THUỘC TÍNH] Thiết lập giá trị cho `evaluator`
     evaluator = Evaluator().to(device).eval()
     # [RẼ NHÁNH ĐIỀU KIỆN] Kiểm tra điều kiện: `hasattr(torch, 'compile')`
@@ -3212,7 +3218,7 @@ def mine_multiturn(target_games=None, parallel_slots=None, depth=None):
         # [BẮT LỖI/THỬ NGHIỆM] Thử nghiệm thực thi đoạn mã trong khối try
         try:
             # [BIẾN/HẰNG SỐ/THUỘC TÍNH] Thiết lập giá trị cho `evaluator`
-            evaluator = torch.compile(evaluator)
+            evaluator = torch.compile(evaluator, mode='reduce-overhead')
         # [XỬ LÝ NGOẠI LỆ] Bắt ngoại lệ và xử lý lỗi: `except Exception`
         except Exception:
             pass
@@ -3432,7 +3438,7 @@ def mine_multiturn(target_games=None, parallel_slots=None, depth=None):
         # [RẼ NHÁNH ĐIỀU KIỆN] Kiểm tra điều kiện: `all_tensors`
         if all_tensors:
             # [BIẾN/HẰNG SỐ/THUỘC TÍNH] Thiết lập giá trị cho `SUB_BATCH_SIZE`
-            SUB_BATCH_SIZE = 28672
+            SUB_BATCH_SIZE = 8192
             # [BIẾN/HẰNG SỐ/THUỘC TÍNH] Thiết lập giá trị cho `score_list`
             score_list = []
             # [VÒNG LẶP/XỬ LÝ] Duyệt qua từng phần tử trong `i in range(0, len(all_tensors), SUB_BATCH_SIZE)`
