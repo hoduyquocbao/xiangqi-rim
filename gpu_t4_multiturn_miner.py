@@ -252,13 +252,14 @@ def row(idx: int) -> int:
     # [ĐỊNH DẠNG UCI] Chuyển đổi chỉ số mảng 1D (0..89) sang tọa độ văn bản UCI (ví dụ: sq(4,2) -> "e2")
 # [FUNCTION/HÀM] uci(idx: int): Tham số idx=Ô 1D. Trả về chuỗi tọa độ văn bản UCI (ví dụ "e2")
 # [ĐỊNH NGHĨA HÀM/PHƯƠNG THỨC] Khai báo hàm với chữ ký: `uci(idx: int) -> str`
-def uci(idx: int) -> str:
-    # [BIẾN/HẰNG SỐ/THUỘC TÍNH] Thiết lập giá trị cho `c`
-    c = chr(ord('a') + col(idx))
-    # [BIẾN/HẰNG SỐ/THUỘC TÍNH] Thiết lập giá trị cho `r`
-    r = str(row(idx))
-    # [KẾT QUẢ TRẢ VỀ] Trả về giá trị kết quả: `f"{c}{r}"`
-    return f"{c}{r}"
+def uci(src: int, dst: int = None) -> str:
+    c1 = chr(ord('a') + col(src))
+    r1 = str(row(src))
+    if dst is None:
+        return f"{c1}{r1}"
+    c2 = chr(ord('a') + col(dst))
+    r2 = str(row(dst))
+    return f"{c1}{r1}{c2}{r2}"
 
     # [XÁC ĐỊNH PHE] Trả về phe của quân cờ: 0 = Đỏ (quân 1..7), 1 = Đen (quân 8..14), 2 = Ô trống (quân 0)
 # [FUNCTION/HÀM] side(piece: int): Tham số piece=ID quân cờ. Trả về phe: 0=Đỏ, 1=Đen, 2=Trống
@@ -1587,7 +1588,7 @@ def run_all_geometry_tests() -> bool:
     b_c_nocap.parse("5k3/1r7/9/9/9/9/9/9/1C7/4K4 w - - 0 1")
     moves_c_nocap = [m.encode() for m in b_c_nocap.legal() if m.src == sq(1, 1)]
     assert "b1b8" not in moves_c_nocap, "❌ Test 6.4 Failed: Cannon capture without screen"
-    assert b_c_move.attacks_piece(sq(1, 1), sq(1, 8), 6) == False, "❌ Test 6.4b Failed: Cannon attacks_piece without screen"
+    assert b_c_nocap.attacks_piece(sq(1, 1), sq(1, 8), 6) == False, "❌ Test 6.4b Failed: Cannon attacks_piece without screen"
     # T6.5 Negative: Pháo ăn quân qua 2 ngòi trở lên -> FAIL
     b_c_2screen = Board()
     b_c_2screen.parse("5k3/1r7/1p7/1p7/9/9/9/9/1C7/4K4 w - - 0 1")
