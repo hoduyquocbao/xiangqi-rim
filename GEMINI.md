@@ -172,10 +172,23 @@ GAMES=10000 DEPTH=4 THREADS=4 cargo run --release --example 20_parallel_mine
   - `.agents/logs/INDEX.md` (Đăng ký vào bảng mục lục nhật ký phiên)
 - **CẤM** lý do "ngữ cảnh context window đã có rồi thì để sau mới ghi file" hoặc "file cũ đã có rồi nên không cần tạo mới".
 
-### 7.2 BẮT BUỘC DIỄN GIẢI & CHÚ THÍCH TƯỜNG MINH (FORCED ELABORATION MANDATE)
-- Mọi tệp hướng dẫn, quy tắc, chú thích, tài liệu và mã nguồn **PHẢI được diễn giải, chú thích, giải thích chi tiết tỉ mỉ tới từng dòng, từng thông số, từng trường dữ liệu bằng tiếng Việt 100%**.
-- **Mục đích**: Đảm bảo một Agent thiểu năng / kém thông minh nhất khi đọc vào cũng buộc phải hiểu và thực hiện đúng 100%, không thể hiểu sai hay làm sai.
-- **NGHIÊM CẤM** diễn giải mập mờ, CẤM viết tắt, CẤM giả định "người khác / agent khác tự hiểu".
+### 7.2 BẮT BUỘC DIỄN GIẢI & CHÚ THÍCH TƯỜNG MINH TRÊN TỪNG DÒNG MÃ (MANDATORY LINE-BY-LINE ELABORATION ON EVERY IDENTIFIER)
+- **NGHIÊM CẤM TỰ TẠO AI SLOP BIẾN CHẤT, LƯỜI BIẾNG, TÓM TẮT CẮT XÉN, LÀM VIỆC CẨU THẢ, LÀM CHO CÓ LỆ, LÀM ĐỂ ĐỐI PHÓ!**
+- **BẮT BUỘC DIỄN GIẢI TỪNG DÒNG LỆNH (LINE-BY-LINE)**: Mọi tệp hướng dẫn, quy tắc, chú thích, tài liệu và mã nguồn Python/Rust/JS/Notebook **PHẢI được giải thích, chú thích, diễn giải chi tiết tường minh 100% bằng Tiếng Việt trên TẤT CẢ các dòng mã nguồn**, bao gồm:
+  1. `variable` (biến cục bộ / biến toàn cục)
+  2. `constant` (hằng số)
+  3. `parameter` (tham số đầu vào của hàm / phương thức)
+  4. `function` / `method` (hàm / phương thức)
+  5. `class` (lớp)
+  6. `object` (thể hiện đối tượng)
+  7. `field` / `property` (thuộc tính / trường dữ liệu)
+  8. `module` / `package` (mô-đun / gói thư viện nạp vào)
+  9. `interface` / `trait` (giao diện / khuôn mẫu trừu tượng)
+  10. `namespace` (không gian tên)
+  11. `enum` (kiểu liệt kê)
+  12. `type` / `alias` (kiểu dữ liệu / bí danh)
+- **Mục đích**: Đảm bảo một Agent thiểu năng / kém thông minh nhất khi đọc vào cũng buộc phải hiểu 100% logic, không thể hiểu sai hay làm sai.
+- **NGHIÊM CẤM** chú thích thùng rác chung chung chỉ ở đầu hàm, CẤM diễn giải mập mờ, CẤM viết tắt, CẤM giả định "người khác / agent khác tự hiểu".
 
 ### 7.3 KỶ LUẬT 5 THÀNH PHẦN BẮT BUỘC TRONG MỌI HÀNH ĐỘNG
 1. **Kế Hoạch (Plan)**: Không bao giờ viết mã trong vô định. Phải khảo sát, nghiên cứu, lập kế hoạch 5 bước.

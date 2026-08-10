@@ -52,3 +52,34 @@ Khi thực hiện sửa lỗi hoặc cập nhật phiên bản, Agent phải c�
 ### 2. Quy Tắc Phòng Ngự Thép:
 - Mỗi khi hoàn thành một sửa đổi lớn hoặc xử lý lỗi bài học, BẮT BUỘC tạo tệp `pain_points_[YYYYMMDD].md` mới và cập nhật `INDEX.md`.
 - NGHIÊM CẤM kết thúc phiên mà chưa ghi nhận bài học xương máu.
+
+---
+
+## BÀI HỌC 4: KHÓA MẶT TƯỚNG (FLYING GENERAL LOCKOUT) TRONG THIẾT LẬP FEN UNIT TESTS QUÂN CỜ
+
+### 1. Bối Cảnh & Lỗi Ngây Thơ:
+Khi thiết lập FEN cho các bài unit test của các quân cờ vật lý (như Sĩ, Tượng, Mã, Xe, Pháo, Tốt), Agent vô tình đặt Tướng Đen ở cột 4 (`e9` — FEN `4k4/`) trong khi Tướng Đỏ ở cột 4 (`e0` — FEN `2B1K4/`).
+Do cột 4 trống không có quân cản, quy tắc **Mặt Tướng Nhìn Nhau (`flying()`)** lập tức bị kích hoạt. Kết quả là `b.check(0)` trả về `True` (Tướng Đỏ đang bị chiếu), làm cho `b.legal()` TỪ CHỐI 100% NƯỚC ĐI CỦA CÁC QUÂN CỜ KHÁC (vì không nước đi quân nào ngoài Tướng giải cứu được chiếu Mặt Tướng)!
+
+### 2. Nguyên Nhân Gốc Rễ:
+Agent không tính đến tác dụng phụ của quy tắc `flying()` (Mặt Tướng đối mặt) khi đặt vị trí Tướng trong các bài test quân cờ đơn lẻ.
+
+### 3. Quy Tắc Phòng Ngự Thép:
+1. **BẮT BUỘC** đặt Tướng Đen ở cột 5 (`f9` — FEN `5k3/`) trong mọi bài test unit tests của Sĩ/Tượng/Mã/Xe/Pháo/Tốt để Tướng hai bên KHÔNG nằm trên cùng một cột mở.
+2. **BẮT BUỘC** kiểm tra `b.legal()` trả về nước đi mong muốn trước khi assert trong bài test.
+
+
+---
+
+## BÀI HỌC 5: TRIỆT TIÊU AI SLOP BIẾN CHẤT, LƯỜI BIẾNG TÓM TẮT CẮT XÉN — BẮT BUỘC DIỄN GIẢI 100% TỪNG DÒNG MÃ (LINE-BY-LINE ELABORATION MANDATE)
+
+### 1. Bối Cảnh & Lỗi Ngây Thơ Cẩu Thả:
+Trong phiên làm việc v18.4, Agent đã phạm phải sai lầm cẩu thả vô cùng nghiêm trọng: Chỉ ghi nhận chú thích tổng quan sơ sài trước đầu phương thức `def` hoặc các hằng số dictionary, nhưng BỎ TRỐNG, KHÔNG CHÚ THÍCH CÁC DÒNG LỆNH LOGIC BÊN TRONG CÁC HÀM (phép gán biến, điều kiện `if/elif/else`, vòng lặp `for/while`, lệnh `return`, `assert`, phép toán chỉ số mảng `sq(c,r)`). Hành vi này vi phạm quy tắc chống AI Slop, gây cắt xén, đối phó, khiến mã nguồn bị che giấu logic đối với người đọc hoặc các thế hệ Agent thiểu năng trong tương lai.
+
+### 2. Nguyên Nhân Gốc Rễ:
+Agent lười biếng, làm cho có lệ, dùng phương pháp sinh chú thích mẫu tự động cấp cao thay vì duyệt và chú thích chi tiết từng dòng lệnh cụ thể.
+
+### 3. Quy Tắc Phòng Ngự Thép (Ràng Buộc Sắt Tuyệt Đối):
+1. **NGHIÊM CẤM** chú thích chung chung kiểu thùng rác chỉ ở đầu hàm.
+2. **BẮT BUỘC** diễn giải tường minh 100% bằng Tiếng Việt trên TẤT CẢ các dòng lệnh: từng `variable` (biến), `constant` (hằng số), `parameter` (tham số đầu vào), `function/method` (hàm/phương thức), `class` (lớp), `object` (đối tượng), `field/property` (thuộc tính/trường dữ liệu), `module/package` (mô-đun/gói thư viện), `interface/trait` (giao diện/khuôn mẫu), `namespace` (không gian tên), `enum` (kiểu liệt kê), `type/alias` (kiểu dữ liệu/bí danh).
+3. **CẤM TÓM TẮT CẮT XÉN**: Mỗi dòng mã logic đều phải được giải thích mục đích, dữ liệu, điều kiện rẽ nhánh và tác động vật lý cụ thể.
