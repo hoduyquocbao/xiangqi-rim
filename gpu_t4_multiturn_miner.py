@@ -755,6 +755,12 @@ class Board:
         return valid
 
     # [ĐỊNH NGHĨA HÀM/PHƯƠNG THỨC] Khai báo hàm với chữ ký: `apply(self, ...)`
+    # [ĐỊNH NGHĨA HÀM/PHƯƠNG THỨC] Khai báo hàm với chữ ký: `is_game_over(self)`
+    def is_game_over(self) -> bool:
+        """Kiểm tra xem ván đấu cờ Tướng đã kết thúc hay chưa (Tướng bị bắt hoặc hết nước đi hợp lệ)."""
+        # [KẾT QUẢ TRẢ VỀ] Trả về True nếu 1 trong 2 Tướng không còn trên bàn cờ hoặc không còn nước đi hợp lệ
+        return self.king(0) < 0 or self.king(1) < 0 or len(self.legal()) == 0
+
     def apply(self, m: Move):
         """Thực thi nước đi `m` lên bàn cờ và chuyển lượt đi."""
         # [BIẾN/HẰNG SỐ/THUỘC TÍNH] Thiết lập giá trị cho `self.grid[m.dst]`
