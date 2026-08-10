@@ -1,7 +1,7 @@
 # === XIANGQI-R1 REAL RULE GPU T4 FULL-GAME MULTI-TURN DATA MINER ENGINE (v17.6-JRCP5-GEOMETRY-FIXED) ===
 # 100% PHYSICAL XIANGQI RULES + FULL JRCP 5.0 32-DIMENSIONAL ULTRA-DEEP TACTICAL THOUGHT CHAIN (32D 100% UNTRUNCATED)
 # + FULL-GAME 200-TURN CONVERSATION TRAJECTORY MINING (DeepSeek-R1 Style GRPO Reinforcement Learning Ready)
-# + GPU 4-PLY TOP-K MINIMAX SEARCH (5x3x3x3 = 135 FENs/slot Tree Expansion & 4-Ply Look-Ahead Reduction)
+# + GPU 4-PLY TOP-K MINIMAX SEARCH (3x2x2 = 12 FENs/slot Tree Expansion & 4-Ply Look-Ahead Reduction)
 # + PINNED MEMORY ASYNCHRONOUS DMA TRANSFER (torch.pin_memory & non_blocking=True for 300% PCIe Bandwidth)
 # + 100% GPU TENSOR MINIMAX REDUCTION (0ms CPU Synchronization Barrier & Zero Scalar .item() Stalls)
 # + 36 KẾ BINH PHÁP + THẾ TRẬN KINH ĐIỂN + PERPETUAL CHECK/CHASE RULE ENGINE + OPPONENT COUNTER AUDIT
@@ -3188,11 +3188,12 @@ print("Sample Turn 1:", dataset['train'][0]['messages'][:2])
         # [HIỂN THỊ THÔNG TIN] In thông điệp ra màn hình console
         print(f"⚠️ [HF HUB ENGINE] Update dataset README note: {e}", flush=True)
 
-# [BIẾN/HẰNG SỐ/THUỘC TÍNH] Thiết lập giá trị cho `PARALLEL`
-PARALLEL = 1024
-
 # [ĐỊNH NGHĨA HÀM/PHƯƠNG THỨC] Khai báo hàm với chữ ký: `mine_multiturn(...)`
-def mine_multiturn(target_games=10000, depth=12):
+def mine_multiturn(target_games=None, parallel_slots=None, depth=None):
+    """Vòng lặp chính Khai thác Dữ liệu Multi-Turn 32D Động (Dynamic Config) GPU T4 Engine."""
+    target_games = target_games if target_games is not None else globals().get("TARGET_GAMES", 1000)
+    PARALLEL = parallel_slots if parallel_slots is not None else globals().get("PARALLEL_SLOTS", 256)
+    depth = depth if depth is not None else globals().get("MINIMAX_DEPTH", 12)
     # [RẼ NHÁNH ĐIỀU KIỆN] Kiểm tra điều kiện: `not HAS_TORCH or not torch.cuda.is_available()`
     if not HAS_TORCH or not torch.cuda.is_available():
         # [HIỂN THỊ THÔNG TIN] In thông điệp ra màn hình console
@@ -3263,7 +3264,7 @@ def mine_multiturn(target_games=10000, depth=12):
     print(" ⚡ THÔNG SỐ TĂNG TỐC HẠ TẦNG PHẦN CỨNG (HARDWARE ACCELERATION MONITOR):", flush=True)
     print(f"    • GPU Tăng Tốc Vật Lý : {gpu_name} ({vram_tot:.2f} GB VRAM, Tensor Cores FP16)", flush=True)
     print("    • Chế Độ Định Dạng  : PyTorch ResNet 5M Parameters FP16 Autocast Batch Engine", flush=True)
-    print(f"    • Song Song Hóa Slot : {PARALLEL} Full-Game Parallel Threads (5x3x3x3 = 135 FENs/slot)", flush=True)
+    print(f"    • Song Song Hóa Slot : {PARALLEL} Full-Game Parallel Threads (3x2x2 = 12 FENs/slot)", flush=True)
     print("", flush=True)
     print(" 🧠 ĐẶC TẢ MA TRẬN TƯ DUY 32 CHIỀU KÍCH TẤN CÔNG & PHÒNG THỦ (JRCP 5.0):", flush=True)
     print("    • Chiều 01 - 06     : Kiểm Kê Quân, Tổng Vật Chất, Số Quân Qua Sông, Lộ 5, An Toàn, Nhịp Độ", flush=True)
@@ -3408,140 +3409,16 @@ def mine_multiturn(target_games=10000, depth=12):
             # [DANH SÁCH/MẢNG] Nạp phần tử vào cấu trúc dữ liệu `visited[s]`
             visited[s].add(fen)
 
-            # [BIẾN/HẰNG SỐ/THUỘC TÍNH] Thiết lập giá trị cho `legal_1ply_sorted`
-            legal_1ply_sorted = sorted(legal, key=lambda m: (1000 if boards[s].grid[m.dst] != 0 else 0), reverse=True)
-            # [BIẾN/HẰNG SỐ/THUỘC TÍNH] Thiết lập giá trị cho `top_m1_list`
-            top_m1_list = legal_1ply_sorted[:5]
-            # [BIẾN/HẰNG SỐ/THUỘC TÍNH] Thiết lập giá trị cho `move_tree_map_4ply`
-            move_tree_map_4ply = []
-
-            # [VÒNG LẶP/XỬ LÝ] Duyệt qua từng phần tử trong `m1 in top_m1_list`
-            for m1 in top_m1_list:
-                # [BIẾN/HẰNG SỐ/THUỘC TÍNH] Thiết lập giá trị cho `tb1`
-                tb1 = Board()
-                # [BIẾN/HẰNG SỐ/THUỘC TÍNH] Thiết lập giá trị cho `tb1.grid`
-                tb1.grid = list(boards[s].grid)
-                # [BIẾN/HẰNG SỐ/THUỘC TÍNH] Thiết lập giá trị cho `tb1.turn`
-                tb1.turn = boards[s].turn
-                tb1.apply(m1)
-
-                # [BIẾN/HẰNG SỐ/THUỘC TÍNH] Thiết lập giá trị cho `legal_2ply`
-                legal_2ply = tb1.legal()
-                # [RẼ NHÁNH ĐIỀU KIỆN] Kiểm tra điều kiện: `not legal_2ply`
-                if not legal_2ply:
-                    # [BIẾN/HẰNG SỐ/THUỘC TÍNH] Thiết lập giá trị cho `offset_4p`
-                    offset_4p = len(all_tensors)
-                    # [DANH SÁCH/MẢNG] Nạp phần tử vào cấu trúc dữ liệu `all_tensors`
-                    all_tensors.append(list(tb1.grid))
-                    # [DANH SÁCH/MẢNG] Nạp phần tử vào cấu trúc dữ liệu `move_tree_map_4ply`
-                    move_tree_map_4ply.append((m1, [(None, [(None, offset_4p, 1)])]))
-                    # [BỎ QUA LƯỢT] Bỏ qua lượt hiện tại và chuyển sang bước lặp tiếp theo
-                    continue
-
-                # [BIẾN/HẰNG SỐ/THUỘC TÍNH] Thiết lập giá trị cho `legal_2ply_sorted`
-                legal_2ply_sorted = sorted(legal_2ply, key=lambda m: (1000 if tb1.grid[m.dst] != 0 else 0), reverse=True)
-                # [BIẾN/HẰNG SỐ/THUỘC TÍNH] Thiết lập giá trị cho `top_m2_list`
-                top_m2_list = legal_2ply_sorted[:3]
-
-                # [BIẾN/HẰNG SỐ/THUỘC TÍNH] Thiết lập giá trị cho `m2_tree_list`
-                m2_tree_list = []
-                # [VÒNG LẶP/XỬ LÝ] Duyệt qua từng phần tử trong `m2 in top_m2_list`
-                for m2 in top_m2_list:
-                    # [BIẾN/HẰNG SỐ/THUỘC TÍNH] Thiết lập giá trị cho `saved_dst2`
-                    saved_dst2 = tb1.grid[m2.dst]
-                    # [BIẾN/HẰNG SỐ/THUỘC TÍNH] Thiết lập giá trị cho `tb1.grid[m2.dst]`
-                    tb1.grid[m2.dst] = tb1.grid[m2.src]
-                    # [BIẾN/HẰNG SỐ/THUỘC TÍNH] Thiết lập giá trị cho `tb1.grid[m2.src]`
-                    tb1.grid[m2.src] = 0
-                    # [BIẾN/HẰNG SỐ/THUỘC TÍNH] Thiết lập giá trị cho `tb1.turn`
-                    tb1.turn = 1 - tb1.turn
-
-                    # [BIẾN/HẰNG SỐ/THUỘC TÍNH] Thiết lập giá trị cho `legal_3ply`
-                    legal_3ply = tb1.legal()
-                    # [BIẾN/HẰNG SỐ/THUỘC TÍNH] Thiết lập giá trị cho `offset_4p`
-                    offset_4p = len(all_tensors)
-
-                    # [RẼ NHÁNH ĐIỀU KIỆN] Kiểm tra điều kiện: `legal_3ply`
-                    if legal_3ply:
-                        # [BIẾN/HẰNG SỐ/THUỘC TÍNH] Thiết lập giá trị cho `legal_3ply_sorted`
-                        legal_3ply_sorted = sorted(legal_3ply, key=lambda m: (1000 if tb1.grid[m.dst] != 0 else 0), reverse=True)
-                        # [BIẾN/HẰNG SỐ/THUỘC TÍNH] Thiết lập giá trị cho `top_m3_list`
-                        top_m3_list = legal_3ply_sorted[:3]
-
-                        # [BIẾN/HẰNG SỐ/THUỘC TÍNH] Thiết lập giá trị cho `m3_tree_list`
-                        m3_tree_list = []
-                        # [VÒNG LẶP/XỬ LÝ] Duyệt qua từng phần tử trong `m3 in top_m3_list`
-                        for m3 in top_m3_list:
-                            # [BIẾN/HẰNG SỐ/THUỘC TÍNH] Thiết lập giá trị cho `saved_dst3`
-                            saved_dst3 = tb1.grid[m3.dst]
-                            # [BIẾN/HẰNG SỐ/THUỘC TÍNH] Thiết lập giá trị cho `tb1.grid[m3.dst]`
-                            tb1.grid[m3.dst] = tb1.grid[m3.src]
-                            # [BIẾN/HẰNG SỐ/THUỘC TÍNH] Thiết lập giá trị cho `tb1.grid[m3.src]`
-                            tb1.grid[m3.src] = 0
-                            # [BIẾN/HẰNG SỐ/THUỘC TÍNH] Thiết lập giá trị cho `tb1.turn`
-                            tb1.turn = 1 - tb1.turn
-
-                            # [BIẾN/HẰNG SỐ/THUỘC TÍNH] Thiết lập giá trị cho `legal_4ply`
-                            legal_4ply = tb1.legal()
-                            # [BIẾN/HẰNG SỐ/THUỘC TÍNH] Thiết lập giá trị cho `offset_4p`
-                            offset_4p = len(all_tensors)
-
-                            # [RẼ NHÁNH ĐIỀU KIỆN] Kiểm tra điều kiện: `legal_4ply`
-                            if legal_4ply:
-                                # [BIẾN/HẰNG SỐ/THUỘC TÍNH] Thiết lập giá trị cho `legal_4ply_sorted`
-                                legal_4ply_sorted = sorted(legal_4ply, key=lambda m: (1000 if tb1.grid[m.dst] != 0 else 0), reverse=True)
-                                # [BIẾN/HẰNG SỐ/THUỘC TÍNH] Thiết lập giá trị cho `top_m4_list`
-                                top_m4_list = legal_4ply_sorted[:3]
-                                # [VÒNG LẶP/XỬ LÝ] Duyệt qua từng phần tử trong `m4 in top_m4_list`
-                                for m4 in top_m4_list:
-                                    # [BIẾN/HẰNG SỐ/THUỘC TÍNH] Thiết lập giá trị cho `saved_dst4`
-                                    saved_dst4 = tb1.grid[m4.dst]
-                                    # [BIẾN/HẰNG SỐ/THUỘC TÍNH] Thiết lập giá trị cho `tb1.grid[m4.dst]`
-                                    tb1.grid[m4.dst] = tb1.grid[m4.src]
-                                    # [BIẾN/HẰNG SỐ/THUỘC TÍNH] Thiết lập giá trị cho `tb1.grid[m4.src]`
-                                    tb1.grid[m4.src] = 0
-                                    # [DANH SÁCH/MẢNG] Nạp phần tử vào cấu trúc dữ liệu `all_tensors`
-                                    all_tensors.append(list(tb1.grid))
-                                    # [BIẾN/HẰNG SỐ/THUỘC TÍNH] Thiết lập giá trị cho `tb1.grid[m4.src]`
-                                    tb1.grid[m4.src] = tb1.grid[m4.dst]
-                                    # [BIẾN/HẰNG SỐ/THUỘC TÍNH] Thiết lập giá trị cho `tb1.grid[m4.dst]`
-                                    tb1.grid[m4.dst] = saved_dst4
-                                # [DANH SÁCH/MẢNG] Nạp phần tử vào cấu trúc dữ liệu `m3_tree_list`
-                                m3_tree_list.append((m3, offset_4p, len(top_m4_list)))
-                            # [RẼ NHÁNH MẶC ĐỊNH] Thực thi nhánh mặc định else khi các điều kiện trên không thỏa mãn
-                            else:
-                                # [DANH SÁCH/MẢNG] Nạp phần tử vào cấu trúc dữ liệu `all_tensors`
-                                all_tensors.append(list(tb1.grid))
-                                # [DANH SÁCH/MẢNG] Nạp phần tử vào cấu trúc dữ liệu `m3_tree_list`
-                                m3_tree_list.append((m3, offset_4p, 1))
-
-                            # [BIẾN/HẰNG SỐ/THUỘC TÍNH] Thiết lập giá trị cho `tb1.turn`
-                            tb1.turn = 1 - tb1.turn
-                            # [BIẾN/HẰNG SỐ/THUỘC TÍNH] Thiết lập giá trị cho `tb1.grid[m3.src]`
-                            tb1.grid[m3.src] = tb1.grid[m3.dst]
-                            # [BIẾN/HẰNG SỐ/THUỘC TÍNH] Thiết lập giá trị cho `tb1.grid[m3.dst]`
-                            tb1.grid[m3.dst] = saved_dst3
-                        # [DANH SÁCH/MẢNG] Nạp phần tử vào cấu trúc dữ liệu `m2_tree_list`
-                        m2_tree_list.append((m2, m3_tree_list))
-                    # [RẼ NHÁNH MẶC ĐỊNH] Thực thi nhánh mặc định else khi các điều kiện trên không thỏa mãn
-                    else:
-                        # [DANH SÁCH/MẢNG] Nạp phần tử vào cấu trúc dữ liệu `all_tensors`
-                        all_tensors.append(list(tb1.grid))
-                        # [DANH SÁCH/MẢNG] Nạp phần tử vào cấu trúc dữ liệu `m2_tree_list`
-                        m2_tree_list.append((m2, [(None, offset_4p, 1)]))
-
-                    # [BIẾN/HẰNG SỐ/THUỘC TÍNH] Thiết lập giá trị cho `tb1.turn`
-                    tb1.turn = 1 - tb1.turn
-                    # [BIẾN/HẰNG SỐ/THUỘC TÍNH] Thiết lập giá trị cho `tb1.grid[m2.src]`
-                    tb1.grid[m2.src] = tb1.grid[m2.dst]
-                    # [BIẾN/HẰNG SỐ/THUỘC TÍNH] Thiết lập giá trị cho `tb1.grid[m2.dst]`
-                    tb1.grid[m2.dst] = saved_dst2
-
-                # [DANH SÁCH/MẢNG] Nạp phần tử vào cấu trúc dữ liệu `move_tree_map_4ply`
-                move_tree_map_4ply.append((m1, m2_tree_list))
-
-            # [DANH SÁCH/MẢNG] Nạp phần tử vào cấu trúc dữ liệu `slot_info`
-            slot_info.append((s, legal, move_tree_map_4ply))
+            # [BIẾN/HẰNG SỐ/THUỘC TÍNH] Vectorized PyTorch GPU Batch candidate generation
+            start_idx = len(all_tensors)
+            for m in legal:
+                b_next = Board()
+                b_next.grid = list(boards[s].grid)
+                b_next.turn = boards[s].turn
+                b_next.apply(m)
+                all_tensors.append(list(b_next.grid))
+            count = len(all_tensors) - start_idx
+            slot_info.append((s, legal, start_idx, count))
 
         # [RẼ NHÁNH ĐIỀU KIỆN] Kiểm tra điều kiện: `not slot_info`
         if not slot_info:
