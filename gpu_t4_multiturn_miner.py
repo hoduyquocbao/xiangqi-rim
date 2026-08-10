@@ -659,6 +659,18 @@ class Board:
         self.grid[m.src] = 0
         self.turn = 1 - self.turn
 
+    def push(self, m: Move):
+        """Bí danh (alias) tương thích ngược cho `apply`."""
+        self.apply(m)
+
+    def make_move(self, m: Move):
+        """Bí danh (alias) tương thích ngược cho `apply`."""
+        self.apply(m)
+
+    def do_move(self, m: Move):
+        """Bí danh (alias) tương thích ngược cho `apply`."""
+        self.apply(m)
+
     # --------------------------------------------------------------------------
     # NHÓM I: NHẬN THỨC BÀN CỜ (CHIỀU 1 -> 6)
     # --------------------------------------------------------------------------
@@ -698,7 +710,9 @@ class Board:
         lines.append("    a    b    c    d    e    f    g    h    i")
         return "\n".join(lines)
 
-    def material(self, s: int) -> int:
+    def material(self, s: int = None) -> int | tuple:
+        if s is None:
+            return self.material(0), self.material(1)
         """[3/32] Tính tổng điểm vật chất của phe `s`."""
         total = 0
         for i in range(90):
@@ -1430,6 +1444,30 @@ if HAS_TORCH:
 def board_to_tensor(board: Board, device: torch.device) -> torch.Tensor:
     """Chuyển đổi mảng 90 ô cờ của Board thành PyTorch Tensor dạng Long trên thiết bị `device`."""
     return torch.tensor(board.grid, dtype=torch.long, device=device)
+
+# [KHỞI TẠO ĐỐI TƯỢNG MẠNG NƠ-RON TOÀN CỤC] Evaluator engine trên GPU/CPU
+evaluator = None
+if HAS_TORCH:
+    try:
+        evaluator = Evaluator().to(DEVICE).eval()
+    except Exception as e:
+        print(f"⚠️ [WARNING] Failed to instantiate Evaluator on {DEVICE}: {e}", flush=True)
+
+# [HÀM ĐÁNH GIÁ VỊ TRÍ] evaluate_board_position: Đánh giá điểm số Centipawn của vị trí bàn cờ
+def evaluate_board_position(board: Board) -> float:
+    """Đánh giá điểm số Centipawn của vị trí bàn cờ hiện tại (dùng PyTorch ResNet 5M Params trên GPU T4 hoặc HCE Fallback)."""
+    if HAS_TORCH and evaluator is not None:
+        try:
+            with torch.no_grad():
+                t = torch.tensor([board.grid], dtype=torch.long, device=DEVICE)
+                v = evaluator(t).item()
+                return float(v)
+        except Exception:
+            pass
+    r_mat, b_mat = board.material()
+    diff = (r_mat - b_mat) * 100.0
+    return float(diff if board.turn == 0 else -diff)
+
 
 # ==============================================================================
 # PHẦN IV: CHECKPOINT PHYSICAL UNIT TESTS & DATA VALIDATOR FIREWALL
