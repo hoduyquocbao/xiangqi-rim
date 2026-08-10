@@ -22,6 +22,9 @@ try:
     HAS_TORCH = True
 except BaseException:
     HAS_TORCH = False
+    class nn:
+        class Module:
+            pass
 
 try:
     from huggingface_hub import HfApi
@@ -186,8 +189,8 @@ class Move:
         self.src = src
         self.dst = dst
     def encode(self):
-        c1, r1 = divmod(self.src, 9)
-        c2, r2 = divmod(self.dst, 9)
+        r1, c1 = divmod(self.src, 9)
+        r2, c2 = divmod(self.dst, 9)
         cols = ['a','b','c','d','e','f','g','h','i']
         return f"{cols[c1]}{9-r1}{cols[c2]}{9-r2}"
 
