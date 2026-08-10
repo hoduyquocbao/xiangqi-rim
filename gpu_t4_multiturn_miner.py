@@ -13,7 +13,12 @@ import time
 import json
 import random
 import math
+import warnings
 from pathlib import Path
+
+warnings.filterwarnings("ignore")
+os.environ["TORCH_LOGS"] = "-all"
+os.environ["PYTHONWARNINGS"] = "ignore"
 
 # --- PyTorch Safeguard ---
 try:
@@ -611,6 +616,18 @@ def mine_multiturn(target_games=100, depth=12):
 
             game_histories[s].append(user_msg)
             game_histories[s].append(assistant_msg)
+
+            # Ghi nảy số đĩa tức thì mỗi 2 lượt đi để đĩa nảy dung lượng ngay từ bước đầu
+            if len(game_histories[s]) >= 4 and len(game_histories[s]) % 4 == 0:
+                step_record = {
+                    "messages": [{"role": "system", "content": SYSTEM_PROMPT}] + game_histories[s][-4:],
+                    "game_id": game_ids[s],
+                    "total_plies": plies[s] + 1,
+                    "outcome": "in_progress",
+                    "stamp": int(time.time())
+                }
+                f.write(json.dumps(step_record, ensure_ascii=False) + "\n")
+                f.flush()
 
             boards[s].apply(best_move)
             plies[s] += 1
