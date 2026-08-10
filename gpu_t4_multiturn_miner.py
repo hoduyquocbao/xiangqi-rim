@@ -2142,7 +2142,12 @@ class Board:
 # PHẦN III: MẠNG NƠ-RON DEEP RESIDUAL EVALUATOR (5M PARAMETERS FP16 ENGINE)
 # ==============================================================================
 
-# [RẼ NHÁNH ĐIỀU KIỆN] Kiểm tra điều kiện: `HAS_TORCH`
+DEVICE = torch.device('cuda:0' if (HAS_TORCH and torch.cuda.is_available()) else 'cpu') if (HAS_TORCH and hasattr(torch, 'device')) else 'cpu'
+if HAS_TORCH:
+    import torch
+    import torch.nn as nn
+    import torch.nn.functional as F
+    DEVICE = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
 if HAS_TORCH:
     # [ĐỊNH NGHĨA LỚP/ĐỐI TƯỢNG] Khai báo cấu trúc lớp: `ResBlock`
     class ResBlock(nn.Module):
