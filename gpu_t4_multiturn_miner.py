@@ -34,152 +34,253 @@ except ImportError:
 # === SYSTEM PROMPT JRCP 5.0 ===
 SYSTEM_PROMPT = """Bạn là Xiangqi-R1 Master — Trí tuệ Nhân tạo Cờ Tướng Cấp Quốc Gia (Grandmaster Engine). Nhiệm vụ của bạn là phân tích thế cờ Tướng dưới dạng 32 chiều kích chiến thuật và trả về nước đi tối ưu nhất theo định dạng chuẩn JSON."""
 
-# === PHYSICAL BOARD IMPLEMENTATION ===
+# Ký hiệu FEN chuẩn của 14 loại quân cờ
+PIECES = {
+    'P': 1, 'A': 2, 'B': 3, 'N': 4, 'R': 5, 'C': 6, 'K': 7,
+    'p': 8, 'a': 9, 'b': 10, 'n': 11, 'r': 12, 'c': 13, 'k': 14
+}
+
+def col(idx: int) -> int: return idx % 9
+def row(idx: int) -> int: return idx // 9
+def sq(c: int, r: int) -> int: return r * 9 + c
+def uci(idx: int) -> str: return f"{chr(ord('a') + col(idx))}{row(idx)}"
+def side(piece: int) -> int:
+    if 1 <= piece <= 7: return 0
+    if 8 <= piece <= 14: return 1
+    return 2
+
+class Move:
+    """Đại diện cho một nước di chuyển cờ vật lý từ ô `src` tới ô `dst`."""
+    def __init__(self, src: int, dst: int):
+        self.src = src
+        self.dst = dst
+    def encode(self) -> str:
+        return f"{uci(self.src)}{uci(self.dst)}"
+
 class Board:
+    """Lớp quản lý trạng thái bàn cờ vật lý 10x9 (90 ô)."""
     def __init__(self):
         self.grid = [0] * 90
         self.turn = 0 # 0: Red, 1: Black
-    
-    def parse(self, fen):
+
+    def parse(self, fen: str):
+        self.grid = [0] * 90
         parts = fen.split()
         rows = parts[0].split('/')
-        self.grid = [0] * 90
-        mapping = {'P':1, 'R':2, 'N':3, 'B':4, 'A':5, 'C':6, 'K':7,
-                   'p':8, 'r':9, 'n':10, 'b':11, 'a':12, 'c':13, 'k':14}
-        r = 0
-        for row in rows:
+        r = 9
+        for row_str in rows:
             c = 0
-            for ch in row:
-                if ch.isdigit():
-                    c += int(ch)
-                else:
-                    self.grid[r * 9 + c] = mapping.get(ch, 0)
+            for char in row_str:
+                if char.isdigit():
+                    c += int(char)
+                elif char in PIECES:
+                    self.grid[sq(c, r)] = PIECES[char]
                     c += 1
-            r += 1
-        self.turn = 0 if len(parts) < 2 or parts[1] == 'w' or parts[1] == 'r' else 1
+            r -= 1
+        self.turn = 0 if len(parts) < 2 or parts[1] == 'w' else 1
 
-    def export(self):
-        inv_map = {1:'P', 2:'R', 3:'N', 4:'B', 5:'A', 6:'C', 7:'K',
-                   8:'p', 9:'r', 10:'n', 11:'b', 12:'a', 13:'c', 14:'k'}
-        rows = []
-        for r in range(10):
+    def export(self) -> str:
+        fen_rows = []
+        for r in range(9, -1, -1):
             empty = 0
             row_str = ""
             for c in range(9):
-                p = self.grid[r * 9 + c]
+                p = self.grid[sq(c, r)]
                 if p == 0:
                     empty += 1
                 else:
                     if empty > 0:
                         row_str += str(empty)
                         empty = 0
-                    row_str += inv_map[p]
+                    for char, val in PIECES.items():
+                        if val == p:
+                            row_str += char
+                            break
             if empty > 0:
                 row_str += str(empty)
-            rows.append(row_str)
-        side = 'w' if self.turn == 0 else 'b'
-        return f"{'/'.join(rows)} {side} - - 0 1"
+            fen_rows.append(row_str)
+        fen_body = "/".join(fen_rows)
+        turn_char = 'w' if self.turn == 0 else 'b'
+        return f"{fen_body} {turn_char} - - 0 1"
 
-    def is_red(self, p): return 1 <= p <= 7
-    def is_black(self, p): return 8 <= p <= 14
+    def king(self, s: int) -> int:
+        target = 7 if s == 0 else 14
+        for i in range(90):
+            if self.grid[i] == target:
+                return i
+        return -1
 
-    def legal(self):
-        moves = []
-        for src in range(90):
-            p = self.grid[src]
-            if p == 0: continue
-            if self.turn == 0 and not self.is_red(p): continue
-            if self.turn == 1 and not self.is_black(p): continue
-            ptype = p if p <= 7 else p - 7
-            r, c = divmod(src, 9)
+    def flying(self) -> bool:
+        rk = self.king(0)
+        bk = self.king(1)
+        if rk < 0 or bk < 0: return False
+        if col(rk) != col(bk): return False
+        c = col(rk)
+        min_r = min(row(rk), row(bk))
+        max_r = max(row(rk), row(bk))
+        for r in range(min_r + 1, max_r):
+            if self.grid[sq(c, r)] != 0:
+                return False
+        return True
 
-            if ptype == 1: # Pawn
-                dir_r = -1 if self.turn == 0 else 1
+    def attacks_piece(self, src_sq: int, target_sq: int, piece: int) -> bool:
+        pc, pr = col(src_sq), row(src_sq)
+        tc, tr = col(target_sq), row(target_sq)
+        s = side(piece)
+        ptype = piece if s == 0 else piece - 7
+
+        if ptype == 7: # King
+            return abs(pc - tc) + abs(pr - tr) == 1
+        elif ptype == 2: # Advisor
+            return abs(pc - tc) == 1 and abs(pr - tr) == 1
+        elif ptype == 3: # Elephant
+            if abs(pc - tc) == 2 and abs(pr - tr) == 2:
+                return self.grid[sq((pc + tc) // 2, (pr + tr) // 2)] == 0
+            return False
+        elif ptype == 4: # Knight
+            dc, dr = tc - pc, tr - pr
+            if abs(dc) == 1 and abs(dr) == 2:
+                return self.grid[sq(pc, pr + (1 if dr > 0 else -1))] == 0
+            elif abs(dc) == 2 and abs(dr) == 1:
+                return self.grid[sq(pc + (1 if dc > 0 else -1), pr)] == 0
+            return False
+        elif ptype == 5: # Rook
+            if pc == tc:
+                return sum(1 for r in range(min(pr, tr) + 1, max(pr, tr)) if self.grid[sq(pc, r)] != 0) == 0
+            elif pr == tr:
+                return sum(1 for c in range(min(pc, tc) + 1, max(pc, tc)) if self.grid[sq(c, pr)] != 0) == 0
+            return False
+        elif ptype == 6: # Cannon
+            if pc == tc:
+                return sum(1 for r in range(min(pr, tr) + 1, max(pr, tr)) if self.grid[sq(pc, r)] != 0) == 1
+            elif pr == tr:
+                return sum(1 for c in range(min(pc, tc) + 1, max(pc, tc)) if self.grid[sq(c, pr)] != 0) == 1
+            return False
+        elif ptype == 1: # Pawn
+            if s == 0:
+                return (tr == pr + 1 and tc == pc) or (pr >= 5 and tr == pr and abs(tc - pc) == 1)
+            else:
+                return (tr == pr - 1 and tc == pc) or (pr <= 4 and tr == pr and abs(tc - pc) == 1)
+        return False
+
+    def attack(self, target_sq: int, attacker_side: int) -> bool:
+        for i in range(90):
+            p = self.grid[i]
+            if p == 0 or side(p) != attacker_side: continue
+            if self.attacks_piece(i, target_sq, p):
+                return True
+        return False
+
+    def check(self, s: int) -> bool:
+        k = self.king(s)
+        if k < 0: return True
+        return self.attack(k, 1 - s) or self.flying()
+
+    def generate() -> list:
+        pass
+
+    def legal(self) -> list:
+        res = []
+        s = self.turn
+        for i in range(90):
+            p = self.grid[i]
+            if p == 0 or side(p) != s: continue
+            c = col(i)
+            r = row(i)
+            ptype = p if s == 0 else p - 7
+
+            if ptype == 7: # King
+                r_min, r_max = (0, 2) if s == 0 else (7, 9)
+                for dc, dr in [(-1, 0), (1, 0), (0, -1), (0, 1)]:
+                    nc, nr = c + dc, r + dr
+                    if 3 <= nc <= 5 and r_min <= nr <= r_max:
+                        t = self.grid[sq(nc, nr)]
+                        if t == 0 or side(t) != s: res.append(Move(i, sq(nc, nr)))
+            elif ptype == 2: # Advisor
+                r_min, r_max = (0, 2) if s == 0 else (7, 9)
+                for dc, dr in [(-1, -1), (1, -1), (-1, 1), (1, 1)]:
+                    nc, nr = c + dc, r + dr
+                    if 3 <= nc <= 5 and r_min <= nr <= r_max:
+                        t = self.grid[sq(nc, nr)]
+                        if t == 0 or side(t) != s: res.append(Move(i, sq(nc, nr)))
+            elif ptype == 3: # Elephant
+                r_min, r_max = (0, 4) if s == 0 else (5, 9)
+                for dc, dr in [(-2, -2), (2, -2), (-2, 2), (2, 2)]:
+                    nc, nr = c + dc, r + dr
+                    if 0 <= nc <= 8 and r_min <= nr <= r_max:
+                        eye = sq((c + nc) // 2, (r + nr) // 2)
+                        if self.grid[eye] == 0:
+                            t = self.grid[sq(nc, nr)]
+                            if t == 0 or side(t) != s: res.append(Move(i, sq(nc, nr)))
+            elif ptype == 4: # Knight
+                for dc, dr, lc, lr in [
+                    (-1, -2, 0, -1), (1, -2, 0, -1),
+                    (-1, 2, 0, 1), (1, 2, 0, 1),
+                    (-2, -1, -1, 0), (-2, 1, -1, 0),
+                    (2, -1, 1, 0), (2, 1, 1, 0)
+                ]:
+                    nc, nr = c + dc, r + dr
+                    if 0 <= nc <= 8 and 0 <= nr <= 9:
+                        leg = sq(c + lc, r + lr)
+                        if self.grid[leg] == 0:
+                            t = self.grid[sq(nc, nr)]
+                            if t == 0 or side(t) != s: res.append(Move(i, sq(nc, nr)))
+            elif ptype == 5: # Rook
+                for dc, dr in [(-1, 0), (1, 0), (0, -1), (0, 1)]:
+                    nc, nr = c + dc, r + dr
+                    while 0 <= nc <= 8 and 0 <= nr <= 9:
+                        t = self.grid[sq(nc, nr)]
+                        if t == 0:
+                            res.append(Move(i, sq(nc, nr)))
+                        else:
+                            if side(t) != s: res.append(Move(i, sq(nc, nr)))
+                            break
+                        nc += dc
+                        nr += dr
+            elif ptype == 6: # Cannon
+                for dc, dr in [(-1, 0), (1, 0), (0, -1), (0, 1)]:
+                    nc, nr = c + dc, r + dr
+                    screen = False
+                    while 0 <= nc <= 8 and 0 <= nr <= 9:
+                        t = self.grid[sq(nc, nr)]
+                        if not screen:
+                            if t == 0:
+                                res.append(Move(i, sq(nc, nr)))
+                            else:
+                                screen = True
+                        else:
+                            if t != 0:
+                                if side(t) != s: res.append(Move(i, sq(nc, nr)))
+                                break
+                        nc += dc
+                        nr += dr
+            elif ptype == 1: # Pawn
+                dir_r = 1 if s == 0 else -1
                 nr = r + dir_r
                 if 0 <= nr <= 9:
-                    dst = nr * 9 + c
-                    if self.grid[dst] == 0 or (self.is_black(self.grid[dst]) if self.turn == 0 else self.is_red(self.grid[dst])):
-                        moves.append(Move(src, dst))
-                crossed = (r <= 4) if self.turn == 0 else (r >= 5)
+                    t = self.grid[sq(c, nr)]
+                    if t == 0 or side(t) != s: res.append(Move(i, sq(c, nr)))
+                crossed = (r >= 5) if s == 0 else (r <= 4)
                 if crossed:
                     for dc in [-1, 1]:
                         nc = c + dc
                         if 0 <= nc <= 8:
-                            dst = r * 9 + nc
-                            if self.grid[dst] == 0 or (self.is_black(self.grid[dst]) if self.turn == 0 else self.is_red(self.grid[dst])):
-                                moves.append(Move(src, dst))
-            elif ptype == 2: # Rook
-                for dr, dc in [(-1,0), (1,0), (0,-1), (0,1)]:
-                    nr, nc = r + dr, c + dc
-                    while 0 <= nr <= 9 and 0 <= nc <= 8:
-                        dst = nr * 9 + nc
-                        target = self.grid[dst]
-                        if target == 0:
-                            moves.append(Move(src, dst))
-                        else:
-                            if (self.turn == 0 and self.is_black(target)) or (self.turn == 1 and self.is_red(target)):
-                                moves.append(Move(src, dst))
-                            break
-                        nr += dr; nc += dc
-            elif ptype == 3: # Knight
-                offsets = [(-2,-1,-1,0), (-2,1,-1,0), (2,-1,1,0), (2,1,1,0),
-                           (-1,-2,0,-1), (-1,2,0,1), (1,-2,0,-1), (1,2,0,1)]
-                for dr, dc, lr, lc in offsets:
-                    nr, nc = r + dr, c + dc
-                    leg_r, leg_c = r + lr, c + lc
-                    if 0 <= nr <= 9 and 0 <= nc <= 8 and 0 <= leg_r <= 9 and 0 <= leg_c <= 8:
-                        if self.grid[leg_r * 9 + leg_c] == 0:
-                            target = self.grid[nr * 9 + nc]
-                            if target == 0 or (self.is_black(target) if self.turn == 0 else self.is_red(target)):
-                                moves.append(Move(src, nr * 9 + nc))
-            elif ptype == 4: # Elephant
-                for dr, dc, er, ec in [(-2,-2,-1,-1), (-2,2,-1,1), (2,-2,1,-1), (2,2,1,1)]:
-                    nr, nc = r + dr, c + dc
-                    eye_r, eye_c = r + er, c + ec
-                    if 0 <= nr <= 9 and 0 <= nc <= 8:
-                        in_side = (nr >= 5) if self.turn == 0 else (nr <= 4)
-                        if in_side and self.grid[eye_r * 9 + eye_c] == 0:
-                            target = self.grid[nr * 9 + nc]
-                            if target == 0 or (self.is_black(target) if self.turn == 0 else self.is_red(target)):
-                                moves.append(Move(src, nr * 9 + nc))
-            elif ptype == 5: # Advisor
-                in_palace_r = (7 <= r <= 9) if self.turn == 0 else (0 <= r <= 2)
-                for dr, dc in [(-1,-1), (-1,1), (1,-1), (1,1)]:
-                    nr, nc = r + dr, c + dc
-                    palace_r = (7 <= nr <= 9) if self.turn == 0 else (0 <= nr <= 2)
-                    if palace_r and 3 <= nc <= 5:
-                        target = self.grid[nr * 9 + nc]
-                        if target == 0 or (self.is_black(target) if self.turn == 0 else self.is_red(target)):
-                            moves.append(Move(src, nr * 9 + nc))
-            elif ptype == 6: # Cannon
-                for dr, dc in [(-1,0), (1,0), (0,-1), (0,1)]:
-                    nr, nc = r + dr, c + dc
-                    screen = False
-                    while 0 <= nr <= 9 and 0 <= nc <= 8:
-                        dst = nr * 9 + nc
-                        target = self.grid[dst]
-                        if not screen:
-                            if target == 0:
-                                moves.append(Move(src, dst))
-                            else:
-                                screen = True
-                        else:
-                            if target != 0:
-                                if (self.turn == 0 and self.is_black(target)) or (self.turn == 1 and self.is_red(target)):
-                                    moves.append(Move(src, dst))
-                                break
-                        nr += dr; nc += dc
-            elif ptype == 7: # King
-                for dr, dc in [(-1,0), (1,0), (0,-1), (0,1)]:
-                    nr, nc = r + dr, c + dc
-                    palace_r = (7 <= nr <= 9) if self.turn == 0 else (0 <= nr <= 2)
-                    if palace_r and 3 <= nc <= 5:
-                        target = self.grid[nr * 9 + nc]
-                        if target == 0 or (self.is_black(target) if self.turn == 0 else self.is_red(target)):
-                            moves.append(Move(src, nr * 9 + nc))
-        return moves
+                            t = self.grid[sq(nc, r)]
+                            if t == 0 or side(t) != s: res.append(Move(i, sq(nc, r)))
 
-    def apply(self, mv):
+        # Lọc các nước làm Tướng bị chiếu hoặc Flying General
+        legal_moves = []
+        for m in res:
+            saved_dst = self.grid[m.dst]
+            self.grid[m.dst] = self.grid[m.src]
+            self.grid[m.src] = 0
+            if not self.check(s):
+                legal_moves.append(m)
+            self.grid[m.src] = self.grid[m.dst]
+            self.grid[m.dst] = saved_dst
+        return legal_moves
+
+    def apply(self, mv: Move):
         self.grid[mv.dst] = self.grid[mv.src]
         self.grid[mv.src] = 0
         self.turn = 1 - self.turn
