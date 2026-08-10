@@ -761,6 +761,19 @@ class Board:
         # [KẾT QUẢ TRẢ VỀ] Trả về True nếu 1 trong 2 Tướng không còn trên bàn cờ hoặc không còn nước đi hợp lệ
         return self.king(0) < 0 or self.king(1) < 0 or len(self.legal()) == 0
 
+    # [ĐỊNH NGHĨA HÀM/PHƯƠNG THỨC] Khai báo hàm với chữ ký: `copy(self)`
+    def copy(self):
+        """Tạo bản sao độc lập (deep copy) O(1) của trạng thái bàn cờ hiện tại."""
+        nb = Board()
+        nb.grid = list(self.grid)
+        nb.turn = self.turn
+        return nb
+
+    # [ĐỊNH NGHĨA HÀM/PHƯƠNG THỨC] Khai báo hàm với chữ ký: `clone(self)`
+    def clone(self):
+        """Bí danh (alias) tương thích ngược cho `copy`."""
+        return self.copy()
+
     def apply(self, m: Move):
         """Thực thi nước đi `m` lên bàn cờ và chuyển lượt đi."""
         # [BIẾN/HẰNG SỐ/THUỘC TÍNH] Thiết lập giá trị cho `self.grid[m.dst]`
