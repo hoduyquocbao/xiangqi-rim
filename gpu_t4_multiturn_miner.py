@@ -3184,7 +3184,7 @@ print("Sample Turn 1:", dataset['train'][0]['messages'][:2])
 PARALLEL = 1024
 
 # [ĐỊNH NGHĨA HÀM/PHƯƠNG THỨC] Khai báo hàm với chữ ký: `mine_multiturn(...)`
-def mine_multiturn(target_games=100, depth=12):
+def mine_multiturn(target_games=10000, depth=12):
     # [RẼ NHÁNH ĐIỀU KIỆN] Kiểm tra điều kiện: `not HAS_TORCH or not torch.cuda.is_available()`
     if not HAS_TORCH or not torch.cuda.is_available():
         # [HIỂN THỊ THÔNG TIN] In thông điệp ra màn hình console
@@ -3731,4 +3731,4 @@ def mine_multiturn(target_games=100, depth=12):
 # [RẼ NHÁNH ĐIỀU KIỆN] Kiểm tra điều kiện: `__name__ == "__main__"`
 if __name__ == "__main__":
     # [BIẾN/HẰNG SỐ/THUỘC TÍNH] Thiết lập giá trị cho `mine_multiturn(target_games`
-    mine_multiturn(target_games=100, depth=12)
+    mine_multiturn(target_games=10000, depth=12)
