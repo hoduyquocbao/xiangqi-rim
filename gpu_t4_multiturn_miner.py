@@ -3168,7 +3168,7 @@ print("Sample Turn 1:", dataset['train'][0]['messages'][:2])
         print(f"⚠️ [HF HUB ENGINE] Update dataset README note: {e}", flush=True)
 
 # [BIẾN/HẰNG SỐ/THUỘC TÍNH] Thiết lập giá trị cho `PARALLEL`
-PARALLEL = 128
+PARALLEL = 256
 
 # [ĐỊNH NGHĨA HÀM/PHƯƠNG THỨC] Khai báo hàm với chữ ký: `mine_multiturn(...)`
 def mine_multiturn(target_games=100, depth=12):
