@@ -206,3 +206,8 @@ GAMES=10000 DEPTH=4 THREADS=4 cargo run --release --example 20_parallel_mine
 
 ### 7.6 QUY TẮC CẤM GHI ĐÈ KÝ ỨC CŨ — BẮT BUỘC NỐI THÊM (STRICT IMMUTABLE APPEND-ONLY MEMORY MANDATE)
 - **Ràng Buộc Sắt Cho Ký Ức**: Gemini tuyệt đối KHÔNG ĐƯỢC xóa hoặc làm mất các Mục bài học cũ trong tệp `pain_points_*.md`. Mọi cập nhật ký ức BẮT BUỘC phải là NỐI THÊM (APPEND-ONLY) ở cuối tệp hoặc TẠO TỆP MỚI VỚI TIMESTAMP (`pain_points_[YYYYMMDD_HHMM].md`).
+
+### 7.7 QUY TẮC CUNG CẤP LINK GOOGLE COLAB KÈM MCP PROXY TOKEN (MANDATORY COLAB MCP LINK MANDATE)
+- **Ràng Buộc Sắt**: BẤT KỲ LẦN NÀO cung cấp đường dẫn Google Colab cho người dùng, Gemini BẮT BUỘC phải đọc token/port mới nhất từ `.agents/memory/colab_mcp_proxy.json` và gắn trực tiếp chuỗi hash fragment vào cuối URL:
+  - Dạng link chuẩn: `https://colab.research.google.com/github/hoduyquocbao/xiangqi-rim/blob/<COMMIT_SHA>/colab_gpu_multiturn_v17.ipynb#mcpProxyToken=<TOKEN>&mcpProxyPort=<PORT>`
+- **Mục Đích**: Đảm bảo khi người dùng bấm vào đường dẫn, trang web Google Colab tự động thiết lập WebSocket Proxy bridge về `localhost:<PORT>` mà không bị ngắt kết nối giữa chừng!

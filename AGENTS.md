@@ -254,3 +254,9 @@ python3 scripts/test_quantization.py data/nnue_weights_gen5.bin
 - **NGHIÊM CẤM** xóa bỏ, cắt xén, tóm tắt hoặc sử dụng `replace_file_content` làm đè / mất các Mục bài học cũ trong tệp `.agents/memory/pain_points_*.md`.
 - **BẮT BUỘC APPEND-ONLY**: Mọi bài học mới khi bổ sung vào tệp ký ức BẮT BUỘC phải được ghi nối tiếp vào cuối tệp mà không làm ảnh hưởng tới bất kỳ dòng chữ nào của các Mục bài học trước đó.
 - **TẠO TỆP MỚI KHI DUNG LƯỢNG LỚN**: Nếu tệp ký ức hiện tại quá lớn (> 15KB), Agent phải tạo tệp mới mang mốc thời gian (ví dụ `.agents/memory/pain_points_[YYYYMMDD_HHMM].md`) và đăng ký vào bảng mục lục `INDEX.md`.
+
+### 8.7 QUY TẮC CUNG CẤP LINK GOOGLE COLAB KÈM MCP PROXY TOKEN (MANDATORY COLAB MCP LINK MANDATE)
+- **Ràng Buộc Sắt**: BẤT KỲ LẦN NÀO cung cấp đường dẫn Google Colab cho người dùng, Agent BẮT BUỘC phải đọc token/port mới nhất từ `.agents/memory/colab_mcp_proxy.json` và gắn trực tiếp chuỗi hash fragment vào cuối URL:
+  - Dạng link chuẩn: `https://colab.research.google.com/github/hoduyquocbao/xiangqi-rim/blob/<COMMIT_SHA>/colab_gpu_multiturn_v17.ipynb#mcpProxyToken=<TOKEN>&mcpProxyPort=<PORT>`
+- **Mục Đích**: Đảm bảo khi người dùng bấm vào đường dẫn, trang web Google Colab tự động thiết lập WebSocket Proxy bridge về `localhost:<PORT>` mà không bị ngắt kết nối giữa chừng!
+
