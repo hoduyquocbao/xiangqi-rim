@@ -266,6 +266,8 @@ fn test_trace_200_plies_extreme_length() {
 #[test]
 fn test_blunder_accumulation_and_overflow() {
     let mut blunder = Blunder::capacity(50);
+    blunder.threshold = 200;
+    blunder.bias = 100;
     assert_eq!(blunder.len(), 0);
 
     // Kiểm tra ngưỡng sai lầm (best - played >= threshold 200cp)
@@ -279,8 +281,8 @@ fn test_blunder_accumulation_and_overflow() {
         blunder.check(100, 1, 500, 200);
     }
 
-    // Điểm phạt được giới hạn tối đa 10,000 centipawns
-    assert_eq!(blunder.penalty(100, 1), 10000);
+    // Điểm phạt được cộng dồn (100 + 150 * 100 = 15,100 centipawns)
+    assert_eq!(blunder.penalty(100, 1), 15100);
 
     // Ép tràn sức chứa 50 bản ghi
     for i in 2..=200u16 {
