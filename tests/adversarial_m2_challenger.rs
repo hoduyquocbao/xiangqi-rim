@@ -8,17 +8,17 @@ use xiangrust::movegen::{legal, List};
 fn test_pawn_check_red_king() {
     // Red King at e0 (4)
     // Black Pawn at d0 (3): sideways check -> MUST BE CHECK
-    let fen1 = "4k4/9/9/9/9/9/9/9/9/3pK4 w - - 0 1";
+    let fen1 = "3k5/9/9/9/9/9/9/9/9/3pK4 w - - 0 1";
     let pos1 = Parser::parse(fen1);
     assert!(legal::check(&pos1, 0), "Red King at e0 MUST be in check from Black Pawn at d0!");
 
     // Black Pawn at f0 (5): sideways check -> MUST BE CHECK
-    let fen2 = "4k4/9/9/9/9/9/9/9/9/4Kp3 w - - 0 1";
+    let fen2 = "3k5/9/9/9/9/9/9/9/9/4Kp3 w - - 0 1";
     let pos2 = Parser::parse(fen2);
     assert!(legal::check(&pos2, 0), "Red King at e0 MUST be in check from Black Pawn at f0!");
 
     // Black Pawn at e1 (13): forward check -> MUST BE CHECK
-    let fen3 = "4k4/9/9/9/9/9/9/9/4p4/4K4 w - - 0 1";
+    let fen3 = "3k5/9/9/9/9/9/9/9/4p4/4K4 w - - 0 1";
     let pos3 = Parser::parse(fen3);
     assert!(legal::check(&pos3, 0), "Red King at e0 MUST be in check from Black Pawn at e1!");
 
@@ -38,22 +38,22 @@ fn test_pawn_check_red_king() {
 fn test_pawn_check_black_king() {
     // Black King at e9 (85)
     // Red Pawn at d9 (84): sideways check -> MUST BE CHECK
-    let fen1 = "3Pk4/9/9/9/9/9/9/9/9/4K4 b - - 0 1";
+    let fen1 = "3Pk4/9/9/9/9/9/9/9/9/5K3 b - - 0 1";
     let pos1 = Parser::parse(fen1);
     assert!(legal::check(&pos1, 1), "Black King at e9 MUST be in check from Red Pawn at d9!");
 
     // Red Pawn at f9 (86): sideways check -> MUST BE CHECK
-    let fen2 = "4kP3/9/9/9/9/9/9/9/9/4K4 b - - 0 1";
+    let fen2 = "4kP3/9/9/9/9/9/9/9/9/5K3 b - - 0 1";
     let pos2 = Parser::parse(fen2);
     assert!(legal::check(&pos2, 1), "Black King at e9 MUST be in check from Red Pawn at f9!");
 
     // Red Pawn at e8 (76): forward check -> MUST BE CHECK
-    let fen3 = "4k4/4P4/9/9/9/9/9/9/9/4K4 b - - 0 1";
+    let fen3 = "4k4/4P4/9/9/9/9/9/9/9/5K3 b - - 0 1";
     let pos3 = Parser::parse(fen3);
     assert!(legal::check(&pos3, 1), "Black King at e9 MUST be in check from Red Pawn at e8!");
 
     // Black King at d8 (75). Red Pawn at d9 (84): behind King -> NOT CHECK (Red pawns move up)
-    let fen4 = "3P4/3k5/9/9/9/9/9/9/9/4K4 b - - 0 1";
+    let fen4 = "3P4/3k5/9/9/9/9/9/9/9/5K3 b - - 0 1";
     let pos4 = Parser::parse(fen4);
     assert!(!legal::check(&pos4, 1), "Black King at d8 should NOT be in check from Red Pawn at d9 behind it!");
 }
