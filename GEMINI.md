@@ -218,3 +218,8 @@ GAMES=10000 DEPTH=4 THREADS=4 cargo run --release --example 20_parallel_mine
   2. `colab-notebook-ops`: Tuân thủ 7 quy tắc bảo toàn thế hệ (Live DOM sync, ô mã nguồn độc lập, Form Cells `# @title`, bắt lỗi 403 Forbidden HF token).
 - **Tuyệt đối KHÔNG ĐƯỢC PHÉP**: Tự ý gọi công cụ Colab MCP mà không đọc hoặc tuân thủ các quy tắc trong 2 skills trên!
 
+### 7.9 RÀNG BUỘC SẮT ƯU TIÊN GPU PHẦN CỨNG BẰNG MỌI GIÁ (MANDATORY GPU HARDWARE ACCELERATION MANDATE)
+- **Ràng Buộc Sắt Bằng Mọi Giá Cho Gemini**: BẤT KỲ LẦN NÀO thực thi mã Rust Engine (mining, batch evaluation, NNUE search), Gemini BẮT BUỘC phải ưu tiên phần cứng GPU (NVIDIA CUDA / Vulkan / WGPU / Metal Native) bằng mọi giá.
+- **NGHIÊM CẤM** ngã về CPU fallback khi đang trong môi trường có GPU phần cứng. Luôn đảm bảo nạp đúng driver Vulkan ICD JSON (`/etc/vulkan/icd.d/nvidia_icd.json`) hoặc CUDA backend để vRAM và Compute Units của GPU được kích hoạt 100%!
+
+
