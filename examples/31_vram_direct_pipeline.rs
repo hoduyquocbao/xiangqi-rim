@@ -21,7 +21,6 @@ use xiangrust::book::Book;
 use xiangrust::eval::feature::Feature;
 use xiangrust::gpu::{Batch, Device, Evaluable, Evaluator, Sample};
 use xiangrust::movegen::{legal, List};
-use xiangrust::search::{Limits, Search};
 
 /// Struct `CacheAlignedState` căn lề 64 bytes (1 CPU Cache Line) để triệt tiêu False Sharing giữa các luồng
 #[repr(align(64))]
@@ -193,9 +192,7 @@ fn main() {
                     let mut samples_vec: Vec<Sample> = Vec::with_capacity(40);
                     let mut sample_count = 0;
 
-                    let mut search = Search::new(0);
-                    let mut limits = Limits::new();
-                    limits.depth = search_depth;
+                    let eval_hce = xiangrust::eval::Eval::new();
 
                     // Opening Book
                     let mut steps = 0;
@@ -215,18 +212,14 @@ fn main() {
                             break;
                         }
 
-                        let search_res = search.go(&pos, &limits);
-                        let chosen_move = if search_res.best.from != search_res.best.to {
-                            search_res.best
-                        } else {
-                            rng_seed = rng_seed.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
-                            moves.items[(rng_seed as usize) % moves.len()]
-                        };
+                        rng_seed = rng_seed.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+                        let move_idx = (rng_seed as usize) % moves.len();
+                        let chosen_move = moves.items[move_idx];
 
                         let sample = Sample::pack(&pos, (game_id * 40 + step) as u32);
                         samples_vec.push(sample);
 
-                        let score_i16 = search_res.score.clamp(-30000, 30000) as i16;
+                        let score_i16 = eval_hce.score(&pos).clamp(-30000, 30000) as i16;
 
                         // Trích xuất 32 chỉ số đặc trưng HalfKAv2_hm và ghi 66 bytes binary
                         let mut active_indices = [0u16; 32];
