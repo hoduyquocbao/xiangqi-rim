@@ -78,15 +78,24 @@ impl Device { // Khối triển khai các phương thức cho Device
     /// Khởi tạo thiết bị GPU Adapter mới, tự động phát hiện backend và kích hoạt Guard.
     pub fn init() -> Self { // Hàm khởi tạo init
         let instance = wgpu::Instance::new(&wgpu::InstanceDescriptor { // Khởi tạo wgpu Instance mới
-            backends: wgpu::Backends::all(), // Khởi tạo hỗ trợ tất cả các GPU Backend (Metal/Vulkan/DX12)
+            backends: wgpu::Backends::all(), // Hỗ trợ tất cả các GPU Backend (Metal/Vulkan/DX12)
+            flags: wgpu::InstanceFlags::ALLOW_UNDERLYING_NONCOMPLIANT_ADAPTER, // Cho phép headless Vulkan GPU trên Linux Colab
             ..Default::default() // Sử dụng mặc định cho các trường còn lại
         }); // Kết thúc khởi tạo Instance
 
-        let adapter = pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions { // Yêu cầu Adapter GPU
+        let mut adapter = pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions { // Yêu cầu HighPerformance GPU
             power_preference: wgpu::PowerPreference::HighPerformance, // Ưu tiên GPU hiệu năng cao
             compatible_surface: None, // Không yêu cầu GUI surface
             force_fallback_adapter: false, // Không ép buộc CPU fallback
         })); // Kết thúc yêu cầu Adapter
+
+        if adapter.is_none() { // Nếu HighPerformance không khớp -> Thử lại với LowPower/None cho Linux Vulkan ICD
+            adapter = pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions {
+                power_preference: wgpu::PowerPreference::None,
+                compatible_surface: None,
+                force_fallback_adapter: false,
+            }));
+        }
 
         let mut backend = Backend::Cpu; // Khởi tạo mặc định CPU backend
         let mut context = None; // Khởi tạo mặc định context None
