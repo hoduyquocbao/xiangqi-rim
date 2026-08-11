@@ -197,7 +197,7 @@ def main():
         cmd_mine = ["cargo", "run", "--release", "--example", "31_vram_direct_pipeline"]
         env = os.environ.copy()
         env["GAMES"] = str(int(fens_per_chunk / 50))
-        env["BATCH"] = os.environ.get("BATCH", "65536")
+        env["BATCH"] = "16384"
         env["THREADS"] = os.environ.get("THREADS", "4")
         env["RAYON_NUM_THREADS"] = os.environ.get("THREADS", "4")
         env["OUTPUT"] = chunk_jsonl

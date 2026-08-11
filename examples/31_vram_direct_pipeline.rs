@@ -73,6 +73,7 @@ fn main() {
     let batch_size: usize = std::env::var("BATCH")
         .ok()
         .and_then(|v| v.parse().ok())
+        .map(|v: usize| std::cmp::min(v, 16384))
         .unwrap_or(16384);
     let num_threads: usize = std::env::var("THREADS")
         .ok()
