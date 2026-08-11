@@ -260,3 +260,10 @@ python3 scripts/test_quantization.py data/nnue_weights_gen5.bin
   - Dạng link chuẩn: `https://colab.research.google.com/github/hoduyquocbao/xiangqi-rim/blob/<COMMIT_SHA>/colab_gpu_multiturn_v17.ipynb#mcpProxyToken=<TOKEN>&mcpProxyPort=<PORT>`
 - **Mục Đích**: Đảm bảo khi người dùng bấm vào đường dẫn, trang web Google Colab tự động thiết lập WebSocket Proxy bridge về `localhost:<PORT>` mà không bị ngắt kết nối giữa chừng!
 
+### 8.8 RÀNG BUỘC SẮT KÍCH HOẠT COLAB SKILLS (MANDATORY COLAB SKILL ACTIVATION PROTOCOL)
+- **Ràng Buộc Sắt**: BẤT KỲ LẦN NÀO thao tác với Google Colab, Agent BẮT BUỘC phải kích hoạt và tham chiếu 2 kỹ năng chuyên biệt:
+  1. `colab-mcp-setup`: Thiết lập và sửa lỗi WebSocket Proxy bridge kết nối Colab.
+  2. `colab-notebook-ops`: Tuân thủ 7 quy tắc bảo toàn thế hệ (Live DOM sync, ô mã nguồn độc lập, Form Cells `# @title`, bắt lỗi 403 Forbidden HF token).
+- **Tuyệt đối KHÔNG ĐƯỢC PHÉP**: Gọi công cụ Colab MCP mà không đọc hoặc tuân thủ các quy tắc trong 2 skills trên!
+
+

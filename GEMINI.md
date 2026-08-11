@@ -211,3 +211,10 @@ GAMES=10000 DEPTH=4 THREADS=4 cargo run --release --example 20_parallel_mine
 - **Ràng Buộc Sắt**: BẤT KỲ LẦN NÀO cung cấp đường dẫn Google Colab cho người dùng, Gemini BẮT BUỘC phải đọc token/port mới nhất từ `.agents/memory/colab_mcp_proxy.json` và gắn trực tiếp chuỗi hash fragment vào cuối URL:
   - Dạng link chuẩn: `https://colab.research.google.com/github/hoduyquocbao/xiangqi-rim/blob/<COMMIT_SHA>/colab_gpu_multiturn_v17.ipynb#mcpProxyToken=<TOKEN>&mcpProxyPort=<PORT>`
 - **Mục Đích**: Đảm bảo khi người dùng bấm vào đường dẫn, trang web Google Colab tự động thiết lập WebSocket Proxy bridge về `localhost:<PORT>` mà không bị ngắt kết nối giữa chừng!
+
+### 7.8 RÀNG BUỘC SẮT KÍCH HOẠT COLAB SKILLS (MANDATORY COLAB SKILL ACTIVATION PROTOCOL)
+- **Ràng Buộc Sắt Cho Gemini**: BẤT KỲ LẦN NÀO tương tác với Google Colab, Gemini BẮT BUỘC phải kích hoạt và đọc kỹ 2 kỹ năng chuyên biệt:
+  1. `colab-mcp-setup`: Thiết lập và troubleshooting WebSocket Proxy bridge kết nối Colab.
+  2. `colab-notebook-ops`: Tuân thủ 7 quy tắc bảo toàn thế hệ (Live DOM sync, ô mã nguồn độc lập, Form Cells `# @title`, bắt lỗi 403 Forbidden HF token).
+- **Tuyệt đối KHÔNG ĐƯỢC PHÉP**: Tự ý gọi công cụ Colab MCP mà không đọc hoặc tuân thủ các quy tắc trong 2 skills trên!
+
