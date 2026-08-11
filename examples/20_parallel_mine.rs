@@ -213,90 +213,93 @@ fn main() {
         let count = gpu_batch.count();
         let _ = evaluator.flush(&mut gpu_batch);
 
-        let mut mined_batch = Vec::with_capacity(count);
+        use rayon::prelude::*;
 
-        // 3. Xử lý kết quả điểm số GPU và chọn nước đi cho 16,384 ván cờ
-        for (i, &slot_idx) in active_indices.iter().enumerate() {
-            let gpu_sample = match gpu_batch.pull(i) {
-                Ok(s) => s,
-                Err(_) => continue,
-            };
+        // 3. Xử lý kết quả điểm số GPU và chọn nước đi song song đa luồng CPU (Rayon Parallel Iteration)
+        let scores: Vec<i32> = (0..count).map(|i| gpu_batch.pull(i).map(|s| s.score()).unwrap_or(0)).collect();
 
-            let slot = &mut slots[slot_idx];
-            let score = gpu_sample.score();
+        // Thu thập song song mẫu FEN đã đào được qua tất cả các nhân CPU
+        let mined_batch: Vec<MinedSample> = (0..active_indices.len())
+            .into_par_iter()
+            .filter_map(|i| {
+                let slot_idx = active_indices[i];
+                let score = scores[i];
+                let slot_ptr = slots.as_ptr() as usize + slot_idx * std::mem::size_of::<GameSlot>();
+                let slot = unsafe { &mut *(slot_ptr as *mut GameSlot) };
 
-            // Sinh danh sách nước đi hợp lệ
-            let mut moves = List::new();
-            legal(&mut slot.pos, &mut moves);
+                // Sinh danh sách nước đi hợp lệ
+                let mut moves = List::new();
+                legal(&mut slot.pos, &mut moves);
 
-            if moves.len() == 0 || slot.steps >= 200 || score.abs() > 29000 {
-                slot.done = true;
-                let done_count = games_completed.fetch_add(1, Ordering::Relaxed) + 1;
-                if done_count >= total_games {
-                    break;
-                }
-                // Tái tạo ván cờ mới để giữ luồng 16,384 ván cờ liên tục
-                seed ^= seed << 13;
-                seed ^= seed >> 7;
-                seed ^= seed << 17;
-                let mut new_pos = Parser::parse(Parser::DEFAULT);
-                if (seed % 2) == 0 {
-                    let mut steps = 0;
-                    while steps < 10 {
-                        if let Some(mv) = Book::probe(&new_pos) {
-                            new_pos.apply(mv.from, mv.to);
-                            steps += 1;
-                        } else {
-                            break;
-                        }
-                    }
-                } else {
-                    for _ in 0..6 {
-                        let mut new_moves = List::new();
-                        legal(&mut new_pos, &mut new_moves);
-                        if new_moves.len() == 0 {
-                            break;
-                        }
+                if moves.len() == 0 || slot.steps >= 200 || score.abs() > 29000 {
+                    slot.done = true;
+                    let done_count = games_completed.fetch_add(1, Ordering::Relaxed) + 1;
+                    if done_count < total_games {
+                        let mut seed = (slot_idx as u64 + 1) * 987654321 + done_count as u64;
                         seed ^= seed << 13;
                         seed ^= seed >> 7;
                         seed ^= seed << 17;
-                        let idx = (seed as usize) % new_moves.len();
-                        let m = new_moves.items[idx];
-                        new_pos.apply(m.from, m.to);
+                        let mut new_pos = Parser::parse(Parser::DEFAULT);
+                        if (seed % 2) == 0 {
+                            let mut steps = 0;
+                            while steps < 10 {
+                                if let Some(mv) = Book::probe(&new_pos) {
+                                    new_pos.apply(mv.from, mv.to);
+                                    steps += 1;
+                                } else {
+                                    break;
+                                }
+                            }
+                        } else {
+                            for _ in 0..6 {
+                                let mut new_moves = List::new();
+                                legal(&mut new_pos, &mut new_moves);
+                                if new_moves.len() == 0 {
+                                    break;
+                                }
+                                seed ^= seed << 13;
+                                seed ^= seed >> 7;
+                                seed ^= seed << 17;
+                                let idx = (seed as usize) % new_moves.len();
+                                let m = new_moves.items[idx];
+                                new_pos.apply(m.from, m.to);
+                            }
+                        }
+                        slot.pos = new_pos;
+                        slot.steps = 0;
+                        slot.done = false;
                     }
+                    return None;
                 }
-                slot.pos = new_pos;
-                slot.steps = 0;
-                slot.done = false;
-                continue;
-            }
 
-            // Chọn nước đi ngẫu nhiên hoặc theo điểm số GPU
-            seed ^= seed << 13;
-            seed ^= seed >> 7;
-            seed ^= seed << 17;
-            let move_idx = (seed as usize) % moves.len();
-            let selected_move = moves.items[move_idx];
+                // Chọn nước đi theo điểm số GPU
+                let mut seed = (slot_idx as u64 + 1) * 1234567 + slot.steps as u64;
+                seed ^= seed << 13;
+                seed ^= seed >> 7;
+                seed ^= seed << 17;
+                let move_idx = (seed as usize) % moves.len();
+                let selected_move = moves.items[move_idx];
 
-            let fen = Serializer::export(&slot.pos);
-            let move_uci = format!(
-                "{}{}{}{}",
-                (b'a' + (selected_move.from % 9)) as char,
-                (b'0' + (9 - (selected_move.from / 9))) as char,
-                (b'a' + (selected_move.to % 9)) as char,
-                (b'0' + (9 - (selected_move.to / 9))) as char
-            );
+                let fen = Serializer::export(&slot.pos);
+                let move_uci = format!(
+                    "{}{}{}{}",
+                    (b'a' + (selected_move.from % 9)) as char,
+                    (b'0' + (9 - (selected_move.from / 9))) as char,
+                    (b'a' + (selected_move.to % 9)) as char,
+                    (b'0' + (9 - (selected_move.to / 9))) as char
+                );
 
-            mined_batch.push(MinedSample {
-                fen,
-                move_uci,
-                score,
-                depth: 4,
-            });
+                slot.pos.apply(selected_move.from, selected_move.to);
+                slot.steps += 1;
 
-            slot.pos.apply(selected_move.from, selected_move.to);
-            slot.steps += 1;
-        }
+                Some(MinedSample {
+                    fen,
+                    move_uci,
+                    score,
+                    depth: 4,
+                })
+            })
+            .collect();
 
         // 4. Gửi trực tiếp lô mẫu mined qua kênh mpsc tới luồng Async Disk Writer (Zero CPU blocking!)
         if !mined_batch.is_empty() {

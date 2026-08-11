@@ -8,6 +8,8 @@ description = "High-performance Xiangqi AI Engine in Rust 2021"
 [dependencies]
 wgpu = "24.0.0"
 pollster = "0.4.0"
+opencl3 = "0.9.0"
+rayon = "1.10"
 
 [profile.release]
 opt-level = 3

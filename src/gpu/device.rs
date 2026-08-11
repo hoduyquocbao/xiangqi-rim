@@ -108,14 +108,32 @@ impl Device { // Khối triển khai các phương thức cho Device
         let mut backend = Backend::Cpu; // Khởi tạo mặc định CPU backend
         let mut context = None; // Khởi tạo mặc định context None
 
+        // 1. Thử nhận diện qua opencl3 Native GPU trên Linux / Colab CUDA Driver Container
+        if let Ok(platforms) = opencl3::platform::get_platforms() {
+            for platform in platforms {
+                if let Ok(devices) = platform.get_devices(opencl3::device::CL_DEVICE_TYPE_GPU) {
+                    if !devices.is_empty() {
+                        if let Ok(dev_name) = opencl3::device::Device::new(devices[0]).name() {
+                            if !dev_name.to_lowercase().contains("llvmpipe") {
+                                backend = Backend::Opencl;
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
         if let Some(adapter) = adapter { // Nếu lấy được GPU Adapter phần cứng thành công
             let info = adapter.get_info(); // Lấy thông tin GPU Adapter
-            backend = match info.backend { // Khớp mẫu loại backend thực tế
-                wgpu::Backend::Metal => Backend::Metal, // macOS Apple Metal Native
-                wgpu::Backend::Vulkan => Backend::Opencl, // Linux / Windows Vulkan
-                wgpu::Backend::Dx12 => Backend::Wgpu, // Windows DirectX12
-                _ => Backend::Wgpu, // Mặc định WebGPU/OpenGL
-            }; // Kết thúc match backend
+            if info.device_type != wgpu::DeviceType::Cpu && !info.name.to_lowercase().contains("llvmpipe") {
+                backend = match info.backend { // Khớp mẫu loại backend thực tế
+                    wgpu::Backend::Metal => Backend::Metal, // macOS Apple Metal Native
+                    wgpu::Backend::Vulkan => Backend::Opencl, // Linux / Windows Vulkan
+                    wgpu::Backend::Dx12 => Backend::Wgpu, // Windows DirectX12
+                    _ => Backend::Wgpu, // Mặc định WebGPU/OpenGL
+                }; // Kết thúc match backend
+            }
 
             if let Ok((device, queue)) = pollster::block_on(adapter.request_device( // Khởi tạo Device và Queue từ GPU Adapter
                 &wgpu::DeviceDescriptor { // Cấu hình tham số mô tả Device
