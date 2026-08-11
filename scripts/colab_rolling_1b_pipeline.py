@@ -225,13 +225,13 @@ def main():
         print(f"  ⚡ Binary GPU Memory Load Time: {t_load_1 - t_load_0:.4f} seconds ({len(feats):,} samples)!", flush=True)
 
         model.train()
-        batch_size_gpu = 65536
+        batch_size_gpu = 32768
         num_batches = len(feats) // batch_size_gpu
         total_loss = 0.0
 
         for b_i in range(min(num_batches, 100)):
             b_feats = feats[b_i*batch_size_gpu : (b_i+1)*batch_size_gpu]
-            b_targets = targets[b_i*batch_size_gpu : (b_i+1)*batch_size_gpu].unsqueeze(1)
+            b_targets = targets[b_i*batch_size_gpu : (b_i+1)*batch_size_gpu]
 
             optimizer.zero_grad()
             out = model(b_feats)
