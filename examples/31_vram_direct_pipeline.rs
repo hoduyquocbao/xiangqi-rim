@@ -170,6 +170,7 @@ fn main() {
 
     while games_done < total_games {
         let chunk_size = std::cmp::min(mini_batch_size, total_games - games_done);
+        let state_rayon = Arc::clone(&state);
 
         // Sinh dữ liệu song song trên Rayon pool cho chunk_size ván cờ (Chỉ ghi Binary 66-byte, triệt tiêu 100% JSONL RAM leak)
         let chunk_results: Vec<(Vec<u8>, usize, Vec<Sample>)> = pool.install(|| {
@@ -251,6 +252,9 @@ fn main() {
                         pos.apply(chosen_move.from, chosen_move.to);
                     }
 
+                    state_rayon.games_completed.fetch_add(1, Ordering::Relaxed);
+                    state_rayon.samples_collected.fetch_add(sample_count, Ordering::Relaxed);
+
                     (local_bin, sample_count, samples_vec)
                 })
                 .collect()
@@ -265,15 +269,11 @@ fn main() {
         let _ = evaluator.flush(&mut gpu_batch);
 
         // Gửi kết quả byte buffers về Dedicated Writer Thread
-        let mut chunk_samples = 0;
-        for (bin_buf, cnt, _samples) in chunk_results {
+        for (bin_buf, _cnt, _samples) in chunk_results {
             let _ = tx_bin.send(bin_buf);
-            chunk_samples += cnt;
         }
 
         games_done += chunk_size;
-        state.games_completed.store(games_done, Ordering::Relaxed);
-        state.samples_collected.fetch_add(chunk_samples, Ordering::Relaxed);
     }
 
     state.finished_flag.store(true, Ordering::Relaxed);
