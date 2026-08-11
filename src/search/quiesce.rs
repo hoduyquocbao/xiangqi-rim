@@ -61,18 +61,13 @@ impl Quiesce {
         } else {
             let mut raw = List::new();
             pseudo::pseudo(pos, &mut raw);
-            let side = pos.side as usize;
             let mut i = 0;
             while i < raw.count {
                 let mv = raw.items[i];
                 let captured = pos.grid[mv.to as usize];
-                // Chỉ lấy các nước ăn quân (captured < 14)
+                // Chỉ lấy các nước ăn quân (captured < 14) ở 0-cost mà KHÔNG apply/revert sớm
                 if captured < 14 {
-                    let state = pos.apply(mv.from, mv.to);
-                    if !legal::check(pos, side) && !legal::fly(pos) {
-                        list.push(mv);
-                    }
-                    pos.revert(mv.from, mv.to, &state);
+                    list.push(mv);
                 }
                 i += 1;
             }
@@ -141,11 +136,22 @@ impl Quiesce {
                 continue;
             }
 
+            let side = pos.side as usize;
             // Cập nhật gia tăng NNUE accumulator và thực thi nước đi
             if active {
                 eval.apply(pos, mv.from, mv.to, moving, captured);
             }
             let state = pos.apply(mv.from, mv.to);
+
+            // Kiểm tra nước đi hợp lệ: Nếu để Tướng bị chiếu hoặc phạm quy Tướng đối mặt → Bỏ qua nước này
+            if !check && (legal::check(pos, 1 - side) || legal::fly(pos)) {
+                pos.revert(mv.from, mv.to, &state);
+                if active {
+                    eval.revert(pos, mv.from, mv.to, moving, captured);
+                }
+                i += 1;
+                continue;
+            }
 
             let score = -Self::search(pos, eval, timer, -beta, -alpha, ply + 1, nodes);
 
