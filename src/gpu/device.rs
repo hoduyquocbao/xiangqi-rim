@@ -458,6 +458,7 @@ impl Device { // Khối triển khai các phương thức cho Device
 impl Queryable for Device { // Triển khai trait Queryable cho Device
     fn name(&self) -> &'static str { // Triển khai phương thức name
         match self.backend { // Khớp mẫu backend để trả về tên thiết bị
+            Backend::Cuda => "NVIDIA CUDA (cuda:0) Native Hardware Engine", // Tên nền tảng NVIDIA CUDA Native
             Backend::Metal => "Apple Metal Native GPU Adapter", // Tên nền tảng Metal
             Backend::Opencl => "OpenCL Hardware GPU Engine", // Tên nền tảng OpenCL
             Backend::Wgpu => "WebGPU Compute Shaders Engine", // Tên nền tảng WebGPU

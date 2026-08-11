@@ -10,17 +10,24 @@
 #[repr(u8)] // Định dạng đại diện bộ nhớ 1 byte u8 tương thích FFI
 #[derive(Debug, Clone, Copy, PartialEq, Eq)] // Tự động derive các trait cơ bản
 pub enum Backend { // Định nghĩa enum Backend với các biến thể phần cứng
-    Metal = 0, // Nền tảng Apple Metal Native trên macOS
-    Opencl = 1, // Nền tảng OpenCL cross-platform dự phòng thứ nhất
-    Wgpu = 2, // Nền tảng WebGPU Compute Shaders dự phòng thứ hai
-    Cpu = 3, // Nền tảng CPU SIMD dự phòng cuối cùng
+    Cuda = 0, // Nền tảng NVIDIA CUDA Native Driver API (cuda:0)
+    Metal = 1, // Nền tảng Apple Metal Native trên macOS
+    Opencl = 2, // Nền tảng OpenCL cross-platform dự phòng thứ nhất
+    Wgpu = 3, // Nền tảng WebGPU Compute Shaders dự phòng thứ hai
+    Cpu = 4, // Nền tảng CPU SIMD dự phòng cuối cùng
 } // Kết thúc định nghĩa enum Backend
 
 impl Backend { // Khối triển khai các phương thức hỗ trợ cho enum Backend
-    /// Phương thức `detect`: Tự động nhận diện phần cứng GPU thực tế thông qua wgpu Instance.
+    /// Phương thức `detect`: Tự động nhận diện phần cứng GPU thực tế (CUDA / Metal / Vulkan / CPU).
     pub fn detect() -> Self { // Định nghĩa hàm khởi tạo tự động phát hiện backend phần cứng GPU
+        // Kiểm tra xem có thiết bị NVIDIA CUDA kernel driver (/dev/nvidia0) trên Linux không
+        if std::path::Path::new("/dev/nvidia0").exists() || std::path::Path::new("/dev/nvidiactl").exists() {
+            return Self::Cuda; // Trả về CUDA Native Driver API (cuda:0)
+        }
+
         let instance = wgpu::Instance::new(&wgpu::InstanceDescriptor { // Khởi tạo wgpu Instance mới
-            backends: wgpu::Backends::all(), // Cho phép tất cả các backend phần cứng GPU (Metal, Vulkan, DX12, Gl)
+            backends: wgpu::Backends::all(), // Cho phép tất cả các backend phần cứng GPU
+            flags: wgpu::InstanceFlags::ALLOW_UNDERLYING_NONCOMPLIANT_ADAPTER,
             ..Default::default() // Sử dụng các giá trị mặc định cho các cấu hình khác
         }); // Kết thúc khởi tạo Instance
         let adapter = pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions { // Yêu cầu Adapter GPU bất đồng bộ bằng pollster
@@ -30,6 +37,9 @@ impl Backend { // Khối triển khai các phương thức hỗ trợ cho enum B
         })); // Kết thúc yêu cầu Adapter
         if let Some(adapter) = adapter { // Nếu phát hiện được phần cứng GPU Adapter hợp lệ
             let info = adapter.get_info(); // Lấy thông tin chi tiết về phần cứng GPU Adapter
+            if info.device_type == wgpu::DeviceType::Cpu || info.name.to_lowercase().contains("llvmpipe") {
+                return Self::Cpu;
+            }
             match info.backend { // Kiểm tra loại backend thực tế của GPU Adapter
                 wgpu::Backend::Metal => Self::Metal, // Metal Native trên Apple Silicon / macOS
                 wgpu::Backend::Vulkan => Self::Opencl, // Vulkan / OpenCL trên Linux / Windows / Android
@@ -46,6 +56,7 @@ impl Backend { // Khối triển khai các phương thức hỗ trợ cho enum B
     #[inline(always)] // Inline phương thức lấy tên hiển thị
     pub fn name(&self) -> &'static str { // Trả về tham chiếu chuỗi tĩnh
         match self { // Khớp mẫu giá trị của biến thể enum
+            Self::Cuda => "CUDA (cuda:0)", // Chuỗi tên nền tảng NVIDIA CUDA
             Self::Metal => "Metal", // Chuỗi tên nền tảng Metal
             Self::Opencl => "OpenCL", // Chuỗi tên nền tảng OpenCL
             Self::Wgpu => "WGPU", // Chuỗi tên nền tảng WebGPU
@@ -62,7 +73,7 @@ impl Backend { // Khối triển khai các phương thức hỗ trợ cho enum B
     /// Phương thức `hardware`: Kiểm tra xem backend có thuộc nhóm card đồ họa phần cứng không.
     #[inline(always)] // Inline phương thức hardware
     pub fn hardware(&self) -> bool { // Trả về true cho các GPU phần cứng
-        matches!(self, Self::Metal | Self::Opencl | Self::Wgpu) // Khớp nhóm phần cứng GPU
+        matches!(self, Self::Cuda | Self::Metal | Self::Opencl | Self::Wgpu) // Khớp nhóm phần cứng GPU
     } // Kết thúc phương thức hardware
 
     /// Phương thức `rank`: Trả về thứ tự ưu tiên của backend dạng số nguyên u8.
@@ -75,7 +86,8 @@ impl Backend { // Khối triển khai các phương thức hỗ trợ cho enum B
     #[inline(always)] // Inline phương thức đánh giá điểm hiệu năng
     pub fn speed(&self) -> usize { // Trả về giá trị điểm số hiệu năng kiểu usize
         match self { // Khớp mẫu điểm số tương ứng từng backend
-            Self::Metal => 100, // Metal Native đạt 100% hiệu năng
+            Self::Cuda => 100, // CUDA Tensor Cores đạt 100% hiệu năng tối đại
+            Self::Metal => 95, // Metal Native đạt 95% hiệu năng
             Self::Opencl => 80, // OpenCL đạt 80% hiệu năng tương đối
             Self::Wgpu => 70, // WebGPU compute shaders đạt 70% hiệu năng
             Self::Cpu => 10, // CPU SIMD fallback đạt 10% hiệu năng
