@@ -110,7 +110,7 @@ fn run_elite_hybrid_benchmark(target_depth: u8, total_games: usize) -> (f64, usi
         if let Ok(evaluator) = Evaluator::new(gpu_dev) {
             if let Ok(mut batch_a) = Batch::allocate(evaluator.device(), batch_size) {
                 let mut accumulated: Vec<Sample> = Vec::with_capacity(65536);
-                let dispatch_stride = if target_depth >= 10 { 128 } else { 512 };
+                let dispatch_stride = if target_depth >= 10 { 32 } else { 128 };
 
                 while !flag_gpu.load(Ordering::Relaxed) || !accumulated.is_empty() {
                     while let Ok(samples) = rx_sample.try_recv() {
@@ -168,7 +168,7 @@ fn run_elite_hybrid_benchmark(target_depth: u8, total_games: usize) -> (f64, usi
                 let mv = list.get((step + g) % list.len());
                 pos.apply(mv.from, mv.to);
 
-                if local_samples.len() >= 16 {
+                if local_samples.len() >= 8 {
                     let _ = tx.send(local_samples.clone());
                     local_samples.clear();
                 }
