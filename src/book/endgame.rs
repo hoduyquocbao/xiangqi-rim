@@ -387,7 +387,7 @@ mod tests {
     /// Kiểm thử Đơn Mã thắng Đơn Sĩ (Win).
     #[test]
     fn knight() {
-        let pos = Parser::parse("4k1a2/9/9/9/9/9/9/4N4/9/4K4 w - - 0 1");
+        let pos = Parser::parse("4ka3/9/9/9/9/9/9/4N4/9/4K4 w - - 0 1");
         let score = Endgame::eval(&pos);
         assert_eq!(score, Some(WIN));
     }
@@ -395,7 +395,7 @@ mod tests {
     /// Kiểm thử Xe Pháo thắng Xe (Win / Loss).
     #[test]
     fn rook() {
-        let pos = Parser::parse("3k5/4r4/9/9/9/9/9/9/4C4/3K1R3 w - - 0 1");
+        let pos = Parser::parse("3k5/4r4/9/9/9/9/9/9/4C4/4K1R2 w - - 0 1");
         let score = Endgame::eval(&pos);
         assert_eq!(score, Some(WIN));
 
