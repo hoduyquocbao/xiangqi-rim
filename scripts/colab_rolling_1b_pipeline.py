@@ -158,11 +158,18 @@ def main():
         repo_chunk_path = f"chunks/chunk_{chunk_idx:03d}_10m.jsonl"
         
         # Kiểm tra xem Chunk đã tồn tại trên Hugging Face Hub chưa (Resume Support!)
+        force_remine = os.environ.get("FORCE_REMINE", "0") == "1"
         try:
-            if api.file_exists(repo_id=repo_dataset, filename=repo_chunk_path, repo_type="dataset"):
+            if not force_remine and api.file_exists(repo_id=repo_dataset, filename=repo_chunk_path, repo_type="dataset"):
                 print(f"⏩ [CHUNK {chunk_idx:03d}/{total_chunks:03d}] Đã tồn tại trên Hugging Face Hub. Bỏ qua!", flush=True)
                 accumulated_fens += fens_per_chunk
                 continue
+            elif force_remine and api.file_exists(repo_id=repo_dataset, filename=repo_chunk_path, repo_type="dataset"):
+                print(f"🗑️ [FORCE_REMINE] Xóa Chunk {chunk_idx:03d} cũ để đào lại 100% bằng Native Rust Engine...", flush=True)
+                try:
+                    api.delete_file(path_in_repo=repo_chunk_path, repo_id=repo_dataset, repo_type="dataset")
+                except Exception as e:
+                    print(f"  ⚠️ Warning deleting file: {e}", flush=True)
         except Exception:
             pass
             
