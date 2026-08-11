@@ -126,15 +126,12 @@ def main():
     total_chunks = int(os.environ.get("CHUNKS", "100"))  # 100 Chunks x 10M FENs = 1 TỶ FEN!
     fens_per_chunk = int(os.environ.get("FENS_PER_CHUNK", "10000000"))  # 10M FENs / Chunk (~52s on T4 GPU)
     
-    _T1 = "hf_olRVlCHGkrZTKzX"
-    _T2 = "dDEEHGUuqRFivahQLFu"
-    token = None
-    try:
-        token = userdata.get('HF_TOKEN')
-    except Exception:
-        pass
+    token = os.environ.get("HF_TOKEN")
     if not token:
-        token = os.environ.get("HF_TOKEN") or (_T1 + _T2)
+        try:
+            token = userdata.get('HF_TOKEN')
+        except Exception:
+            pass
     api = HfApi(token=token)
     
     user_info = api.whoami()
