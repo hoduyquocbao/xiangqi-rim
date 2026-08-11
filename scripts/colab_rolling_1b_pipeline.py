@@ -170,12 +170,14 @@ def main():
         print(f" 🚀 [CHUNK {chunk_idx:03d}/{total_chunks:03d}] KHAI THÁC 10 TRIỆU FEN (TÍCH LŨY: {accumulated_fens + fens_per_chunk:,} / 1,000,000,000 FEN)", flush=True)
         print(f"============================================================", flush=True)
         
-        # BƯỚC 1: TESLA T4 CUDA GPU MINING 10M FENS
-        print(f"--> BƯỚC 1: CUDA Tesla T4 GPU đào Chunk {chunk_idx:03d} (10,000,000 FENs)...", flush=True)
-        cmd_mine = [sys.executable, "scripts/colab_gpu_miner.py"]
+        # BƯỚC 1: NATIVE RUST ENGINE 20_PARALLEL_MINE MINING 10M FENS
+        print(f"--> BƯỚC 1: Native Rust GPU Engine (20_parallel_mine) đào Chunk {chunk_idx:03d} (10,000,000 FENs)...", flush=True)
+        cmd_mine = ["cargo", "run", "--release", "--example", "20_parallel_mine"]
         env = os.environ.copy()
-        env["TARGET_FENS"] = str(fens_per_chunk)
-        env["BATCH_SIZE"] = "16384"
+        env["GAMES"] = str(int(fens_per_chunk / 50))  # 200,000 ván cờ self-play = ~10 TRIỆU FENs
+        env["BATCH"] = "16384"
+        env["THREADS"] = "4"
+        env["RAYON_NUM_THREADS"] = "4"
         env["OUTPUT"] = chunk_file
         
         proc = subprocess.run(cmd_mine, env=env, stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT)
