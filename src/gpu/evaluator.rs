@@ -9,6 +9,7 @@
 // ============================================================================
 
 use std::sync::atomic::Ordering; // Nhập thứ tự bộ nhớ Ordering cho cờ nguyên tử Ping-Pong Double Buffering
+use crate::board::Position; // Nhập kiểu struct Position từ module board
 use super::batch::Batch; // Nhập kiểu struct Batch từ module batch
 use super::buffer::{Buffer, Storable}; // Nhập kiểu struct Buffer và trait Storable từ module buffer
 use super::device::Device; // Nhập kiểu struct Device từ module device
@@ -254,6 +255,30 @@ impl Evaluator { // Khối triển khai các phương thức cho Evaluator
         self.active = true; // Đặt cờ active true
         Ok(()) // Trả về thành công Ok
     } // Kết thúc hàm reset
+
+    /// Phương thức `evaluate_positions`: Tính điểm trực tiếp một mảng các thế cờ `Position` trên GPU phần cứng.
+    pub fn evaluate_positions(&self, positions: &[Position], scores: &mut [i32]) -> Result<usize, Status> {
+        if positions.is_empty() {
+            return Ok(0);
+        }
+        let count = positions.len().min(scores.len());
+        let mut batch = Batch::allocate(&self.device, count)?;
+        let mut i = 0usize;
+        while i < count {
+            let sample = Sample::pack(&positions[i], i as u32);
+            let _ = batch.push(&sample);
+            i += 1;
+        }
+        self.execute(&mut batch, count)?;
+        let mut j = 0usize;
+        while j < count {
+            if let Ok(sample) = batch.pull(j) {
+                scores[j] = sample.score();
+            }
+            j += 1;
+        }
+        Ok(count)
+    }
 } // Kết thúc khối impl Evaluator
 
 impl Evaluable for Evaluator { // Triển khai trait Evaluable cho Evaluator
