@@ -141,6 +141,13 @@ def main():
     create_repo(repo_id=repo_model, repo_type="model", token=token, exist_ok=True)
     create_repo(repo_id=repo_dataset, repo_type="dataset", token=token, exist_ok=True)
 
+    # Tự động xuất bản Dataset Card README.md chuẩn để kích hoạt Hugging Face Dataset Viewer
+    try:
+        from scripts.upload_dataset_card import upload_cards
+        upload_cards()
+    except Exception as e:
+        print(f"⚠️ Warning uploading Dataset Card: {e}", flush=True)
+
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"--> GPU Device: {device} ({torch.cuda.get_device_name(0)})", flush=True)
 
