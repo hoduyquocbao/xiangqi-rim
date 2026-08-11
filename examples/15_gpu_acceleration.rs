@@ -12,7 +12,7 @@
 
 // Nhập các kiểu dữ liệu và trait từ module gpu của thư viện xiangrust
 use xiangrust::gpu::{
-    Batch, Buffer, Device, Dispatchable, Evaluator, Guard, Gym, Kernel, Queryable, Sample, Status,
+    Batch, Buffer, Device, Dispatchable, Evaluable, Evaluator, Guard, Gym, Kernel, Queryable, Sample, Status,
     Storable, Validatable,
 };
 // Nhập đối tượng Position và Parser từ module board
@@ -37,6 +37,8 @@ fn main() {
     let device = Device::init();
     // In tên hiển thị của thiết bị GPU Adapter
     println!("   - Tên thiết bị  : {}", device.name());
+    // In tên phần cứng card đồ họa GPU thực tế
+    println!("   - Card đồ họa GPU: {}", device.adapter_name());
     // In tên chuỗi backend phần cứng đang sử dụng (Metal, OpenCL, WGPU, CPU)
     println!("   - Backend GPU   : {}", device.backend().name());
     // In điểm số hiệu năng tương đối của backend phần cứng

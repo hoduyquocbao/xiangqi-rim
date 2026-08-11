@@ -6,6 +6,8 @@ license = "MIT"
 description = "High-performance Xiangqi AI Engine in Rust 2021"
 
 [dependencies]
+wgpu = "24.0.0"
+pollster = "0.4.0"
 
 [profile.release]
 opt-level = 3

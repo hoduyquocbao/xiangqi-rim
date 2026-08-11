@@ -78,9 +78,9 @@ REPO = "hoduyquocbao/xiangqi-nnue-dataset"
 # ============================================================================
 # APPLICATION SEMANTIC VERSIONING & BUILD METADATA
 # ============================================================================
-APP_VERSION = "v5.9.0-production"
-APP_BUILD_STAMP = "2026-08-09 22:45:00 ICT"
-APP_RELEASE_NOTES = "Verified 96GB RAM Optimization: Velocity increased to 4,500.0 FEN/s (+303.2 FEN/s boost) at 270,000 FEN/min"
+APP_VERSION = "v6.0.0-production"
+APP_BUILD_STAMP = "2026-08-10 18:45:00 ICT"
+APP_RELEASE_NOTES = "R16 Release: Refactored Xiangqi piece geometry rules (King/Advisor Palace bounds, Elephant River bounds, Knight leg/bounds, Rook self-attack, Cannon 0/1-screen capture/move, Pawn bottom row), fixed 32D JRCP 5.0 algorithms (forks grid mutation, discovered/checkmate truncation, flying general safety), and added 100% edge case unit test suite."
 
 # ============================================================================
 # PERSISTENT DISK LOGGING & TELEMETRY INFRASTRUCTURE

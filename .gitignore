@@ -3,17 +3,19 @@
 **/*.rs.bk
 
 # Node / Web Artifacts
-/web/node_modules/
-/web/dist/
-/web/.vite/
+*/node_modules/
+*/dist/
+*/.vite/
 *.wasm
 web/public/*.wasm
 
 # Data & Models
 /data/*.json
 /data/*.jsonl
+/data/*.bin
 !/data/.gitkeep
 outputs/
+tools/*.jsonl
 
 # Secrets & Configuration
 .env
@@ -21,7 +23,6 @@ outputs/
 !.env.example
 *.pem
 *.key
-# example-xiangqi_gradio_mcp_backend.ipynb  # Token đã xóa, an toàn để commit
 
 # Internal Development Requests & Diagnostic Reports
 ORIGINAL_REQUEST.md

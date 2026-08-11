@@ -3,10 +3,13 @@
 // ============================================================================
 // Đại diện hợp nhất cho GPU Adapter (Metal Native / OpenCL / WGPU / CPU Fallback).
 // Quản lý vòng đời cấp phát VRAM an toàn thông qua VRAM Guard 512MB limit / 409.6MB ceiling.
-// Tích hợp Bộ đánh giá tự chủ GPU Evaluator tích lũy ma trận trọng số NNUE trên payload.
+// Tích hợp Mạng Nơ-ron NNUE 32MB VRAM Storage Buffer nạp trực tiếp vào Compute Shader.
 // Tuân thủ 100% định danh từ đơn tiếng Anh, căn lề 64-byte và 100% chú thích tiếng Việt.
 // ============================================================================
 
+use std::sync::atomic::AtomicBool; // Nhập cờ nguyên tử AtomicBool cho Double-Buffering
+use std::sync::Arc; // Nhập kiểu Arc quản lý con trỏ đếm tham chiếu dùng chung
+use wgpu::util::DeviceExt; // Nhập DeviceExt mở rộng hàm create_buffer_init
 use super::backend::Backend; // Nhập kiểu enum Backend từ module backend
 use super::buffer::{Buffer, Storable}; // Nhập kiểu struct Buffer và trait Storable từ module buffer
 use super::guard::Guard; // Nhập kiểu struct Guard từ module guard
@@ -22,7 +25,39 @@ pub trait Queryable { // Định nghĩa trait Queryable
     fn active(&self) -> bool; // Chữ ký hàm active
 } // Kết thúc trait Queryable
 
-/// Struct `Device`: Thiết bị GPU Adapter tích hợp backend phần cứng và Guard.
+/// Struct `GpuContext`: Lưu trữ các đối tượng hạ tầng GPU phần cứng thực tế của wgpu.
+pub struct GpuContext { // Định nghĩa struct GpuContext
+    /// Thiết bị điều khiển GPU Device phần cứng
+    pub device: wgpu::Device, // Trường thiết bị device
+    /// Hàng đợi gửi lệnh GPU Queue
+    pub queue: wgpu::Queue, // Trường hàng đợi queue
+    /// Pipeline thực thi Compute Shader WGSL
+    pub pipeline: wgpu::ComputePipeline, // Trường đường ống pipeline
+    /// Bind Group Layout của Storage Buffer
+    pub layout: wgpu::BindGroupLayout, // Trường bố cục layout
+    /// Storage Buffer VRAM cấp phát tĩnh sẵn (2MB = 16,384 samples x 128 bytes)
+    pub storage_buffer: wgpu::Buffer, // Trường bộ đệm Storage Buffer tĩnh
+    /// Staging Buffer A Host RAM cấp phát tĩnh sẵn (2MB = 16,384 samples x 128 bytes) cho Ping-Pong Double Buffering
+    pub staging_buffer_a: wgpu::Buffer, // Trường bộ đệm Staging Buffer A
+    /// Staging Buffer B Host RAM cấp phát tĩnh sẵn (2MB = 16,384 samples x 128 bytes) cho Ping-Pong Double Buffering
+    pub staging_buffer_b: wgpu::Buffer, // Trường bộ đệm Staging Buffer B
+    /// Storage Buffer nén 64KB VRAM (16,384 x 4 bytes i32)
+    pub score_storage: wgpu::Buffer, // Trường bộ đệm Score Storage Buffer nén 64KB
+    /// Staging Buffer nén A 64KB Host RAM (16,384 x 4 bytes i32)
+    pub score_staging_a: wgpu::Buffer, // Trường bộ đệm Score Staging A nén 64KB
+    /// Staging Buffer nén B 64KB Host RAM (16,384 x 4 bytes i32)
+    pub score_staging_b: wgpu::Buffer, // Trường bộ đệm Score Staging B nén 64KB
+    /// Storage Buffer chứa trọng số Mạng Nơ-ron NNUE 33.57MB VRAM (Binding 2)
+    pub weight_buffer: wgpu::Buffer, // Trường bộ đệm Weight Buffer NNUE 33.57MB
+    /// BindGroup cấp phát tĩnh sẵn liên kết Storage Buffer với Shader
+    pub bind_group: wgpu::BindGroup, // Trường nhóm liên kết BindGroup tĩnh
+    /// Cờ nguyên tử điều khiển xoay vòng Ping-Pong Double Buffering (false -> A, true -> B)
+    pub ping_pong: AtomicBool, // Trường cờ nguyên tử ping_pong
+    /// Tên hiển thị của thiết bị GPU Adapter phần cứng thực tế
+    pub name: String, // Trường tên hiển thị name
+} // Kết thúc struct GpuContext
+
+/// Struct `Device`: Thiết bị GPU Adapter tích hợp backend phần cứng và Guard (128 bytes total).
 #[repr(C, align(64))] // Căn lề 64-byte tránh False Sharing trên CPU Cache Line
 pub struct Device { // Định nghĩa struct Device
     /// Bộ giám sát dung lượng VRAM (VRAM Guard 512MB limit) (64 bytes, offset 0..64)
@@ -33,23 +68,226 @@ pub struct Device { // Định nghĩa struct Device
     status: Status, // Trường trạng thái hoạt động
     /// Mảng đệm 6 byte (6 bytes, offset 66..72)
     pad: [u8; 6], // Trường đệm căn lề 8-byte
-    /// Mảng đệm 56 byte đảm bảo kích thước toàn bộ struct Device đúng 128 bytes (2 cache lines: 64 + 8 + 56 = 128)
-    extra: [u8; 56], // Trường đệm căn lề tròn 128 bytes
+    /// Con trỏ dùng chung chứa ngữ cảnh phần cứng GPU thực tế qua wgpu (8 bytes, offset 72..80)
+    context: Option<Arc<GpuContext>>, // Trường ngữ cảnh context
+    /// Mảng đệm 48 byte đảm bảo kích thước toàn bộ struct Device đúng 128 bytes (48 bytes, offset 80..128)
+    extra: [u8; 48], // Trường đệm căn lề tròn 128 bytes
 } // Kết thúc struct Device
 
 impl Device { // Khối triển khai các phương thức cho Device
     /// Khởi tạo thiết bị GPU Adapter mới, tự động phát hiện backend và kích hoạt Guard.
     pub fn init() -> Self { // Hàm khởi tạo init
-        let backend = Backend::detect(); // Tự động phát hiện backend có sẵn trên hệ thống qua FFI Probe
-        let status = if backend.valid() { Status::Ready } else { Status::Active }; // Đặt trạng thái Ready cho GPU, Active cho CPU
+        let instance = wgpu::Instance::new(&wgpu::InstanceDescriptor { // Khởi tạo wgpu Instance mới
+            backends: wgpu::Backends::all(), // Khởi tạo hỗ trợ tất cả các GPU Backend (Metal/Vulkan/DX12)
+            ..Default::default() // Sử dụng mặc định cho các trường còn lại
+        }); // Kết thúc khởi tạo Instance
+
+        let adapter = pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions { // Yêu cầu Adapter GPU
+            power_preference: wgpu::PowerPreference::HighPerformance, // Ưu tiên GPU hiệu năng cao
+            compatible_surface: None, // Không yêu cầu GUI surface
+            force_fallback_adapter: false, // Không ép buộc CPU fallback
+        })); // Kết thúc yêu cầu Adapter
+
+        let mut backend = Backend::Cpu; // Khởi tạo mặc định CPU backend
+        let mut context = None; // Khởi tạo mặc định context None
+
+        if let Some(adapter) = adapter { // Nếu lấy được GPU Adapter phần cứng thành công
+            let info = adapter.get_info(); // Lấy thông tin GPU Adapter
+            backend = match info.backend { // Khớp mẫu loại backend thực tế
+                wgpu::Backend::Metal => Backend::Metal, // macOS Apple Metal Native
+                wgpu::Backend::Vulkan => Backend::Opencl, // Linux / Windows Vulkan
+                wgpu::Backend::Dx12 => Backend::Wgpu, // Windows DirectX12
+                _ => Backend::Wgpu, // Mặc định WebGPU/OpenGL
+            }; // Kết thúc match backend
+
+            if let Ok((device, queue)) = pollster::block_on(adapter.request_device( // Khởi tạo Device và Queue từ GPU Adapter
+                &wgpu::DeviceDescriptor { // Cấu hình tham số mô tả Device
+                    label: Some("Xiangqi-RIM GPU Device"), // Nhãn tên thiết bị GPU
+                    required_features: wgpu::Features::empty(), // Không yêu cầu feature đặc biệt
+                    required_limits: wgpu::Limits::default(), // Sử dụng giới hạn VRAM/Limits mặc định
+                    memory_hints: Default::default(), // Sử dụng mô tả bộ nhớ mặc định
+                }, // Kết thúc cấu hình Descriptor
+                None, // Không dùng đường dẫn vết trace
+            )) { // Bắt đầu khối nếu khởi tạo Device thành công
+                let shader_str = include_str!("shader.wgsl"); // Nạp chuỗi Compute Shader WGSL từ tệp nội bộ
+                let module = device.create_shader_module(wgpu::ShaderModuleDescriptor { // Tạo Module Shader WGSL
+                    label: Some("Xiangqi-RIM Compute Shader"), // Nhãn Module Shader
+                    source: wgpu::ShaderSource::Wgsl(shader_str.into()), // Nạp mã nguồn WGSL
+                }); // Kết thúc tạo Module Shader
+
+                let layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor { // Tạo BindGroupLayout cho Storage Buffer
+                    label: Some("Xiangqi-RIM BindGroupLayout"), // Nhãn Layout
+                    entries: &[
+                        wgpu::BindGroupLayoutEntry { // Entry 0: BatchBuffer Storage (2MB)
+                            binding: 0, // Ô liên kết binding 0
+                            visibility: wgpu::ShaderStages::COMPUTE, // Cho phép truy cập từ Compute Shader
+                            ty: wgpu::BindingType::Buffer { // Kiểu tài nguyên là Buffer
+                                ty: wgpu::BufferBindingType::Storage { read_only: false }, // Kiểu Storage Buffer đọc/ghi
+                                has_dynamic_offset: false, // Không dùng offset động
+                                min_binding_size: None, // Không giới hạn kích thước tối thiểu
+                            }, // Kết thúc kiểu BindingType
+                            count: None, // Không dùng mảng tài nguyên
+                        },
+                        wgpu::BindGroupLayoutEntry { // Entry 1: ScoreBuffer Storage nén 64KB
+                            binding: 1, // Ô liên kết binding 1
+                            visibility: wgpu::ShaderStages::COMPUTE, // Cho phép truy cập từ Compute Shader
+                            ty: wgpu::BindingType::Buffer { // Kiểu tài nguyên là Buffer
+                                ty: wgpu::BufferBindingType::Storage { read_only: false }, // Kiểu Storage Buffer đọc/ghi
+                                has_dynamic_offset: false, // Không dùng offset động
+                                min_binding_size: None, // Không giới hạn kích thước tối thiểu
+                            }, // Kết thúc kiểu BindingType
+                            count: None, // Không dùng mảng tài nguyên
+                        },
+                        wgpu::BindGroupLayoutEntry { // Entry 2: WeightBuffer Storage NNUE 33.57MB
+                            binding: 2, // Ô liên kết binding 2
+                            visibility: wgpu::ShaderStages::COMPUTE, // Cho phép truy cập từ Compute Shader
+                            ty: wgpu::BindingType::Buffer { // Kiểu tài nguyên là Buffer
+                                ty: wgpu::BufferBindingType::Storage { read_only: true }, // Kiểu Storage Buffer chỉ đọc
+                                has_dynamic_offset: false, // Không dùng offset động
+                                min_binding_size: None, // Không giới hạn kích thước tối thiểu
+                            }, // Kết thúc kiểu BindingType
+                            count: None, // Không dùng mảng tài nguyên
+                        },
+                    ], // Kết thúc mảng entries
+                }); // Kết thúc tạo BindGroupLayout
+
+                let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor { // Tạo PipelineLayout
+                    label: Some("Xiangqi-RIM PipelineLayout"), // Nhãn Pipeline Layout
+                    bind_group_layouts: &[&layout], // Liên kết mảng Layout
+                    push_constant_ranges: &[], // Không dùng hằng số đẩy Push Constant
+                }); // Kết thúc tạo PipelineLayout
+
+                let pipeline = device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor { // Tạo ComputePipeline thực thi
+                    label: Some("Xiangqi-RIM ComputePipeline"), // Nhãn Compute Pipeline
+                    layout: Some(&pipeline_layout), // Gán Pipeline Layout
+                    module: &module, // Gán Shader Module
+                    entry_point: Some("main"), // Tên hàm điểm vào main trong shader WGSL
+                    compilation_options: Default::default(), // Tùy chọn biên dịch mặc định
+                    cache: None, // Không dùng bộ đệm cache ngoài
+                }); // Kết thúc tạo ComputePipeline
+
+                // Pre-allocate 2MB Storage Buffer tĩnh (16,384 samples x 128 bytes)
+                let max_bytes = 16384 * 128; // 2,097,152 bytes = 2MB
+                let storage_buffer = device.create_buffer(&wgpu::BufferDescriptor { // Khởi tạo Storage Buffer tĩnh
+                    label: Some("Xiangqi-RIM Static Storage Buffer"), // Nhãn bộ đệm Storage tĩnh
+                    size: max_bytes as u64, // Kích thước 2MB
+                    usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_SRC | wgpu::BufferUsages::COPY_DST, // Cờ cho phép đọc/ghi Storage và sao chép
+                    mapped_at_creation: false, // Không map ngay khi khởi tạo
+                }); // Kết thúc tạo Storage Buffer tĩnh
+
+                // Pre-allocate Staging Buffer A tĩnh (2MB) cho Ping-Pong Double Buffering
+                let staging_buffer_a = device.create_buffer(&wgpu::BufferDescriptor { // Khởi tạo Staging Buffer A
+                    label: Some("Xiangqi-RIM Static Staging Buffer A"), // Nhãn bộ đệm Staging A
+                    size: max_bytes as u64, // Kích thước 2MB
+                    usage: wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::COPY_DST, // Cờ cho phép đọc map và làm đích sao chép
+                    mapped_at_creation: false, // Không map ngay khi khởi tạo
+                }); // Kết thúc tạo Staging Buffer A
+
+                // Pre-allocate Staging Buffer B tĩnh (2MB) cho Ping-Pong Double Buffering
+                let staging_buffer_b = device.create_buffer(&wgpu::BufferDescriptor { // Khởi tạo Staging Buffer B
+                    label: Some("Xiangqi-RIM Static Staging Buffer B"), // Nhãn bộ đệm Staging B
+                    size: max_bytes as u64, // Kích thước 2MB
+                    usage: wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::COPY_DST, // Cờ cho phép đọc map và làm đích sao chép
+                    mapped_at_creation: false, // Không map ngay khi khởi tạo
+                }); // Kết thúc tạo Staging Buffer B
+
+                // Pre-allocate 64KB Score Storage Buffer nén (16,384 x 4 bytes i32)
+                let max_score_bytes = 16384 * 4; // 65,536 bytes = 64KB
+                let score_storage = device.create_buffer(&wgpu::BufferDescriptor { // Khởi tạo Score Storage Buffer
+                    label: Some("Xiangqi-RIM Compact Score Storage Buffer"), // Nhãn Score Storage
+                    size: max_score_bytes as u64, // Kích thước 64KB
+                    usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_SRC | wgpu::BufferUsages::COPY_DST, // Cờ Storage và Copy
+                    mapped_at_creation: false, // Không map ngay khi tạo
+                }); // Kết thúc tạo Score Storage
+
+                // Pre-allocate 64KB Score Staging Buffer A nén (64KB)
+                let score_staging_a = device.create_buffer(&wgpu::BufferDescriptor { // Khởi tạo Score Staging Buffer A
+                    label: Some("Xiangqi-RIM Compact Score Staging A"), // Nhãn Score Staging A
+                    size: max_score_bytes as u64, // Kích thước 64KB
+                    usage: wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::COPY_DST, // Cờ Map Read và Copy DST
+                    mapped_at_creation: false, // Không map ngay khi tạo
+                }); // Kết thúc tạo Score Staging A
+
+                // Pre-allocate 64KB Score Staging Buffer B nén (64KB)
+                let score_staging_b = device.create_buffer(&wgpu::BufferDescriptor { // Khởi tạo Score Staging Buffer B
+                    label: Some("Xiangqi-RIM Compact Score Staging B"), // Nhãn Score Staging B
+                    size: max_score_bytes as u64, // Kích thước 64KB
+                    usage: wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::COPY_DST, // Cờ Map Read và Copy DST
+                    mapped_at_creation: false, // Không map ngay khi tạo
+                }); // Kết thúc tạo Score Staging B
+
+                // Nạp tệp trọng số XRNN v1 (33.57MB) từ đĩa
+                let weight_bytes = std::fs::read("data/nnue_weights_gen6.bin").unwrap_or_else(|_| vec![0u8; 33571504]);
+                let weight_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                    label: Some("Xiangqi-RIM NNUE Weight Buffer 33.57MB"),
+                    contents: &weight_bytes,
+                    usage: wgpu::BufferUsages::STORAGE,
+                });
+
+                // Khởi tạo BindGroup tĩnh duy nhất liên kết cả BatchBuffer (0), ScoreBuffer (1), và WeightBuffer (2)
+                let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor { // Tạo BindGroup tĩnh
+                    label: Some("Xiangqi-RIM Static BindGroup"), // Nhãn BindGroup tĩnh
+                    layout: &layout, // Gán BindGroupLayout
+                    entries: &[
+                        wgpu::BindGroupEntry { // Binding 0: Storage Buffer 2MB
+                            binding: 0, // Binding 0
+                            resource: storage_buffer.as_entire_binding(), // Liên kết với Storage Buffer tĩnh
+                        },
+                        wgpu::BindGroupEntry { // Binding 1: Score Storage Buffer nén 64KB
+                            binding: 1, // Binding 1
+                            resource: score_storage.as_entire_binding(), // Liên kết với Score Storage Buffer nén
+                        },
+                        wgpu::BindGroupEntry { // Binding 2: Weight Storage Buffer NNUE 33.57MB
+                            binding: 2, // Binding 2
+                            resource: weight_buffer.as_entire_binding(), // Liên kết với Weight Storage Buffer NNUE
+                        },
+                    ], // Kết thúc mảng entries
+                }); // Kết thúc tạo BindGroup tĩnh
+
+                let adapter_name = info.name.clone(); // Đọc tên phần cứng GPU Adapter
+                context = Some(Arc::new(GpuContext { // Tạo bản thể GpuContext dùng chung
+                    device, // Gán thiết bị device
+                    queue, // Gán hàng đợi queue
+                    pipeline, // Gán đường ống pipeline
+                    layout, // Gán bố cục layout
+                    storage_buffer, // Gán bộ đệm Storage tĩnh
+                    staging_buffer_a, // Gán bộ đệm Staging A
+                    staging_buffer_b, // Gán bộ đệm Staging B
+                    score_storage, // Gán bộ đệm Score Storage 64KB
+                    score_staging_a, // Gán bộ đệm Score Staging A 64KB
+                    score_staging_b, // Gán bộ đệm Score Staging B 64KB
+                    weight_buffer, // Gán bộ đệm Weight Buffer 33.57MB
+                    bind_group, // Gán nhóm liên kết BindGroup tĩnh
+                    ping_pong: AtomicBool::new(false), // Khởi tạo cờ ping_pong false
+                    name: adapter_name, // Gán tên hiển thị name
+                })); // Kết thúc khởi tạo GpuContext
+            } // Kết thúc khối if Ok device
+        } // Kết thúc khối if Some adapter
+
+        let status = if context.is_some() { Status::Ready } else { Status::Active }; // Đặt trạng thái Ready nếu có GPU
         Self { // Trả về bản thể Device mới
             guard: Guard::new(), // Khởi tạo VRAM Guard 512MB
             backend, // Gán backend đã phát hiện
             status, // Gán trạng thái khởi tạo
             pad: [0u8; 6], // Khởi tạo mảng đệm pad 6 byte zero
-            extra: [0u8; 56], // Khởi tạo mảng đệm extra 56 byte zero
+            context, // Gán con trỏ ngữ cảnh context GPU
+            extra: [0u8; 48], // Khởi tạo mảng đệm extra 48 byte zero
         } // Kết thúc trả về struct
     } // Kết thúc hàm init
+
+    /// Trả về tham chiếu ngữ cảnh GPU Context nếu phần cứng khả dụng.
+    pub fn context(&self) -> Option<Arc<GpuContext>> { // Hàm context lấy con trỏ GpuContext
+        self.context.clone() // Sao chép con trỏ đếm tham chiếu Arc
+    } // Kết thúc hàm context
+
+    /// Trả về tên hiển thị thực tế của card đồ họa GPU phần cứng.
+    pub fn adapter_name(&self) -> String { // Hàm adapter_name lấy tên GPU
+        if let Some(ref ctx) = self.context { // Nếu có ngữ cảnh GPU phần cứng
+            ctx.name.clone() // Trả về tên card đồ họa thực tế (ví dụ: Apple M1/Intel/Nvidia)
+        } else { // Nếu là CPU fallback
+            "CPU SIMD Vector Engine".to_string() // Trả về chuỗi tên CPU
+        } // Kết thúc kiểm tra context
+    } // Kết thúc hàm adapter_name
 
     /// Trả về loại backend phần cứng đang được thiết bị sử dụng.
     #[inline(always)] // Inline hàm backend
@@ -101,9 +339,7 @@ impl Device { // Khối triển khai các phương thức cho Device
 
     /// Đặt lại toàn bộ trạng thái của thiết bị GPU Adapter và xóa Guard.
     pub fn reset(&mut self) -> Result<(), Status> { // Hàm reset đặt lại thiết bị
-        self.backend = Backend::detect(); // Phát hiện lại backend phần cứng
-        self.status = Status::Ready; // Đưa trạng thái về Ready
-        self.guard.wipe(); // Đặt lại VRAM Guard về 0
+        *self = Self::init(); // Khởi tạo lại thiết bị mới
         Ok(()) // Trả về thành công Ok
     } // Kết thúc hàm reset
 

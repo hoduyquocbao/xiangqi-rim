@@ -28,7 +28,7 @@ except ImportError:
 
 # 1. Khởi tạo Token HuggingFace & Cấu hình Hub
 token = os.environ.get("HF_TOKEN", "")
-repo = "hoduyquocbao/xiangqi-nnue-dataset"
+repo = "hoduyquocbao/xiangqi-r1-dataset"
 
 try:
     import torch
@@ -246,7 +246,7 @@ Mỗi mẫu dữ liệu chứa đầy đủ 3 biểu diễn:
 
 def mine(count: int) -> list:
     """Khai thác dữ liệu cờ tự đấu tốc độ tối đa sử dụng Rust Engine hoặc CPU Multi-processing."""
-    binary = "target/release/examples/17_mine_dataset"
+    binary = "target/release/examples/26_ultimate_jrcp5_miner"
     if os.path.exists(binary) and os.access(binary, os.X_OK):
         print(f"⚡ [RUST ENGINE] Đang kích hoạt Rust Binary compiled '{binary}' (>50,000 samples/s)...")
         env = dict(os.environ, MATCH_COUNT=str(count))

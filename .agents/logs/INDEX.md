@@ -13,3 +13,4 @@
 - [`session_active_202608070038_challenger_m1_2_2.md`](file://.agents/logs/session_active_202608070038_challenger_m1_2_2.md) — Lịch sử phiên làm việc Challenger M1.2.2.
 - [`session_active_202608070037_reviewer_m1_2_1.md`](file://.agents/logs/session_active_202608070037_reviewer_m1_2_1.md) — Lịch sử phiên làm việc Reviewer M1.2.1.
 - [`session_active_202608061656.md`](file://.agents/logs/session_active_202608061656.md) — Lịch sử phiên làm việc ban đầu.
+- [`session_active_202608102145.md`](file://.agents/logs/session_active_202608102145.md) — Dynamic Form Controls, 5x CPU Minimax Speedup & 43/43 Tests Audit

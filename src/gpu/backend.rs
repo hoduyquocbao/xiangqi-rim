@@ -17,52 +17,30 @@ pub enum Backend { // Định nghĩa enum Backend với các biến thể phần
 } // Kết thúc định nghĩa enum Backend
 
 impl Backend { // Khối triển khai các phương thức hỗ trợ cho enum Backend
-    /// Phương thức `detect`: Tự động nhận diện phần cứng có sẵn qua FFI Probe Cascade.
-    #[inline(always)] // Chỉ thị trình biên dịch inline hàm hot path
-    pub fn detect() -> Self { // Định nghĩa hàm khởi tạo tự động phát hiện backend
-        #[cfg(target_os = "macos")] // Khối phát hiện cho macOS
-        { // Bắt đầu khối macOS
-            if Self::probe("/System/Library/Frameworks/Metal.framework/Metal") { // Thử Metal framework
-                return Self::Metal; // Trả về Metal nếu phát hiện thành công
-            } // Kết thúc thử Metal
-            if Self::probe("/System/Library/Frameworks/Metal.framework/Versions/Current/Metal") { // Thử vị trí Metal thứ hai
-                return Self::Metal; // Trả về Metal
-            } // Kết thúc vị trí hai
-        } // Kết thúc khối macOS
-
-        #[cfg(unix)] // Khối phát hiện cho môi trường Unix/Linux
-        { // Bắt đầu khối Unix
-            if Self::probe("/System/Library/Frameworks/OpenCL.framework/OpenCL") // Thử OpenCL macOS
-                || Self::probe("libOpenCL.so") // Thử OpenCL Linux .so
-                || Self::probe("libOpenCL.so.1") // Thử OpenCL Linux version 1
-            { // Nếu khớp OpenCL
-                return Self::Opencl; // Trả về Opencl
-            } // Kết thúc thử OpenCL
-
-            if Self::probe("libwgpu_native.so") || Self::probe("libwgpu.so") { // Thử driver Wgpu
-                return Self::Wgpu; // Trả về Wgpu
-            } // Kết thúc thử Wgpu
-        } // Kết thúc khối Unix
-
-        Self::Cpu // Mặc định hạ cấp về CPU SIMD fallback
+    /// Phương thức `detect`: Tự động nhận diện phần cứng GPU thực tế thông qua wgpu Instance.
+    pub fn detect() -> Self { // Định nghĩa hàm khởi tạo tự động phát hiện backend phần cứng GPU
+        let instance = wgpu::Instance::new(&wgpu::InstanceDescriptor { // Khởi tạo wgpu Instance mới
+            backends: wgpu::Backends::all(), // Cho phép tất cả các backend phần cứng GPU (Metal, Vulkan, DX12, Gl)
+            ..Default::default() // Sử dụng các giá trị mặc định cho các cấu hình khác
+        }); // Kết thúc khởi tạo Instance
+        let adapter = pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions { // Yêu cầu Adapter GPU bất đồng bộ bằng pollster
+            power_preference: wgpu::PowerPreference::HighPerformance, // Ưu tiên card đồ họa hiệu năng cao dGPU/iGPU
+            compatible_surface: None, // Không yêu cầu bề mặt hiển thị GUI surface (dành cho Compute)
+            force_fallback_adapter: false, // Không ép buộc sử dụng CPU fallback adapter
+        })); // Kết thúc yêu cầu Adapter
+        if let Some(adapter) = adapter { // Nếu phát hiện được phần cứng GPU Adapter hợp lệ
+            let info = adapter.get_info(); // Lấy thông tin chi tiết về phần cứng GPU Adapter
+            match info.backend { // Kiểm tra loại backend thực tế của GPU Adapter
+                wgpu::Backend::Metal => Self::Metal, // Metal Native trên Apple Silicon / macOS
+                wgpu::Backend::Vulkan => Self::Opencl, // Vulkan / OpenCL trên Linux / Windows / Android
+                wgpu::Backend::Dx12 => Self::Wgpu, // DirectX12 trên Windows
+                wgpu::Backend::Gl => Self::Wgpu, // OpenGL / WebGPU fallback
+                _ => Self::Wgpu, // Mặc định trả về Wgpu
+            } // Kết thúc match backend
+        } else { // Nếu không tìm thấy GPU Adapter hợp lệ
+            Self::Cpu // Hạ cấp an toàn về CPU SIMD fallback
+        } // Kết thúc kiểm tra adapter
     } // Kết thúc hàm detect
-
-    /// Phương thức phụ `probe`: Thử nghiệm nạp động thư viện qua C-ABI dlopen.
-    fn probe(path: &str) -> bool { // Hàm probe kiểm tra sự tồn tại của thư viện động
-        #[cfg(unix)] // Chỉ hỗ trợ trên Unix/macOS
-        { // Khối xử lý Unix
-            let mut bytes = path.as_bytes().to_vec(); // Chuyển chuỗi path thành mảng byte
-            bytes.push(0); // Thêm ký tự kết thúc chuỗi C null-terminator
-            unsafe { // Khối FFI không an toàn
-                let handle = dlopen(bytes.as_ptr() as *const i8, 1); // Gọi dlopen với cờ RTLD_LAZY (1)
-                if !handle.is_null() { // Nếu con trỏ trả về khác null
-                    dlclose(handle); // Đóng handle thư viện động
-                    return true; // Trả về true xác nhận thư viện tồn tại
-                } // Kết thúc kiểm tra handle
-            } // Kết thúc khối unsafe
-        } // Kết thúc khối Unix
-        false // Trả về false nếu không nạp được
-    } // Kết thúc hàm probe
 
     /// Phương thức `name`: Trả về tên hiển thị tĩnh dạng chuỗi của backend.
     #[inline(always)] // Inline phương thức lấy tên hiển thị
@@ -104,9 +82,3 @@ impl Backend { // Khối triển khai các phương thức hỗ trợ cho enum B
         } // Kết thúc biểu thức match điểm số
     } // Kết thúc phương thức speed
 } // Kết thúc khối impl Backend
-
-#[cfg(unix)] // Định nghĩa FFI C-ABI bên ngoài cho hệ điều hành Unix/macOS
-extern "C" { // Khối FFI extern C
-    fn dlopen(path: *const i8, mode: i32) -> *mut std::ffi::c_void; // Chữ ký hàm C dlopen
-    fn dlclose(handle: *mut std::ffi::c_void) -> i32; // Chữ ký hàm C dlclose
-} // Kết thúc khối extern C

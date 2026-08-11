@@ -1,0 +1,1098 @@
+import json
+import os
+
+from build_sample_dataset import sample_games_json
+
+html_template = """<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Xiangqi-R1 Studio 32D Trajectory Inspector & Analytics Suite v5.0</title>
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600;700&family=Inter:wght@300;400;500;600;700;800&family=Noto+Serif+TC:wght@600;700;900&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-main: #060911;
+            --bg-card: #0d1322;
+            --bg-card-border: #1e293b;
+            --text-main: #f8fafc;
+            --text-muted: #94a3b8;
+            --accent-emerald: #10b981;
+            --accent-cyan: #06b6d4;
+            --accent-amber: #f59e0b;
+            --accent-red: #ef4444;
+            --accent-purple: #a855f7;
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: var(--bg-main);
+            color: var(--text-main);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .font-mono { font-family: 'Fira Code', monospace; }
+        .font-xiangqi { font-family: 'Noto Serif TC', serif; }
+
+        ::-webkit-scrollbar { width: 8px; height: 8px; }
+        ::-webkit-scrollbar-track { background: #060911; }
+        ::-webkit-scrollbar-thumb { background: #1e293b; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #334155; }
+
+        header {
+            background-color: rgba(13, 19, 34, 0.95);
+            backdrop-filter: blur(12px);
+            border-bottom: 1px solid var(--bg-card-border);
+            position: sticky; top: 0; z-index: 50;
+            padding: 0.75rem 1.5rem;
+        }
+
+        .header-container {
+            max-width: 1600px; margin: 0 auto;
+            display: flex; flex-wrap: wrap; align-items: center;
+            justify-content: space-between; gap: 1rem;
+        }
+
+        .logo-box { display: flex; align-items: center; gap: 0.75rem; }
+
+        .logo-icon {
+            width: 44px; height: 44px; border-radius: 12px;
+            background: linear-gradient(135deg, #f59e0b, #ef4444);
+            display: flex; align-items: center; justify-content: center;
+            color: #fff; font-size: 1.35rem; font-weight: 900;
+            box-shadow: 0 4px 14px rgba(239, 68, 68, 0.4);
+        }
+
+        .header-title h1 {
+            font-size: 1.15rem; font-weight: 800;
+            background: linear-gradient(90deg, #fde68a, #6ee7b7, #67e8f9);
+            -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+        }
+
+        .header-title p {
+            font-size: 0.75rem; color: var(--text-muted);
+            display: flex; align-items: center; gap: 0.5rem;
+        }
+
+        .badge-live {
+            display: inline-block; width: 8px; height: 8px;
+            border-radius: 50%; background-color: #10b981;
+            box-shadow: 0 0 8px #10b981;
+        }
+
+        .btn-group { display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap; }
+
+        .btn {
+            padding: 0.45rem 0.85rem; font-size: 0.75rem; font-weight: 600;
+            border-radius: 8px; cursor: pointer; border: 1px solid transparent;
+            transition: all 0.2s ease; display: inline-flex; align-items: center; gap: 0.4rem;
+            user-select: none;
+        }
+
+        .btn-secondary { background-color: #1e293b; color: #e2e8f0; border-color: #334155; }
+        .btn-secondary:hover { background-color: #334155; color: #fff; }
+
+        .btn-primary { background-color: #059669; color: #ffffff; box-shadow: 0 4px 12px rgba(5, 150, 105, 0.3); }
+        .btn-primary:hover { background-color: #10b981; }
+
+        .btn-purple { background-color: #7e22ce; color: #ffffff; box-shadow: 0 4px 12px rgba(126, 34, 206, 0.3); }
+        .btn-purple:hover { background-color: #9333ea; }
+
+        main {
+            max-width: 1600px; width: 100%; margin: 0 auto;
+            padding: 1.25rem; display: flex; flex-direction: column; gap: 1.25rem;
+        }
+
+        .status-bar {
+            display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 1rem;
+        }
+
+        .card {
+            background-color: rgba(13, 19, 34, 0.85);
+            border: 1px solid var(--bg-card-border);
+            border-radius: 16px; padding: 1.25rem;
+            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.4);
+        }
+
+        .meta-row {
+            display: flex; justify-content: space-between;
+            font-size: 0.75rem; font-family: 'Fira Code', monospace; margin-top: 0.35rem;
+        }
+
+        .meta-label { color: #64748b; }
+        .meta-val { font-weight: 700; }
+
+        .select-input {
+            width: 100%; background-color: #060911; border: 1px solid #334155;
+            border-radius: 8px; color: #f8fafc; padding: 0.5rem; font-size: 0.8rem;
+            outline: none; cursor: pointer;
+        }
+        .select-input:focus { border-color: #10b981; }
+
+        .layout-grid { display: grid; grid-template-columns: 1fr; gap: 1.25rem; }
+
+        @media (min-width: 1100px) {
+            .layout-grid { grid-template-columns: 5fr 7fr; }
+        }
+
+        .xq-grid {
+            display: grid; grid-template-columns: repeat(9, 1fr); grid-template-rows: repeat(10, 1fr);
+            aspect-ratio: 9 / 10; background: #090d16; border: 2px solid #334155;
+            border-radius: 12px; overflow: hidden; box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.6);
+            position: relative;
+        }
+
+        .xq-cell {
+            border: 1px solid #1e293b; display: flex; align-items: center;
+            justify-content: center; position: relative; user-select: none;
+        }
+
+        .piece {
+            width: 86%; height: 86%; border-radius: 50%; display: flex;
+            align-items: center; justify-content: center; font-size: 1.3rem; font-weight: 900;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.5); z-index: 10;
+        }
+
+        .piece-red { background: linear-gradient(135deg, #ef4444 0%, #991b1b 100%); color: #fef2f2; border: 2px solid #fca5a5; }
+        .piece-black { background: linear-gradient(135deg, #334155 0%, #0f172a 100%); color: #38bdf8; border: 2px solid #7dd3fc; }
+
+        .bg-src { background-color: rgba(245, 158, 11, 0.25) !important; }
+        .bg-dst { background-color: rgba(16, 185, 129, 0.25) !important; }
+        .piece-src { box-shadow: 0 0 0 3px #f59e0b; }
+        .piece-dst { box-shadow: 0 0 0 3px #10b981; }
+
+        /* Sparkline Eval Chart */
+        .sparkline-container {
+            height: 48px; display: flex; align-items: flex-end; gap: 2px;
+            background-color: #060911; border: 1px solid #1e293b; border-radius: 8px;
+            padding: 4px; margin-top: 0.75rem; overflow-x: auto;
+        }
+
+        .sparkline-bar {
+            flex: 1; min-width: 4px; border-radius: 2px; cursor: pointer;
+            transition: all 0.15s ease; position: relative;
+        }
+        .sparkline-bar:hover { opacity: 0.8; filter: brightness(1.2); }
+        .sparkline-bar.active { outline: 2px solid #fff; z-index: 5; }
+
+        .dim-card {
+            background-color: rgba(13, 19, 34, 0.85);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-left-width: 4px; border-radius: 12px; padding: 0.85rem 1rem;
+            margin-bottom: 0.75rem; transition: all 0.2s ease;
+        }
+
+        .dim-grp-1 { border-left-color: #10b981; }
+        .dim-grp-2 { border-left-color: #ef4444; }
+        .dim-grp-3 { border-left-color: #f59e0b; }
+        .dim-grp-4 { border-left-color: #3b82f6; }
+        .dim-grp-5 { border-left-color: #a855f7; }
+        .dim-grp-6 { border-left-color: #ec4899; }
+
+        .dim-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.35rem; }
+        .dim-title { font-size: 0.8rem; font-weight: 700; color: #f1f5f9; }
+        .dim-tag { font-size: 0.65rem; padding: 0.15rem 0.5rem; border-radius: 4px; background-color: #1e293b; color: #94a3b8; font-weight: 500; }
+
+        .dim-body {
+            font-size: 0.75rem; font-family: 'Fira Code', monospace; color: #cbd5e1;
+            white-space: pre-wrap; line-height: 1.5; padding-left: 0.5rem; border-left: 1px solid #334155;
+        }
+
+        .filter-btn {
+            padding: 0.35rem 0.75rem; font-size: 0.7rem; border-radius: 6px;
+            background-color: #1e293b; color: #94a3b8; border: 1px solid transparent; cursor: pointer;
+        }
+        .filter-btn.active { background-color: rgba(16, 185, 129, 0.2); color: #34d399; border-color: rgba(16, 185, 129, 0.4); }
+
+        .search-box {
+            width: 100%; background-color: #060911; border: 1px solid #334155;
+            border-radius: 8px; padding: 0.55rem 0.85rem; font-size: 0.75rem; color: #f8fafc;
+            outline: none; margin-bottom: 1rem;
+        }
+        .search-box:focus { border-color: #10b981; }
+
+        .pre-box {
+            background-color: #060911; border: 1px solid #1e293b; border-radius: 10px;
+            padding: 0.85rem; font-family: 'Fira Code', monospace; font-size: 0.75rem;
+            color: #e2e8f0; white-space: pre-wrap; overflow-y: auto; max-height: 260px;
+        }
+
+        /* Modal styling */
+        .modal-backdrop {
+            position: fixed; inset: 0; background: rgba(0,0,0,0.8); backdrop-filter: blur(6px);
+            display: none; align-items: center; justify-content: center; z-index: 100; p: 1rem;
+        }
+        .modal-content {
+            background: #0d1322; border: 1px solid #334155; border-radius: 16px;
+            width: 100%; max-width: 700px; padding: 1.5rem; display: flex; flex-direction: column; gap: 1rem;
+        }
+
+        /* Candidate Table */
+        .cand-table {
+            width: 100%; border-collapse: collapse; font-size: 0.72rem; font-family: 'Fira Code', monospace;
+            margin-top: 0.5rem;
+        }
+        .cand-table th, .cand-table td {
+            padding: 0.4rem 0.6rem; border: 1px solid #1e293b; text-align: left;
+        }
+        .cand-table th { background: #060911; color: #94a3b8; }
+
+        /* Graveyard */
+        .graveyard-box {
+            display: flex; gap: 0.5rem; flex-wrap: wrap; min-height: 28px; align-items: center;
+            background: #060911; padding: 0.35rem 0.6rem; border-radius: 6px; border: 1px solid #1e293b;
+        }
+        .graveyard-piece {
+            font-size: 0.9rem; font-weight: 800; font-family: 'Noto Serif TC', serif;
+        }
+    </style>
+</head>
+<body>
+
+    <header>
+        <div class="header-container">
+            <div class="logo-box">
+                <div class="logo-icon font-xiangqi">帥</div>
+                <div class="header-title">
+                    <h1>Xiangqi-R1 Studio 32D Trajectory Inspector & Analytics Suite</h1>
+                    <p>
+                        <span>v5.0 Ultimate Multiturn Engine</span>
+                        <span class="badge-live"></span>
+                        <span style="color: #10b981; font-family: 'Fira Code', monospace;">Batch JSONL & Multi-File Support</span>
+                    </p>
+                </div>
+            </div>
+
+            <div class="btn-group">
+                <button onclick="loadDefaultSample()" class="btn btn-secondary">
+                    ⚡ Load 40-Ply Sample Game
+                </button>
+                <label class="btn btn-primary">
+                    📂 Open JSONL File(s)
+                    <input type="file" id="jsonlFileInput" accept=".jsonl,.json,.txt" multiple style="display: none;">
+                </label>
+                <button onclick="openPasteModal()" class="btn btn-purple">
+                    📝 Paste JSONL Text
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <main>
+
+        <!-- Global Batch Dataset Summary Bar -->
+        <div class="status-bar">
+            <!-- Game Selector Card -->
+            <div class="card">
+                <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.5rem;">
+                    <span style="font-size: 0.7rem; font-weight: 700; color: #94a3b8; text-transform: uppercase;">
+                        🎮 Select Game (<span id="totalGamesCount">0</span> Games Loaded)
+                    </span>
+                    <span id="auditBadge" style="font-size: 0.65rem; padding: 0.15rem 0.5rem; border-radius: 9999px; background: rgba(16, 185, 129, 0.2); color: #34d399; border: 1px solid rgba(16, 185, 129, 0.3);">
+                        32/32D Valid ✓
+                    </span>
+                </div>
+
+                <select id="gameSelect" class="select-input" onchange="onGameChange(this.value)">
+                </select>
+
+                <div class="meta-row">
+                    <span class="meta-label">Game ID:</span>
+                    <span id="metaGameId" class="meta-val" style="color: #f59e0b;">-</span>
+                </div>
+                <div class="meta-row">
+                    <span class="meta-label">Total Plies:</span>
+                    <span id="metaPlies" class="meta-val" style="color: #10b981;">-</span>
+                </div>
+                <div class="meta-row">
+                    <span class="meta-label">Outcome:</span>
+                    <span id="metaOutcome" class="meta-val" style="color: #06b6d4;">-</span>
+                </div>
+            </div>
+
+            <!-- Trajectory Step Player & Auto Slideshow -->
+            <div class="card" style="display: flex; flex-direction: column; justify-content: space-between;">
+                <div>
+                    <div style="display: flex; align-items: center; justify-content: space-between;">
+                        <span style="font-size: 0.7rem; font-weight: 700; color: #94a3b8; text-transform: uppercase;">
+                            ♟️ Trajectory Step Player & Sparkline Eval
+                        </span>
+                        <span id="turnCounter" style="font-size: 0.9rem; font-weight: 800; font-family: 'Fira Code', monospace; color: #10b981;">
+                            Turn 1 / 1
+                        </span>
+                    </div>
+
+                    <!-- Sparkline Chart -->
+                    <div id="sparklineChart" class="sparkline-container">
+                        <!-- Bars rendered by JS -->
+                    </div>
+                </div>
+
+                <div style="display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; margin-top: 0.75rem; flex-wrap: wrap;">
+                    <div style="display: flex; gap: 0.4rem;">
+                        <button onclick="jumpToTurn(0)" class="btn btn-secondary" style="padding: 0.35rem 0.6rem;">⏮️ Start</button>
+                        <button onclick="prevTurnStep()" class="btn btn-secondary" style="padding: 0.35rem 0.6rem;">◀ Prev</button>
+                        <button id="playPauseBtn" onclick="toggleAutoPlay()" class="btn btn-primary" style="padding: 0.35rem 0.75rem;">▶ Play</button>
+                        <button onclick="nextTurnStep()" class="btn btn-secondary" style="padding: 0.35rem 0.6rem;">Next ▶</button>
+                        <button onclick="jumpToTurn(-1)" class="btn btn-secondary" style="padding: 0.35rem 0.6rem;">End ⏭️</button>
+                    </div>
+
+                    <div style="display: flex; align-items: center; gap: 0.4rem;">
+                        <span style="font-size: 0.65rem; color: #64748b;">Speed:</span>
+                        <select id="playSpeedSelect" class="select-input" style="padding: 0.25rem; font-size: 0.7rem; width: auto;" onchange="onSpeedChange(this.value)">
+                            <option value="1000">1.0s</option>
+                            <option value="500">0.5s</option>
+                            <option value="2000">2.0s</option>
+                        </select>
+                    </div>
+                </div>
+
+                <input type="range" id="turnSlider" min="1" max="1" value="1" oninput="onSliderMove(this.value)" style="width: 100%; accent-color: #10b981; cursor: pointer; margin-top: 0.5rem;">
+            </div>
+        </div>
+
+        <!-- Main Layout Grid -->
+        <div class="layout-grid">
+
+            <!-- Left: 2D Xiangqi Board, Captured Graveyard & Candidates Table -->
+            <div style="display: flex; flex-direction: column; gap: 1.25rem;">
+                
+                <!-- 2D Xiangqi Board Card -->
+                <div class="card">
+                    <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.75rem;">
+                        <span style="font-size: 0.85rem; font-weight: 800;">♟️ Bàn Cờ 2D Trực Quan & Tù Binh</span>
+                        <span id="turnSideBadge" style="font-size: 0.7rem; padding: 0.2rem 0.6rem; border-radius: 9999px; background: rgba(239, 68, 68, 0.2); color: #fca5a5; border: 1px solid rgba(239, 68, 68, 0.3);">
+                            Lượt Đỏ
+                        </span>
+                    </div>
+
+                    <div id="xiangqiBoardGrid" class="xq-grid"></div>
+
+                    <!-- Captured Pieces Graveyard -->
+                    <div style="margin-top: 0.75rem; display: flex; flex-direction: column; gap: 0.4rem;">
+                        <div style="display: flex; align-items: center; justify-content: space-between; font-size: 0.7rem;">
+                            <span style="color: #ef4444; font-weight: 700;">🔴 Tù Binh Đỏ Bị Ăn:</span>
+                            <div id="redGraveyard" class="graveyard-box"></div>
+                        </div>
+                        <div style="display: flex; align-items: center; justify-content: space-between; font-size: 0.7rem;">
+                            <span style="color: #38bdf8; font-weight: 700;">🔵 Tù Binh Đen Bị Ăn:</span>
+                            <div id="blackGraveyard" class="graveyard-box"></div>
+                        </div>
+                    </div>
+
+                    <div id="fenDisplay" style="font-size: 0.65rem; font-family: 'Fira Code', monospace; color: #64748b; margin-top: 0.75rem; word-break: break-all;"></div>
+                </div>
+
+                <!-- Candidates Move Matrix Card -->
+                <div class="card">
+                    <div style="font-size: 0.85rem; font-weight: 800; border-bottom: 1px solid #1e293b; padding-bottom: 0.5rem; margin-bottom: 0.5rem;">
+                        🎯 Ma Trận Ứng Viên Candidate Moves ([25/32])
+                    </div>
+                    <div id="candidatesTableContainer">
+                        <table class="cand-table">
+                            <thead>
+                                <tr>
+                                    <th>Move</th>
+                                    <th>Diễn giải</th>
+                                    <th>Eval</th>
+                                    <th>Ý đồ / Intent</th>
+                                </tr>
+                            </thead>
+                            <tbody id="candidatesTableBody">
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- Markdown Dialogue Preview Card -->
+                <div class="card">
+                    <div style="font-size: 0.85rem; font-weight: 800; border-bottom: 1px solid #1e293b; padding-bottom: 0.5rem; margin-bottom: 0.75rem;">
+                        💬 Preview Markdown Hội Thoại (LLM Format)
+                    </div>
+
+                    <div style="margin-bottom: 0.75rem;">
+                        <div style="font-size: 0.7rem; font-weight: 700; color: #f59e0b; font-family: 'Fira Code', monospace; margin-bottom: 0.25rem;">
+                            👤 USER INPUT:
+                        </div>
+                        <div id="userPromptText" class="pre-box"></div>
+                    </div>
+
+                    <div>
+                        <div style="font-size: 0.7rem; font-weight: 700; color: #10b981; font-family: 'Fira Code', monospace; margin-bottom: 0.25rem;">
+                            🤖 ASSISTANT RESPONSE:
+                        </div>
+                        <div id="assistantResponseText" class="pre-box" style="max-height: 280px;"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Right: 32D Thought Inspector -->
+            <div class="card">
+                <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.25rem;">
+                    <span style="font-size: 0.95rem; font-weight: 800;">
+                        🧠 Mạch Suy Tưởng 32 Chiều Kích (&lt;thought&gt; Block)
+                    </span>
+                    <span id="dimComplianceBadge" style="font-size: 0.65rem; padding: 0.15rem 0.5rem; border-radius: 4px; background: rgba(16, 185, 129, 0.2); color: #34d399;">
+                        32/32 Complete
+                    </span>
+                </div>
+                <div style="font-size: 0.75rem; color: #94a3b8; margin-bottom: 0.75rem;">
+                    Phân tích chi tiết 32 chiều kích dưới bối cảnh JRCP 5.0
+                </div>
+
+                <!-- Filter Chips -->
+                <div style="display: flex; flex-wrap: wrap; gap: 0.4rem; margin-bottom: 0.75rem;">
+                    <button class="filter-btn active" onclick="filter32D('all', this)">Tất cả (32)</button>
+                    <button class="filter-btn" onclick="filter32D('grp1', this)">Nhận thức (1-6)</button>
+                    <button class="filter-btn" onclick="filter32D('grp2', this)">Đe dọa (7-12)</button>
+                    <button class="filter-btn" onclick="filter32D('grp3', this)">Chiến thuật (13-18)</button>
+                    <button class="filter-btn" onclick="filter32D('grp4', this)">Binh pháp (19-22)</button>
+                    <button class="filter-btn" onclick="filter32D('grp5', this)">Quyết định (23-28)</button>
+                    <button class="filter-btn" onclick="filter32D('grp6', this)">Luật đấu (29-32)</button>
+                </div>
+
+                <!-- Search Box -->
+                <input type="text" id="dimSearchInput" oninput="search32D(this.value)" placeholder="🔍 Tìm kiếm từ khóa trong 32 chiều kích (ví dụ: 'Pháo', 'Sĩ', 'Bẫy', 'Candidates')..." class="search-box">
+
+                <!-- 32D Cards Container -->
+                <div id="dimsCardsContainer" style="overflow-y: auto; max-height: 750px; padding-right: 0.25rem;">
+                </div>
+            </div>
+
+        </div>
+
+        <!-- Raw JSON Footer Box -->
+        <div class="card">
+            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.5rem;">
+                <span style="font-size: 0.85rem; font-weight: 800;">📄 Raw JSONL Record Inspector</span>
+                <button onclick="copyRawRecordJson()" class="btn btn-secondary" style="font-size: 0.65rem; padding: 0.25rem 0.5rem;">📋 Copy Raw JSON</button>
+            </div>
+            <pre id="rawRecordJsonBox" class="pre-box" style="max-height: 180px; color: #a7f3d0;"></pre>
+        </div>
+
+    </main>
+
+    <!-- Paste Modal -->
+    <div id="pasteModal" class="modal-backdrop">
+        <div class="modal-content">
+            <div style="display: flex; align-items: center; justify-content: space-between;">
+                <span style="font-size: 0.9rem; font-weight: 800;">📝 Paste Raw JSONL Text</span>
+                <button onclick="closePasteModal()" class="btn btn-secondary" style="padding: 0.2rem 0.5rem;">✕</button>
+            </div>
+            <textarea id="pasteTextarea" placeholder="Dán nội dung JSONL vào đây (mỗi dòng là 1 JSON record)..." style="width: 100%; height: 260px; background: #060911; border: 1px solid #334155; border-radius: 8px; color: #f8fafc; padding: 0.75rem; font-family: 'Fira Code', monospace; font-size: 0.75rem; outline: none;"></textarea>
+            <div style="display: flex; justify-content: flex-end; gap: 0.5rem;">
+                <button onclick="closePasteModal()" class="btn btn-secondary">Hủy</button>
+                <button onclick="processPastedJsonl()" class="btn btn-primary">⚡ Nạp Dữ Liệu</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- JavaScript Inspector Engine v5 -->
+    <script>
+        let loadedGamesList = [];
+        let activeGameIndex = 0;
+        let activeTurnIndex = 0;
+        let autoPlayTimer = null;
+        let autoPlaySpeed = 1000;
+
+        const PIECES_MAP = {
+            'r': { name: '車', side: 'black' }, 'n': { name: '馬', side: 'black' }, 'b': { name: '象', side: 'black' },
+            'a': { name: '士', side: 'black' }, 'k': { name: '將', side: 'black' }, 'c': { name: '砲', side: 'black' },
+            'p': { name: '卒', side: 'black' },
+            'R': { name: '車', side: 'red' }, 'N': { name: '馬', side: 'red' }, 'B': { name: '相', side: 'red' },
+            'A': { name: '仕', side: 'red' }, 'K': { name: '帥', side: 'red' }, 'C': { name: '炮', side: 'red' },
+            'P': { name: '兵', side: 'red' }
+        };
+
+        const INITIAL_PIECE_COUNTS = {
+            'R': 2, 'N': 2, 'B': 2, 'A': 2, 'K': 1, 'C': 2, 'P': 5,
+            'r': 2, 'n': 2, 'b': 2, 'a': 2, 'k': 1, 'c': 2, 'p': 5
+        };
+
+        const DEFAULT_SAMPLE_DATASET = __DEFAULT_SAMPLE_DATASET_JSON__;
+
+        // Batch File Listener (Supports multiple files!)
+        document.getElementById('jsonlFileInput').addEventListener('change', function(e) {
+            const files = Array.from(e.target.files);
+            if (!files || files.length === 0) return;
+
+            let parsedGames = [];
+            let filesProcessed = 0;
+
+            files.forEach(file => {
+                const reader = new FileReader();
+                reader.onload = function(evt) {
+                    try {
+                        const text = evt.target.result;
+                        const lines = text.split(/\\r?\\n/).filter(l => l.trim().length > 0);
+                        lines.forEach((line, lineIdx) => {
+                            try {
+                                const obj = JSON.parse(line);
+                                if (obj.messages && Array.isArray(obj.messages)) {
+                                    parsedGames.push(obj);
+                                }
+                            } catch (e) {}
+                        });
+                    } catch (err) {}
+
+                    filesProcessed++;
+                    if (filesProcessed === files.length) {
+                        if (parsedGames.length === 0) {
+                            alert("❌ Không tìm thấy bản ghi JSON valid nào trong (các) file đã chọn!");
+                            return;
+                        }
+                        loadedGamesList = parsedGames;
+                        populateGameSelector();
+                        alert("✅ Đã nạp thành công " + parsedGames.length + " ván cờ từ " + files.length + " file!");
+                    }
+                };
+                reader.readAsText(file);
+            });
+        });
+
+        function openPasteModal() {
+            document.getElementById('pasteModal').style.display = 'flex';
+        }
+        function closePasteModal() {
+            document.getElementById('pasteModal').style.display = 'none';
+        }
+
+        function processPastedJsonl() {
+            const rawText = document.getElementById('pasteTextarea').value;
+            if (!rawText.trim()) return;
+
+            const lines = rawText.split(/\\r?\\n/).filter(l => l.trim().length > 0);
+            const parsedGames = [];
+
+            lines.forEach(line => {
+                try {
+                    const obj = JSON.parse(line);
+                    if (obj.messages && Array.isArray(obj.messages)) {
+                        parsedGames.push(obj);
+                    }
+                } catch (e) {}
+            });
+
+            if (parsedGames.length === 0) {
+                alert("❌ Không tìm thấy JSON Record hợp lệ trong văn bản đã dán!");
+                return;
+            }
+
+            loadedGamesList = parsedGames;
+            populateGameSelector();
+            closePasteModal();
+            alert("✅ Đã nạp thành công " + parsedGames.length + " ván cờ từ văn bản dán!");
+        }
+
+        function loadDefaultSample() {
+            loadedGamesList = DEFAULT_SAMPLE_DATASET;
+            populateGameSelector();
+        }
+
+        function populateGameSelector() {
+            const selectEl = document.getElementById('gameSelect');
+            selectEl.innerHTML = '';
+
+            document.getElementById('totalGamesCount').textContent = loadedGamesList.length;
+
+            loadedGamesList.forEach((game, idx) => {
+                const opt = document.createElement('option');
+                opt.value = idx;
+                const gameId = game.game_id || ("Game_" + (idx + 1));
+                const convMsgs = (game.messages || []).filter(m => m.role === 'user' || m.role === 'assistant');
+                const plies = game.total_plies || convMsgs.length;
+                const outcome = game.outcome || "in_progress";
+                opt.textContent = "Game #" + (idx + 1) + " (ID: " + gameId + " — " + plies + " Plies — " + outcome + ")";
+                selectEl.appendChild(opt);
+            });
+
+            activeGameIndex = 0;
+            selectEl.value = 0;
+            loadActiveGame(0);
+        }
+
+        function onGameChange(val) {
+            stopAutoPlay();
+            activeGameIndex = parseInt(val);
+            loadActiveGame(activeGameIndex);
+        }
+
+        function loadActiveGame(index) {
+            const game = loadedGamesList[index];
+            if (!game) return;
+
+            const convMsgs = (game.messages || []).filter(m => m.role === 'user' || m.role === 'assistant');
+            const totalTurns = Math.floor(convMsgs.length / 2);
+
+            document.getElementById('metaGameId').textContent = game.game_id || ("Game_" + (index + 1));
+            document.getElementById('metaPlies').textContent = (game.total_plies || convMsgs.length) + ' plies';
+            document.getElementById('metaOutcome').textContent = game.outcome || 'in_progress';
+
+            const slider = document.getElementById('turnSlider');
+            slider.min = 1;
+            slider.max = Math.max(1, totalTurns);
+            slider.value = 1;
+
+            // Build Sparkline Chart
+            renderSparklineChart(convMsgs);
+
+            activeTurnIndex = 0;
+            renderTurnStep(0);
+        }
+
+        function renderSparklineChart(convMsgs) {
+            const chartEl = document.getElementById('sparklineChart');
+            chartEl.innerHTML = '';
+
+            const totalTurns = Math.floor(convMsgs.length / 2);
+            for (let t = 0; t < totalTurns; t++) {
+                const assistantMsg = convMsgs[t * 2 + 1];
+                let cpEval = 0;
+                if (assistantMsg) {
+                    const match = assistantMsg.content.match(/CENTIPAWN TỔNG HỢP:\s*([+-]?\d+)cp/i);
+                    if (match) cpEval = parseInt(match[1]);
+                }
+
+                const bar = document.createElement('div');
+                bar.className = 'sparkline-bar';
+                bar.dataset.turn = t;
+                bar.title = "Turn " + (t + 1) + ": " + cpEval + "cp";
+
+                // Height normalized between 10% and 100%
+                const absVal = Math.min(Math.abs(cpEval), 500);
+                const heightPercent = Math.max(15, Math.floor((absVal / 500) * 100));
+                bar.style.height = heightPercent + '%';
+
+                if (cpEval >= 0) {
+                    bar.style.background = '#10b981';
+                } else {
+                    bar.style.background = '#06b6d4';
+                }
+
+                bar.onclick = function() {
+                    jumpToTurn(t);
+                };
+
+                chartEl.appendChild(bar);
+            }
+        }
+
+        function highlightSparklineBar(turnIdx) {
+            document.querySelectorAll('.sparkline-bar').forEach(b => {
+                if (parseInt(b.dataset.turn) === turnIdx) {
+                    b.classList.add('active');
+                } else {
+                    b.classList.remove('active');
+                }
+            });
+        }
+
+        function onSliderMove(val) {
+            activeTurnIndex = parseInt(val) - 1;
+            renderTurnStep(activeTurnIndex);
+        }
+
+        function jumpToTurn(idx) {
+            const game = loadedGamesList[activeGameIndex];
+            if (!game) return;
+            const convMsgs = (game.messages || []).filter(m => m.role === 'user' || m.role === 'assistant');
+            const totalTurns = Math.floor(convMsgs.length / 2);
+
+            if (idx === -1) idx = totalTurns - 1;
+            activeTurnIndex = Math.max(0, Math.min(idx, totalTurns - 1));
+            document.getElementById('turnSlider').value = activeTurnIndex + 1;
+            renderTurnStep(activeTurnIndex);
+        }
+
+        function prevTurnStep() {
+            if (activeTurnIndex > 0) {
+                activeTurnIndex--;
+                document.getElementById('turnSlider').value = activeTurnIndex + 1;
+                renderTurnStep(activeTurnIndex);
+            }
+        }
+
+        function nextTurnStep() {
+            const game = loadedGamesList[activeGameIndex];
+            if (!game) return;
+            const convMsgs = (game.messages || []).filter(m => m.role === 'user' || m.role === 'assistant');
+            const totalTurns = Math.floor(convMsgs.length / 2);
+
+            if (activeTurnIndex < totalTurns - 1) {
+                activeTurnIndex++;
+                document.getElementById('turnSlider').value = activeTurnIndex + 1;
+                renderTurnStep(activeTurnIndex);
+            } else {
+                stopAutoPlay();
+            }
+        }
+
+        function toggleAutoPlay() {
+            if (autoPlayTimer) {
+                stopAutoPlay();
+            } else {
+                startAutoPlay();
+            }
+        }
+
+        function startAutoPlay() {
+            const btn = document.getElementById('playPauseBtn');
+            btn.textContent = '⏸ Pause';
+            btn.classList.replace('btn-primary', 'btn-purple');
+
+            autoPlayTimer = setInterval(() => {
+                const game = loadedGamesList[activeGameIndex];
+                if (!game) return stopAutoPlay();
+                const convMsgs = (game.messages || []).filter(m => m.role === 'user' || m.role === 'assistant');
+                const totalTurns = Math.floor(convMsgs.length / 2);
+
+                if (activeTurnIndex < totalTurns - 1) {
+                    nextTurnStep();
+                } else {
+                    stopAutoPlay();
+                }
+            }, autoPlaySpeed);
+        }
+
+        function stopAutoPlay() {
+            if (autoPlayTimer) {
+                clearInterval(autoPlayTimer);
+                autoPlayTimer = null;
+            }
+            const btn = document.getElementById('playPauseBtn');
+            btn.textContent = '▶ Play';
+            btn.classList.replace('btn-purple', 'btn-primary');
+        }
+
+        function onSpeedChange(val) {
+            autoPlaySpeed = parseInt(val);
+            if (autoPlayTimer) {
+                stopAutoPlay();
+                startAutoPlay();
+            }
+        }
+
+        function renderTurnStep(turnIdx) {
+            const game = loadedGamesList[activeGameIndex];
+            if (!game) return;
+
+            const convMsgs = (game.messages || []).filter(m => m.role === 'user' || m.role === 'assistant');
+            const totalTurns = Math.floor(convMsgs.length / 2);
+
+            document.getElementById('turnCounter').textContent = "Turn " + (turnIdx + 1) + " / " + totalTurns;
+            highlightSparklineBar(turnIdx);
+
+            const userMsg = convMsgs[turnIdx * 2];
+            const assistantMsg = convMsgs[turnIdx * 2 + 1];
+
+            if (!userMsg || !assistantMsg) return;
+
+            document.getElementById('userPromptText').textContent = userMsg.content;
+            document.getElementById('assistantResponseText').textContent = assistantMsg.content;
+
+            let fen = "rnbakabnr/9/1c2c4/p1p1p1p1p/9/9/P1P1P1P1P/4C2C1/9/RNBAKABNR w - - 0 1";
+            const fenMatch = userMsg.content.match(/FEN:\\s*([^\\n]+)/);
+            if (fenMatch) fen = fenMatch[1].trim();
+            document.getElementById('fenDisplay').textContent = "FEN: " + fen;
+
+            const sideMatch = userMsg.content.match(/Lượt\\s*(Đỏ|Đen)\\s*đi/i);
+            const sideText = sideMatch ? sideMatch[1] : (fen.includes(' w ') ? 'Đỏ' : 'Đen');
+            const badge = document.getElementById('turnSideBadge');
+            badge.textContent = "Lượt " + sideText;
+            if (sideText === 'Đỏ') {
+                badge.style.background = "rgba(239, 68, 68, 0.2)";
+                badge.style.color = "#fca5a5";
+                badge.style.borderColor = "rgba(239, 68, 68, 0.3)";
+            } else {
+                badge.style.background = "rgba(14, 165, 233, 0.2)";
+                badge.style.color = "#7dd3fc";
+                badge.style.borderColor = "rgba(14, 165, 233, 0.3)";
+            }
+
+            let bestMove = "";
+            const moveMatch = assistantMsg.content.match(/Chọn\\s+([a-i][0-9][a-i][0-9])/);
+            if (moveMatch) bestMove = moveMatch[1];
+
+            drawXiangqiBoard(fen, bestMove);
+            renderGraveyard(fen);
+            renderCandidatesTable(assistantMsg.content);
+            render32DThoughtCards(assistantMsg.content);
+            document.getElementById('rawRecordJsonBox').textContent = JSON.stringify(game, null, 2);
+        }
+
+        function renderGraveyard(fen) {
+            const currentCounts = { 'R': 0, 'N': 0, 'B': 0, 'A': 0, 'K': 0, 'C': 0, 'P': 0, 'r': 0, 'n': 0, 'b': 0, 'a': 0, 'k': 0, 'c': 0, 'p': 0 };
+            const fenBoard = fen.split(' ')[0];
+
+            for (let i = 0; i < fenBoard.length; i++) {
+                const char = fenBoard[i];
+                if (currentCounts.hasOwnProperty(char)) {
+                    currentCounts[char]++;
+                }
+            }
+
+            const redGraveEl = document.getElementById('redGraveyard');
+            const blackGraveEl = document.getElementById('blackGraveyard');
+            redGraveEl.innerHTML = '';
+            blackGraveEl.innerHTML = '';
+
+            // Red Captured
+            ['R', 'N', 'B', 'A', 'C', 'P'].forEach(p => {
+                const missing = INITIAL_PIECE_COUNTS[p] - (currentCounts[p] || 0);
+                for (let m = 0; m < missing; m++) {
+                    const span = document.createElement('span');
+                    span.className = 'graveyard-piece';
+                    span.style.color = '#ef4444';
+                    span.textContent = PIECES_MAP[p].name;
+                    redGraveEl.appendChild(span);
+                }
+            });
+
+            // Black Captured
+            ['r', 'n', 'b', 'a', 'c', 'p'].forEach(p => {
+                const missing = INITIAL_PIECE_COUNTS[p] - (currentCounts[p] || 0);
+                for (let m = 0; m < missing; m++) {
+                    const span = document.createElement('span');
+                    span.className = 'graveyard-piece';
+                    span.style.color = '#38bdf8';
+                    span.textContent = PIECES_MAP[p].name;
+                    blackGraveEl.appendChild(span);
+                }
+            });
+        }
+
+        function renderCandidatesTable(thoughtText) {
+            const tbody = document.getElementById('candidatesTableBody');
+            tbody.innerHTML = '';
+
+            const candSection = thoughtText.match(/\[25\/32\][^\n]+(?:\n(?!\[26\/32\])[^\n]+)*/);
+            if (!candSection) {
+                tbody.innerHTML = '<tr><td colspan="4" style="color: #64748b; text-align: center;">Chưa tìm thấy khối Candidates [25/32].</td></tr>';
+                return;
+            }
+
+            const lines = candSection[0].split('\\n').filter(l => l.includes('Ứng viên') || l.includes('Candidate'));
+            lines.forEach((line, idx) => {
+                const match = line.match(/\+?\s*Ứng viên\s*\d+:\s*([a-i][0-9][a-i][0-9])?\s*—?\s*([^★\n(]+)?(?:\(([^)]+)\))?/);
+                const tr = document.createElement('tr');
+                if (idx === 0) tr.style.background = 'rgba(16, 185, 129, 0.1)';
+
+                const moveTd = document.createElement('td');
+                moveTd.style.fontWeight = '700';
+                moveTd.style.color = idx === 0 ? '#34d399' : '#e2e8f0';
+                moveTd.textContent = match && match[1] ? match[1] : (idx === 0 ? "★Best" : `Alt #${idx+1}`);
+
+                const descTd = document.createElement('td');
+                descTd.textContent = match && match[2] ? match[2].trim() : line.trim();
+
+                const evalTd = document.createElement('td');
+                evalTd.style.color = '#f59e0b';
+                evalTd.textContent = match && match[3] ? match[3].trim() : '-';
+
+                const intentTd = document.createElement('td');
+                intentTd.style.color = '#94a3b8';
+                intentTd.textContent = idx === 0 ? "Nước đi tối ưu nhất được chọn" : "Ứng viên thay thế";
+
+                tr.appendChild(moveTd);
+                tr.appendChild(descTd);
+                tr.appendChild(evalTd);
+                tr.appendChild(intentTd);
+                tbody.appendChild(tr);
+            });
+        }
+
+        function drawXiangqiBoard(fen, bestMove) {
+            const gridEl = document.getElementById('xiangqiBoardGrid');
+            gridEl.innerHTML = '';
+
+            const fenParts = fen.split(' ');
+            const rows = fenParts[0].split('/');
+
+            let moveSrc = -1, moveDst = -1;
+            if (bestMove && bestMove.length === 4) {
+                const c1 = bestMove.charCodeAt(0) - 'a'.charCodeAt(0);
+                const r1 = parseInt(bestMove[1]);
+                const c2 = bestMove.charCodeAt(2) - 'a'.charCodeAt(0);
+                const r2 = parseInt(bestMove[3]);
+                moveSrc = (9 - r1) * 9 + c1;
+                moveDst = (9 - r2) * 9 + c2;
+            }
+
+            let cellIndex = 0;
+            for (let r = 0; r < 10; r++) {
+                const rowStr = rows[r] || "9";
+                let colIdx = 0;
+
+                for (let i = 0; i < rowStr.length; i++) {
+                    const char = rowStr[i];
+                    if (!isNaN(char)) {
+                        const count = parseInt(char);
+                        for (let e = 0; e < count; e++) {
+                            gridEl.appendChild(makeCell(cellIndex === moveSrc, cellIndex === moveDst, null));
+                            colIdx++;
+                            cellIndex++;
+                        }
+                    } else {
+                        const pInfo = PIECES_MAP[char];
+                        gridEl.appendChild(makeCell(cellIndex === moveSrc, cellIndex === moveDst, pInfo));
+                        colIdx++;
+                        cellIndex++;
+                    }
+                }
+            }
+        }
+
+        function makeCell(isSrc, isDst, pieceInfo) {
+            const cell = document.createElement('div');
+            cell.className = 'xq-cell';
+            if (isSrc) cell.classList.add('bg-src');
+            if (isDst) cell.classList.add('bg-dst');
+
+            if (pieceInfo) {
+                const pEl = document.createElement('div');
+                pEl.className = "piece " + (pieceInfo.side === 'red' ? 'piece-red' : 'piece-black') + " font-xiangqi";
+                pEl.textContent = pieceInfo.name;
+                if (isSrc) pEl.classList.add('piece-src');
+                if (isDst) pEl.classList.add('piece-dst');
+                cell.appendChild(pEl);
+            }
+            return cell;
+        }
+
+        function render32DThoughtCards(thoughtText) {
+            const container = document.getElementById('dimsCardsContainer');
+            container.innerHTML = '';
+
+            const dimBlocks = thoughtText.match(/\\[\\d+\\/32\\][^\\n]+(?:\\n(?!\\[\\d+\\/32\\])[^\\n]+)*/g);
+
+            if (!dimBlocks) {
+                container.innerHTML = '<div style="font-size: 0.75rem; color: #64748b; padding: 1rem;">Không thể phân tách các khối [X/32] từ suy tưởng.</div>';
+                document.getElementById('dimComplianceBadge').textContent = '0/32 Missing';
+                document.getElementById('dimComplianceBadge').style.background = 'rgba(239, 68, 68, 0.2)';
+                document.getElementById('dimComplianceBadge').style.color = '#fca5a5';
+                return;
+            }
+
+            document.getElementById('dimComplianceBadge').textContent = dimBlocks.length + '/32 Complete';
+            if (dimBlocks.length === 32) {
+                document.getElementById('dimComplianceBadge').style.background = 'rgba(16, 185, 129, 0.2)';
+                document.getElementById('dimComplianceBadge').style.color = '#34d399';
+            } else {
+                document.getElementById('dimComplianceBadge').style.background = 'rgba(245, 158, 11, 0.2)';
+                document.getElementById('dimComplianceBadge').style.color = '#fcd34d';
+            }
+
+            dimBlocks.forEach(block => {
+                const lines = block.split('\\n');
+                const headerLine = lines[0];
+                const bodyLines = lines.slice(1).join('\\n');
+
+                const match = headerLine.match(/^\\[(\\d+)\\/32\\]\\s*([^\\n:]+):?(.*)/);
+                if (!match) return;
+
+                const dimNum = parseInt(match[1]);
+                const dimTitle = match[2].trim();
+                const headerExtra = match[3].trim();
+                const bodyText = (headerExtra ? headerExtra + '\\n' : '') + bodyLines;
+
+                let grpClass = 'dim-grp-1';
+                let grpTag = 'Nhận thức';
+                if (dimNum >= 7 && dimNum <= 12) { grpClass = 'dim-grp-2'; grpTag = 'Đe dọa'; }
+                else if (dimNum >= 13 && dimNum <= 18) { grpClass = 'dim-grp-3'; grpTag = 'Chiến thuật'; }
+                else if (dimNum >= 19 && dimNum <= 22) { grpClass = 'dim-grp-4'; grpTag = 'Binh pháp'; }
+                else if (dimNum >= 23 && dimNum <= 28) { grpClass = 'dim-grp-5'; grpTag = 'Quyết định'; }
+                else if (dimNum >= 29) { grpClass = 'dim-grp-6'; grpTag = 'Luật đấu'; }
+
+                const card = document.createElement('div');
+                card.className = "dim-card " + grpClass;
+                card.dataset.num = dimNum;
+
+                card.innerHTML = `
+                    <div class="dim-header">
+                        <div>
+                            <span style="font-size: 0.75rem; font-weight: 800; font-family: 'Fira Code', monospace; color: #10b981;">[${dimNum}/32]</span>
+                            <span class="dim-title">${escapeStr(dimTitle)}</span>
+                        </div>
+                        <span class="dim-tag">${grpTag}</span>
+                    </div>
+                    ${bodyText.trim() ? `<div class="dim-body">${escapeStr(bodyText.trim())}</div>` : ''}
+                `;
+
+                container.appendChild(card);
+            });
+        }
+
+        function escapeStr(str) {
+            return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+        }
+
+        function filter32D(type, btnEl) {
+            document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+            if (btnEl) btnEl.classList.add('active');
+
+            document.querySelectorAll('.dim-card').forEach(card => {
+                const num = parseInt(card.dataset.num);
+                if (type === 'all') card.style.display = 'block';
+                else if (type === 'grp1' && num >= 1 && num <= 6) card.style.display = 'block';
+                else if (type === 'grp2' && num >= 7 && num <= 12) card.style.display = 'block';
+                else if (type === 'grp3' && num >= 13 && num <= 18) card.style.display = 'block';
+                else if (type === 'grp4' && num >= 19 && num <= 22) card.style.display = 'block';
+                else if (type === 'grp5' && num >= 23 && num <= 28) card.style.display = 'block';
+                else if (type === 'grp6' && num >= 29) card.style.display = 'block';
+                else card.style.display = 'none';
+            });
+        }
+
+        function search32D(query) {
+            const q = query.toLowerCase();
+            document.querySelectorAll('.dim-card').forEach(card => {
+                const text = card.textContent.toLowerCase();
+                card.style.display = text.includes(q) ? 'block' : 'none';
+            });
+        }
+
+        function copyRawRecordJson() {
+            const rawText = document.getElementById('rawRecordJsonBox').textContent;
+            navigator.clipboard.writeText(rawText).then(() => {
+                alert("📋 Đã copy Raw JSON Record vào Clipboard!");
+            });
+        }
+
+        // Global Keyboard Shortcuts
+        window.addEventListener('keydown', function(e) {
+            if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+
+            if (e.key === 'ArrowLeft') {
+                prevTurnStep();
+            } else if (e.key === 'ArrowRight') {
+                nextTurnStep();
+            } else if (e.key === ' ') {
+                e.preventDefault();
+                toggleAutoPlay();
+            } else if (e.key === 'ArrowUp') {
+                e.preventDefault();
+                if (activeGameIndex > 0) onGameChange(activeGameIndex - 1);
+            } else if (e.key === 'ArrowDown') {
+                e.preventDefault();
+                if (activeGameIndex < loadedGamesList.length - 1) onGameChange(activeGameIndex + 1);
+            }
+        });
+
+        window.addEventListener('DOMContentLoaded', () => {
+            loadDefaultSample();
+        });
+    </script>
+</body>
+</html>
+"""
+
+final_html = html_template.replace("__DEFAULT_SAMPLE_DATASET_JSON__", sample_games_json)
+
+with open('/Users/hdqb/workspaces/xiangqi-rim/tools/xiangqi_multiturn_32d_inspector.html', 'w', encoding='utf-8') as f:
+    f.write(final_html)
+
+print("✅ World-Class Ultimate Inspector v5.0 generated successfully!")

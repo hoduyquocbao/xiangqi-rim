@@ -97,6 +97,20 @@ impl Sample { // Khối triển khai các phương thức cho Sample
         self.side // Trả về side
     } // Kết thúc hàm side
 
+    /// Trả về tham chiếu tới mảng 90 ô cờ trên bàn cờ.
+    #[inline(always)] // Inline phương thức đọc mảng ô cờ
+    pub fn grid(&self) -> &[u8; 90] { // Hàm grid trả về &[u8; 90]
+        &self.grid // Trả về tham chiếu &self.grid
+    } // Kết thúc hàm grid
+
+    /// Nạp dữ liệu mảng ô cờ và phe lượt đi vào mẫu thế cờ.
+    pub fn load(&mut self, grid: &[u8; 90], side: u8) { // Hàm load nạp dữ liệu
+        self.grid.copy_from_slice(grid); // Sao chép 90 ô cờ
+        self.side = side; // Gán phe lượt đi
+        self.state = 1; // Đặt trạng thái 1
+    } // Kết thúc hàm load
+
+
     /// Trả về chỉ số thứ tự của mẫu trong lô.
     #[inline(always)] // Inline phương thức đọc chỉ số
     pub fn index(&self) -> u32 { // Hàm index trả về u32

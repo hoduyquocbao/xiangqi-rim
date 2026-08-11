@@ -17,18 +17,102 @@ from typing import List, Dict, Tuple, Set
 from huggingface_hub import HfApi, hf_hub_download
 from huggingface_hub.utils import RepositoryNotFoundError, EntryNotFoundError, HfHubHTTPError
 
-REPO = "hoduyquocbao/xiangqi-nnue-dataset"
+REPO = "hoduyquocbao/xiangqi-r1-dataset"
+
+def validate_fen(fen: str) -> bool:
+    """Thẩm định tính hợp lệ của chuỗi FEN UCCI 10x9."""
+    if not fen or not isinstance(fen, str):
+        return False
+    parts = fen.strip().split()
+    if not parts:
+        return False
+    ranks = parts[0].split('/')
+    if len(ranks) != 10:
+        return False
+
+    kings = [0, 0]
+    for r, rank_str in enumerate(ranks):
+        rank = 9 - r
+        file = 0
+        digit = False
+        for ch in rank_str:
+            if ch.isdigit():
+                val = int(ch)
+                if val == 0 or digit:
+                    return False
+                file += val
+                digit = True
+            else:
+                digit = False
+                if ch not in "KABNRCPkabnrcp":
+                    return False
+                if file >= 9:
+                    return False
+
+                color = 0 if ch.isupper() else 1
+                role = ch.upper()
+                if role == 'K':
+                    kings[color] += 1
+                    if color == 0:
+                        if rank > 2 or file < 3 or file > 5:
+                            return False
+                    else:
+                        if rank < 7 or file < 3 or file > 5:
+                            return False
+                elif role == 'A':
+                    if color == 0:
+                        if rank > 2 or file < 3 or file > 5:
+                            return False
+                    else:
+                        if rank < 7 or file < 3 or file > 5:
+                            return False
+                file += 1
+        if file != 9:
+            return False
+
+    if kings[0] != 1 or kings[1] != 1:
+        return False
+    return True
 
 def verify(item: Dict) -> bool:
-    """Xác minh cấu trúc của mẫu cờ tư duy (Schema Validation hỗ trợ cả Legacy & Conversation format)."""
+    """Xác minh cấu trúc của mẫu cờ tư duy (Strict 73-message trajectory & UCCI 10x9 FEN validation)."""
     if not isinstance(item, dict):
         return False
     if "messages" in item and isinstance(item.get("messages"), list):
         msgs = item["messages"]
-        if len(msgs) == 3:
-            # JRCP 2.0 Conversation format
+        if len(msgs) == 73:
+            if msgs[0].get("role") != "system":
+                return False
+            for i in range(1, 73):
+                expected_role = "user" if i % 2 == 1 else "assistant"
+                if msgs[i].get("role") != expected_role:
+                    return False
+                if expected_role == "user":
+                    content = msgs[i].get("content", "")
+                    fen = ""
+                    for line in content.split("\n"):
+                        if "FEN:" in line:
+                            fen = line.split("FEN:", 1)[1].strip()
+                            break
+                        elif "/" in line and len(line) > 15:
+                            for part in line.strip().split():
+                                if "/" in part and len(part) > 15:
+                                    fen = part
+                                    break
+                    if fen and not validate_fen(fen):
+                        return False
+            return True
+        elif len(msgs) == 3:
             roles = [m.get("role") for m in msgs]
-            return roles == ["system", "user", "assistant"]
+            if roles != ["system", "user", "assistant"]:
+                return False
+            user_text = msgs[1].get("content", "")
+            for line in user_text.split("\n"):
+                if "FEN:" in line:
+                    fen = line.split("FEN:", 1)[1].strip()
+                    if not validate_fen(fen):
+                        return False
+            return True
         return len(msgs) > 0
     if "system" in item and "user" in item and "assistant" in item:
         return bool(item.get("system")) and bool(item.get("user")) and bool(item.get("assistant"))
@@ -36,25 +120,12 @@ def verify(item: Dict) -> bool:
     return keys.issubset(item.keys()) and bool(item.get("prompt")) and bool(item.get("move"))
 
 def key(item: Dict) -> str:
-    """Tạo mã băm SHA256 O(1) từ bộ khóa (FEN + move) cho JRCP 2.0 hoặc (prompt + move) cho legacy."""
+    """Tạo mã băm SHA256 O(1) từ game_id hoặc trajectory toàn vẹn cho dataset."""
+    if "game_id" in item and item["game_id"]:
+        return hashlib.sha256(str(item["game_id"]).encode("utf-8")).hexdigest()
     if "messages" in item and isinstance(item.get("messages"), list):
-        msgs = item["messages"]
-        if len(msgs) >= 2:
-            user = msgs[1].get("content", "")
-            move = item.get("move", "")
-            # Trích xuất FEN từ user prompt
-            fen = ""
-            for segment in user.split("\n"):
-                if "/" in segment and len(segment) > 15:
-                    parts = segment.strip().split()
-                    for part in parts:
-                        if "/" in part and len(part) > 15:
-                            fen = part
-                            break
-                    if fen:
-                        break
-            raw = f"{fen}||{move}"
-            return hashlib.sha256(raw.encode("utf-8")).hexdigest()
+        raw = "".join(m.get("content", "") for m in item["messages"])
+        return hashlib.sha256(raw.encode("utf-8")).hexdigest()
     raw = f"{item.get('prompt') or item.get('user') or ''}||{item.get('move') or ''}"
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()
 
@@ -101,9 +172,10 @@ def fetch(repo: str, token: str, filename: str = "train.jsonl") -> List[Dict]:
         raise err
 
 def collect() -> List[Dict]:
-    """Thu thập toàn bộ mẫu JRCP 2.0 từ thư mục data/."""
+    """Thu thập toàn bộ mẫu JRCP 2.0 từ thư mục tools/ và data/."""
     samples = []
     patterns = [
+        "tools/games-completed.jsonl",
         "data/jrcp2_elite_*.jsonl",
         "data/train.jsonl",
     ]
