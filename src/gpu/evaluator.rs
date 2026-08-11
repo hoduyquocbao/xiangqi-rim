@@ -261,8 +261,10 @@ impl Evaluable for Evaluator { // Triển khai trait Evaluable cho Evaluator
         if !self.active { // Nếu chưa kích hoạt
             return Err(Status::Fault); // Trả về lỗi Fault
         } // Kết thúc kiểm tra active
-        let score = self.compute(sample)?; // Tính toán điểm số NNUE
-        self.buffer.push(&score.to_le_bytes())?; // Ghi 4 byte điểm số vào bộ đệm VRAM
+        let bytes = unsafe {
+            std::slice::from_raw_parts(sample as *const Sample as *const u8, std::mem::size_of::<Sample>())
+        };
+        self.buffer.push(bytes)?; // Ghi 128 byte dữ liệu mẫu Sample vào bộ đệm tích lũy
         Ok(()) // Trả về thành công Ok
     } // Kết thúc phương thức submit
 
@@ -270,12 +272,28 @@ impl Evaluable for Evaluator { // Triển khai trait Evaluable cho Evaluator
         if !self.active { // Nếu chưa kích hoạt
             return Err(Status::Fault); // Trả về lỗi Fault
         } // Kết thúc kiểm tra active
+
+        // Nếu batch chưa có dữ liệu nhưng buffer tích lũy có dữ liệu -> Chuyển toàn bộ dữ liệu mẫu vào batch
+        if batch.count() == 0 && self.buffer.commit() > 0 {
+            let sample_stride = std::mem::size_of::<Sample>();
+            let sample_cnt = self.buffer.commit() / sample_stride;
+            let ptr = self.buffer.pointer();
+            if !ptr.is_null() && sample_cnt > 0 {
+                let samples = unsafe { std::slice::from_raw_parts(ptr as *const Sample, sample_cnt) };
+                batch.clear();
+                for sample in samples {
+                    let _ = batch.push(sample);
+                }
+            }
+            self.buffer.clear();
+        }
+
         let count = batch.count(); // Đọc số mẫu có trong lô batch
         if count == 0 { // Nếu lô rỗng
             return Ok(0); // Trả về 0 mẫu ngay
         } // Kết thúc kiểm tra count 0
 
-        self.execute(batch, count)?; // Thực thi tính toán gia tốc lô trên GPU phần cứng (hoặc fallback)
+        self.execute(batch, count)?; // Thực thi tính toán gia tốc lô trên GPU phần cứng
         Ok(count) // Trả về số lượng mẫu FEN đã được tính điểm
     } // Kết thúc phương thức flush
 

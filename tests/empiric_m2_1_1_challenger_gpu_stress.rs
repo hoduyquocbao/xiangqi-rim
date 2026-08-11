@@ -7,7 +7,7 @@
 // Tuân thủ 100% chú thích tiếng Việt và định danh tiếng Anh.
 // ============================================================================
 
-use xiangrust::gpu::{Batch, Buffer, Device, Evaluator, Guard, Sample, Sampleable, Status};
+use xiangrust::gpu::{Batch, Buffer, Device, Evaluable, Evaluator, Guard, Sample, Sampleable, Status};
 use xiangrust::board::Position;
 
 #[test]
@@ -138,7 +138,7 @@ fn test_zero_copy_shared_memory_alignment_and_integrity() {
 #[test]
 fn test_evaluator_score_writeback_integrity() {
     // Kiểm tra xem Evaluator::flush có cập nhật điểm số trở lại Batch hay không
-    let mut evaluator = Evaluator::init().expect("Init evaluator failed");
+    let mut evaluator = Evaluator::auto().expect("Init evaluator failed");
     let device = Device::init();
     let mut batch = Batch::allocate(&device, 10).expect("Allocate batch failed");
 
