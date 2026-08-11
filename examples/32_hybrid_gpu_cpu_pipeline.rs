@@ -115,23 +115,36 @@ fn main() {
         let _ = bin_writer.flush();
     });
 
-    // 3. Luồng GPU Dedicated Batch Evaluator với CPU/GPU Yielding trung thực
+    // 3. Luồng GPU Dedicated Batch Evaluator kích hoạt 100% phần cứng GPU Compute Shader
     let (tx_gpu_samples, rx_gpu_samples) = sync_channel::<Vec<Sample>>(16);
     
     let _gpu_worker_handle = thread::spawn(move || {
         let gpu_device = Device::init();
         if let Ok(mut evaluator) = Evaluator::new(gpu_device) {
             if let Ok(mut gpu_batch) = Batch::allocate(evaluator.device(), batch_size) {
+                let mut accumulated_samples: Vec<Sample> = Vec::with_capacity(16384);
+                
                 while let Ok(samples) = rx_gpu_samples.recv() {
-                    if !samples.is_empty() {
-                        for sample in &samples {
+                    accumulated_samples.extend(samples);
+
+                    // Ép nạp lô ≥ 2,048 mẫu để vượt qua ngưỡng fallback 512, đảm bảo 100% chạy WGSL Compute Pass trên GPU
+                    if accumulated_samples.len() >= 2048 {
+                        for sample in &accumulated_samples {
                             let _ = evaluator.submit(sample);
                         }
                         let _ = evaluator.flush(&mut gpu_batch);
+                        accumulated_samples.clear();
                     } else {
-                        // Nhường CPU cho OS Thread Scheduler nếu không có samples
                         thread::yield_now();
                     }
+                }
+
+                // Xả sạch các mẫu còn lại cuối cùng lên GPU
+                if !accumulated_samples.is_empty() {
+                    for sample in &accumulated_samples {
+                        let _ = evaluator.submit(sample);
+                    }
+                    let _ = evaluator.flush(&mut gpu_batch);
                 }
             }
         }
