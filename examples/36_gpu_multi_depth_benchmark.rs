@@ -97,7 +97,7 @@ fn run_gpu_depth_benchmark(target_depth: u8, total_games: usize, num_threads: us
 
     let flag_gpu = Arc::clone(&finished_flag);
     let count_gpu = Arc::clone(&fens_computed);
-    let dispatch_threshold = if target_depth >= 10 { 256 } else { 1024 };
+    let dispatch_threshold = if target_depth >= 10 { 64 } else { 256 };
 
     // Luồng Dedicated GPU Evaluator
     let gpu_worker = thread::spawn(move || {
@@ -161,7 +161,7 @@ fn run_gpu_depth_benchmark(target_depth: u8, total_games: usize, num_threads: us
                 let mv = list.get((step + g) % list.len());
                 pos.apply(mv.from, mv.to);
 
-                if local_samples.len() >= 16 {
+                if local_samples.len() >= 8 {
                     let _ = tx.send(local_samples.clone());
                     local_samples.clear();
                 }
