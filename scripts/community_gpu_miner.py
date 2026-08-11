@@ -13,7 +13,6 @@ import time  # Nhập thư viện time đo lường thời gian và tạo dấu 
 import uuid  # Nhập thư viện uuid tạo mã định danh ngẫu nhiên cho worker
 import subprocess  # Nhập thư viện subprocess điều khiển tiến trình Rust
 
-from google.colab import userdata  # Nhập module userdata đọc bí mật Colab
 from huggingface_hub import HfApi, create_repo  # Nhập HfApi thao tác Hugging Face
 
 # ----------------------------------------------------------------------------
@@ -28,10 +27,20 @@ def main():
     worker_id = os.environ.get("WORKER_ID") or f"worker_{uuid.uuid4().hex[:8]}"
     print(f"--> Khởi tạo Worker GPU Cộng Đồng với Mã ID: '{worker_id}'", flush=True)
     
-    # 2. Đọc token kết nối Hugging Face Hub
+    # 2. Đọc token kết nối Hugging Face Hub một cách an toàn
     _T1 = "hf_olRVlCHGkrZTKzX"
     _T2 = "dDEEHGUuqRFivahQLFu"
-    token = userdata.get('HF_TOKEN') or os.environ.get("HF_TOKEN") or (_T1 + _T2)
+    token = None
+    
+    try:
+        from google.colab import userdata
+        token = userdata.get('HF_TOKEN')
+    except Exception:
+        token = None
+        
+    if not token:
+        token = os.environ.get("HF_TOKEN") or (_T1 + _T2)
+        
     api = HfApi(token=token)
     
     try:
