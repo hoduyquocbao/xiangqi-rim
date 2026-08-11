@@ -13,9 +13,7 @@ use std::sync::Arc;
 use std::thread;
 use std::time::Instant;
 
-use rayon::prelude::*;
 use xiangrust::board::{Parser, Position};
-use xiangrust::eval::feature::Feature;
 use xiangrust::gpu::{Batch, Device, Evaluator, Sample};
 use xiangrust::movegen::{legal, List};
 
@@ -25,7 +23,7 @@ fn generate_random_position(seed: u64) -> Position {
     let mut move_count = 0;
     while move_count < 10 {
         let mut list = List::new();
-        legal::gen(&pos, &mut list);
+        legal::gen(&mut pos, &mut list);
         if list.len() == 0 {
             break;
         }
@@ -65,7 +63,7 @@ fn test_gpu_throughput_config(
             Ok(b) => b,
             Err(_) => return,
         };
-        let mut accumulated: Vec<Sample> = Vec::with_capacity(batch_capacity);
+        let mut accumulated: Vec<Sample> = Vec::with_capacity(batch_capacity * 2);
 
         while !flag_clone.load(Ordering::Relaxed) || !accumulated.is_empty() {
             while let Ok(samples) = rx_sample.try_recv() {
@@ -107,21 +105,10 @@ fn test_gpu_throughput_config(
             s.spawn(move |_| {
                 let mut local_samples = Vec::with_capacity(1024);
                 let seed = (t + 1) as u64 * 99991;
-                let mut pos = generate_random_position(seed);
+                let pos = generate_random_position(seed);
                 
                 for i in 0..samples_per_thread {
-                    let mut feat = Feature::new();
-                    feat.extract(&pos);
-
-                    let sample = Sample {
-                        index: i as u32,
-                        side: pos.side,
-                        king: pos.king,
-                        active: feat.active,
-                        counts: [feat.count[0] as u16, feat.count[1] as u16],
-                        features: feat.indices,
-                        pad: [0u8; 11],
-                    };
+                    let sample = Sample::pack(&pos, i as u32);
                     local_samples.push(sample);
 
                     if local_samples.len() >= 512 {
