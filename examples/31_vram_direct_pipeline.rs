@@ -7,6 +7,7 @@
 //   2. Tệp `.jsonl` chuẩn hóa cho background upload lên Hugging Face Hub.
 // ============================================================================
 
+use std::cell::RefCell;
 use std::fs::OpenOptions;
 use std::io::{BufWriter, Write};
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
@@ -21,6 +22,11 @@ use xiangrust::book::Book;
 use xiangrust::eval::feature::Feature;
 use xiangrust::gpu::{Batch, Device, Evaluable, Evaluator, Sample};
 use xiangrust::movegen::{legal, List};
+use xiangrust::search::{Limits, Search};
+
+thread_local! {
+    static THREAD_SEARCH: RefCell<Search> = RefCell::new(Search::new(2));
+}
 
 /// Struct `CacheAlignedState` căn lề 64 bytes (1 CPU Cache Line) để triệt tiêu False Sharing giữa các luồng
 #[repr(align(64))]
@@ -114,32 +120,16 @@ fn main() {
 
     let start_time = Instant::now();
 
-    // Mở file JSONL & BIN
-    let jsonl_file = OpenOptions::new()
-        .create(true)
-        .write(true)
-        .truncate(true)
-        .open(&out_jsonl)
-        .expect("Tạo file JSONL thất bại");
-    let mut jsonl_writer = BufWriter::with_capacity(1024 * 1024, jsonl_file);
-
+    // Mở file BINARY duy nhất (Loại bỏ tệp JSONL 980MB gây phình 12GB RAM hệ thống!)
     let bin_file = OpenOptions::new()
         .create(true)
         .write(true)
         .truncate(true)
         .open(&out_bin)
         .expect("Tạo file BINARY thất bại");
-    let mut bin_writer = BufWriter::with_capacity(1024 * 1024, bin_file);
+    let mut bin_writer = BufWriter::with_capacity(256 * 1024, bin_file);
 
-    let (tx_jsonl, rx_jsonl) = channel::<Vec<u8>>();
     let (tx_bin, rx_bin) = channel::<Vec<u8>>();
-
-    let writer_jsonl_handle = thread::spawn(move || {
-        while let Ok(buf) = rx_jsonl.recv() {
-            let _ = jsonl_writer.write_all(&buf);
-        }
-        let _ = jsonl_writer.flush();
-    });
 
     let writer_bin_handle = thread::spawn(move || {
         while let Ok(buf) = rx_bin.recv() {
@@ -179,15 +169,14 @@ fn main() {
     while games_done < total_games {
         let chunk_size = std::cmp::min(batch_size, total_games - games_done);
 
-        // Sinh dữ liệu song song trên Rayon pool cho chunk_size ván cờ
-        let chunk_results: Vec<(Vec<u8>, Vec<u8>, usize, Vec<Sample>)> = pool.install(|| {
+        // Sinh dữ liệu song song trên Rayon pool cho chunk_size ván cờ (Chỉ ghi Binary 66-byte, triệt tiêu 100% JSONL RAM leak)
+        let chunk_results: Vec<(Vec<u8>, usize, Vec<Sample>)> = pool.install(|| {
             (0..chunk_size)
                 .into_par_iter()
                 .map(|i| {
                     let game_id = games_done + i;
                     let mut rng_seed = (game_id as u64 + 1) * 6364136223846793005 + base_seed;
                     let mut pos = Parser::parse(Parser::DEFAULT);
-                    let mut local_jsonl: Vec<u8> = Vec::with_capacity(4096);
                     let mut local_bin: Vec<u8> = Vec::with_capacity(66 * 40);
                     let mut samples_vec: Vec<Sample> = Vec::with_capacity(40);
                     let mut sample_count = 0;
@@ -212,14 +201,30 @@ fn main() {
                             break;
                         }
 
-                        rng_seed = rng_seed.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
-                        let move_idx = (rng_seed as usize) % moves.len();
-                        let chosen_move = moves.items[move_idx];
+                        let (chosen_move, score_i16) = if search_depth > 0 {
+                            THREAD_SEARCH.with(|cell| {
+                                let mut search = cell.borrow_mut();
+                                let mut limits = Limits::new();
+                                limits.depth = search_depth;
+                                let search_res = search.go(&pos, &limits);
+                                let best = if search_res.best.from != search_res.best.to {
+                                    search_res.best
+                                } else {
+                                    rng_seed = rng_seed.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+                                    moves.items[(rng_seed as usize) % moves.len()]
+                                };
+                                (best, search_res.score.clamp(-30000, 30000) as i16)
+                            })
+                        } else {
+                            rng_seed = rng_seed.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+                            let move_idx = (rng_seed as usize) % moves.len();
+                            let best = moves.items[move_idx];
+                            let score = eval_hce.score(&pos).clamp(-30000, 30000) as i16;
+                            (best, score)
+                        };
 
                         let sample = Sample::pack(&pos, (game_id * 40 + step) as u32);
                         samples_vec.push(sample);
-
-                        let score_i16 = eval_hce.score(&pos).clamp(-30000, 30000) as i16;
 
                         // Trích xuất 32 chỉ số đặc trưng HalfKAv2_hm và ghi 66 bytes binary
                         let mut active_indices = [0u16; 32];
@@ -239,39 +244,27 @@ fn main() {
                             local_bin.extend_from_slice(&feat.to_le_bytes());
                         }
                         local_bin.extend_from_slice(&score_i16.to_le_bytes());
-
-                        let fen_str = Serializer::export(&pos);
-                        let move_uci = format!(
-                            "{}{}{}{}",
-                            (b'a' + (chosen_move.from % 9)) as char,
-                            chosen_move.from / 9,
-                            (b'a' + (chosen_move.to % 9)) as char,
-                            chosen_move.to / 9
-                        );
-
-                        write_sample_json_bytes(&mut local_jsonl, &fen_str, &move_uci, score_i16 as i32, search_depth);
                         sample_count += 1;
 
                         pos.apply(chosen_move.from, chosen_move.to);
                     }
 
-                    (local_jsonl, local_bin, sample_count, samples_vec)
+                    (local_bin, sample_count, samples_vec)
                 })
                 .collect()
         });
 
         // Nạp samples vào GPU Evaluator & Submit VRAM Batch
-        for (_jsonl, _bin, _cnt, samples) in &chunk_results {
+        for (_bin, _cnt, samples) in &chunk_results {
             for sample in samples {
                 let _ = evaluator.submit(sample);
             }
         }
         let _ = evaluator.flush(&mut gpu_batch);
 
-        // Gửi kết quả byte buffers về Dedicated Writer Threads
+        // Gửi kết quả byte buffers về Dedicated Writer Thread
         let mut chunk_samples = 0;
-        for (jsonl_buf, bin_buf, cnt, _samples) in chunk_results {
-            let _ = tx_jsonl.send(jsonl_buf);
+        for (bin_buf, cnt, _samples) in chunk_results {
             let _ = tx_bin.send(bin_buf);
             chunk_samples += cnt;
         }
@@ -280,11 +273,6 @@ fn main() {
         state.games_completed.store(games_done, Ordering::Relaxed);
         state.samples_collected.fetch_add(chunk_samples, Ordering::Relaxed);
     }
-
-    drop(tx_jsonl);
-    drop(tx_bin);
-    let _ = writer_jsonl_handle.join();
-    let _ = writer_bin_handle.join();
 
     state.finished_flag.store(true, Ordering::Relaxed);
     let _ = monitor_handle.join();
