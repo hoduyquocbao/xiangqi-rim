@@ -35,6 +35,10 @@ pub mod sample; // Khai báo submodule sample cấu trúc dữ liệu thế cờ
 /// Submodule `status`: Mã trạng thái kết quả của các thao tác GPU và bộ nhớ VRAM
 pub mod status; // Khai báo submodule status định nghĩa mã kết quả hoạt động
 
+/// Submodule `aggregator`: Bộ gom mẫu vị trí cờ lá không khóa lock-free căn lề 64-byte
+pub mod aggregator; // Khai báo submodule aggregator quản lý gom mẫu cờ lá
+
+pub use aggregator::{Aggregatable, Aggregator}; // Re-export struct Aggregator và trait Aggregatable
 pub use backend::Backend; // Re-export kiểu enum Backend
 pub use batch::{Batch, Batchable}; // Re-export struct Batch và trait Batchable
 pub use buffer::{Buffer, Storable}; // Re-export kiểu struct Buffer và trait Storable
