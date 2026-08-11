@@ -21,6 +21,7 @@ use xiangrust::book::Book;
 use xiangrust::eval::feature::Feature;
 use xiangrust::gpu::{Batch, Device, Evaluable, Evaluator, Sample};
 use xiangrust::movegen::{legal, List};
+use xiangrust::search::{Limits, Search};
 
 /// Struct `CacheAlignedState` căn lề 64 bytes (1 CPU Cache Line) để triệt tiêu False Sharing giữa các luồng
 #[repr(align(64))]
@@ -79,11 +80,14 @@ fn main() {
         .ok()
         .and_then(|v| v.parse().ok())
         .unwrap_or(4);
-
     let base_seed: u64 = std::env::var("SEED")
         .ok()
         .and_then(|v| v.parse().ok())
         .unwrap_or(1);
+    let search_depth: u8 = std::env::var("DEPTH")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(4);
     let out_jsonl: String = std::env::var("OUTPUT")
         .unwrap_or_else(|_| "data/selfplay_samples_gen7.jsonl".to_string());
     let out_bin: String = std::env::var("OUTPUT_BIN")
@@ -100,6 +104,7 @@ fn main() {
     println!("  • Tổng số ván cờ  : {} ván", total_games);
     println!("  • GPU Batch Size  : {} ván cờ song song", batch_size);
     println!("  • CPU Worker Pool : {} luồng physical cores", num_threads);
+    println!("  • Search Depth    : Depth {}", search_depth);
     println!("  • GPU Card phần cứng: {} ({})", gpu_name, gpu_backend);
     println!("  • Ghi đĩa Binary  : {} (0.02s Instant PyTorch CUDA Loading!)", out_bin);
     println!("  • Ghi đĩa JSONL   : {} (Background HF Hub Upload)", out_jsonl);
@@ -116,16 +121,16 @@ fn main() {
         .write(true)
         .truncate(true)
         .open(&out_jsonl)
-        .expect("Không thể tạo tệp JSONL");
-    let mut jsonl_writer = BufWriter::with_capacity(64 * 1024, jsonl_file);
+        .expect("Tạo file JSONL thất bại");
+    let mut jsonl_writer = BufWriter::with_capacity(1024 * 1024, jsonl_file);
 
     let bin_file = OpenOptions::new()
         .create(true)
         .write(true)
         .truncate(true)
         .open(&out_bin)
-        .expect("Không thể tạo tệp BIN");
-    let mut bin_writer = BufWriter::with_capacity(64 * 1024, bin_file);
+        .expect("Tạo file BINARY thất bại");
+    let mut bin_writer = BufWriter::with_capacity(1024 * 1024, bin_file);
 
     let (tx_jsonl, rx_jsonl) = channel::<Vec<u8>>();
     let (tx_bin, rx_bin) = channel::<Vec<u8>>();
@@ -188,6 +193,10 @@ fn main() {
                     let mut samples_vec: Vec<Sample> = Vec::with_capacity(40);
                     let mut sample_count = 0;
 
+                    let mut search = Search::new(2);
+                    let mut limits = Limits::new();
+                    limits.depth = search_depth;
+
                     // Opening Book
                     let mut steps = 0;
                     while steps < 8 {
@@ -206,12 +215,18 @@ fn main() {
                             break;
                         }
 
-                        rng_seed = rng_seed.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
-                        let move_idx = (rng_seed as usize) % moves.len();
-                        let chosen_move = moves.items[move_idx];
+                        let search_res = search.go(&pos, &limits);
+                        let chosen_move = if search_res.best.from != search_res.best.to {
+                            search_res.best
+                        } else {
+                            rng_seed = rng_seed.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+                            moves.items[(rng_seed as usize) % moves.len()]
+                        };
 
                         let sample = Sample::pack(&pos, (game_id * 40 + step) as u32);
                         samples_vec.push(sample);
+
+                        let score_i16 = search_res.score.clamp(-30000, 30000) as i16;
 
                         // Trích xuất 32 chỉ số đặc trưng HalfKAv2_hm và ghi 66 bytes binary
                         let mut active_indices = [0u16; 32];
@@ -230,8 +245,7 @@ fn main() {
                         for feat in &active_indices {
                             local_bin.extend_from_slice(&feat.to_le_bytes());
                         }
-                        let dummy_score: i16 = 0;
-                        local_bin.extend_from_slice(&dummy_score.to_le_bytes());
+                        local_bin.extend_from_slice(&score_i16.to_le_bytes());
 
                         let fen_str = Serializer::export(&pos);
                         let move_uci = format!(
@@ -242,7 +256,7 @@ fn main() {
                             chosen_move.to / 9
                         );
 
-                        write_sample_json_bytes(&mut local_jsonl, &fen_str, &move_uci, 0, 4);
+                        write_sample_json_bytes(&mut local_jsonl, &fen_str, &move_uci, score_i16 as i32, search_depth);
                         sample_count += 1;
 
                         pos.apply(chosen_move.from, chosen_move.to);
