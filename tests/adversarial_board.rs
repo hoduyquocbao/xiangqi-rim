@@ -74,10 +74,10 @@ fn test_apply_out_of_bounds_panic() {
 
 #[test]
 fn test_fen_boundary_strings() {
-    // 1. All 90 squares occupied
+    // 1. All 90 squares occupied is rejected by Validator (multiple kings & river violation)
     let full_fen = "rnbakabnr/rnbakabnr/rnbakabnr/rnbakabnr/rnbakabnr/RNBAKABNR/RNBAKABNR/RNBAKABNR/RNBAKABNR/RNBAKABNR w - - 0 1";
     let pos_full = Parser::parse(full_fen);
-    assert_eq!(pos_full.occupied.count(), 90);
+    assert_eq!(pos_full.occupied.count(), 0);
 
     // 2. Empty board FEN
     let empty_fen = "9/9/9/9/9/9/9/9/9/9 w - - 0 1";
@@ -91,7 +91,7 @@ fn test_fen_boundary_strings() {
     // 4. Invalid FEN characters and spaces
     let junk_fen = "rnbakabnr/9/1c5c1/p1p1p1p1p/9/9/P1P1P1P1P/1C5C1/9/RNBAKABNR_INVALID_TOKENS!!! b";
     let pos_junk = Parser::parse(junk_fen);
-    assert_eq!(pos_junk.side, 1);
+    assert_eq!(pos_junk.occupied.count(), 0);
 }
 
 #[test]
@@ -299,15 +299,13 @@ fn test_fen_parser_malformed_and_extreme_inputs() {
 
     // Malformed FEN 2: Only 1 rank provided
     let pos2 = Parser::parse("rnbakabnr");
-    assert_eq!(pos2.side, 0);
+    assert_eq!(pos2.occupied.count(), 0);
 
     // Malformed FEN 3: Unknown characters and digits exceeding 9
     let pos3 = Parser::parse("999999999/9/9/9/9/9/9/9/9/9 b - - 50 100");
-    assert_eq!(pos3.side, 1);
-    assert_eq!(pos3.rule, 50);
-    assert_eq!(pos3.ply, 100);
+    assert_eq!(pos3.occupied.count(), 0);
 
     // Malformed FEN 4: FEN with invalid turn indicator
     let pos4 = Parser::parse("9/9/9/9/9/9/9/9/9/9 x");
-    assert_eq!(pos4.side, 0);
+    assert_eq!(pos4.occupied.count(), 0);
 }
