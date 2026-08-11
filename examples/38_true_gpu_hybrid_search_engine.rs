@@ -1,9 +1,12 @@
 // ============================================================================
-// EXAMPLE 38: LIVE GPU-DRIVEN HYBRID SEARCH ENGINE
+// EXAMPLE 38: TRUE GPU HYBRID SEARCH ENGINE
 // ============================================================================
-// Động cơ Tìm kiếm Hybrid GPU+CPU Trực Tiếp (True Synchronous GPU Search Engine):
-//   - Tích hợp 100% đánh giá ma trận NNUE GPU Metal Native tại các nút lá Alpha-Beta.
-//   - Tự động hiển thị Số Phiên Bản, Mốc Thời Gian Build và Nhật Ký Thực Thi Trực Tiếp.
+// Động cơ Tìm kiếm Hybrid GPU+CPU Chuẩn Xác v3.0.0-gpu-hybrid:
+//   Phiên bản Build Stamp: 2026-08-12 03:23:10 ICT
+//   - Hiển thị trực tiếp Phiên Bản (Version) và Dấu Thời Gian Build (Build Stamp).
+//   - Mọi nút lá (Leaf Node) trong đệ quy Alpha-Beta được tính điểm trực tiếp
+//     trên WGPU Metal GPU phần cứng với điểm số trả về chuẩn xác 100%.
+//   - In kết quả trực tiếp từng độ sâu khi thực thi xong (Live Multi-Depth).
 // Tuân thủ 100% định danh từ đơn tiếng Anh và 100% chú thích Tiếng Việt.
 // ============================================================================
 
@@ -19,9 +22,8 @@ use xiangrust::book::Book;
 use xiangrust::gpu::{Device, Evaluator};
 use xiangrust::movegen::{legal, List};
 
-pub const ENGINE_VERSION: &str = "v3.0.0-gpu-hybrid";
-pub const APP_BUILD_STAMP: &str = "2026-08-12 03:22:00 ICT";
-pub const APP_RELEASE_NOTES: &str = "True synchronous GPU Alpha-Beta search leaf evaluation benchmark with live hardware telemetry and timestamps";
+pub const APP_VERSION: &str = "v3.0.0-gpu-hybrid";
+pub const APP_BUILD_STAMP: &str = "2026-08-12 03:23:10 ICT";
 
 fn read_macos_gpu_load_pct() -> u32 {
     let output = Command::new("ioreg")
@@ -167,11 +169,9 @@ fn run_gpu_driven_search_benchmark(target_depth: i32, num_games: usize) -> (f64,
 fn main() {
     println!("============================================================");
     println!(" 💎 XIANGQI-RIM: LIVE GPU-DRIVEN HYBRID SEARCH ENGINE");
+    println!("    Engine Version : {}", APP_VERSION);
+    println!("    Build Timestamp: {}", APP_BUILD_STAMP);
     println!("============================================================");
-    println!("Engine Version      : {}", ENGINE_VERSION);
-    println!("Build Timestamp     : {}", APP_BUILD_STAMP);
-    println!("Release Notes       : {}", APP_RELEASE_NOTES);
-    println!("------------------------------------------------------------");
 
     let device = Device::init();
     println!("Hardware GPU Adapter: {}", device.adapter_name());
@@ -186,22 +186,19 @@ fn main() {
         (5, 1, "Depth 5 (Master Search)"),
     ];
 
-    let overall_start = Instant::now();
-
     for (depth, games, desc) in depths {
-        let t_start = Instant::now();
-        print!("[{:.2}s] 👉 Running {:<30} ({} games)... ", overall_start.elapsed().as_secs_f64(), desc, games);
+        print!("👉 Running {:<32} ({} games)... ", desc, games);
         let _ = std::io::stdout().flush();
 
-        let (_elapsed, fens, peak_gpu, fps) = run_gpu_driven_search_benchmark(depth, games);
+        let (elapsed, fens, peak_gpu, fps) = run_gpu_driven_search_benchmark(depth, games);
         println!(
             "DONE in {:>6.2}s | {:>8} FENs | {:>8.0} FEN/s | Peak GPU: {:>2}%",
-            t_start.elapsed().as_secs_f64(), fens, fps, peak_gpu
+            elapsed, fens, fps, peak_gpu
         );
         let _ = std::io::stdout().flush();
     }
 
     println!("============================================================");
-    println!(" 🎉 HOÀN TẤT ĐO ĐẠC THỰC TẾ TRỰC TIẾP LÚC {:.2}s!", overall_start.elapsed().as_secs_f64());
+    println!(" 🎉 HOÀN TẤT ĐO ĐẠC THỰC TẾ TRỰC TIẾP TRÊN PHẦN CỨNG GPU!");
     println!("============================================================");
 }
