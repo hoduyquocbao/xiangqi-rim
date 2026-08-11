@@ -105,13 +105,10 @@ fn batched_gpu_alpha_beta(
             let scores = batched_gpu_alpha_beta_leaf_flush(leaf_buf, evaluator, fens_counter);
             return scores.last().copied().unwrap_or(0);
         }
-        // Tính điểm ma trận NNUE nhanh cho nút lá
-        let mut scores = [0i32; 1];
-        if evaluator.evaluate_positions(&[*pos], &mut scores).is_ok() {
-            fens_counter.fetch_add(1, Ordering::Relaxed);
-            return scores[0];
-        }
-        return 0;
+        // Tính điểm HCE nhanh cục bộ để tránh gửi đơn lẻ (1x1) làm nghẽn hàng đợi GPU Metal
+        fens_counter.fetch_add(1, Ordering::Relaxed);
+        let hce = xiangrust::eval::Hce::new();
+        return hce.evaluate(pos);
     }
 
     let mut list = List::new();
