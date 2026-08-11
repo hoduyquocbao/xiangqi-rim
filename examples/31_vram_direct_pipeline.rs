@@ -166,8 +166,10 @@ fn main() {
 
     let mut games_done = 0;
 
+    let mini_batch_size = 128; // Micro-batch 128 ván cờ để stream binary và cập nhật tiến độ liên tục 1 giây/lần
+
     while games_done < total_games {
-        let chunk_size = std::cmp::min(batch_size, total_games - games_done);
+        let chunk_size = std::cmp::min(mini_batch_size, total_games - games_done);
 
         // Sinh dữ liệu song song trên Rayon pool cho chunk_size ván cờ (Chỉ ghi Binary 66-byte, triệt tiêu 100% JSONL RAM leak)
         let chunk_results: Vec<(Vec<u8>, usize, Vec<Sample>)> = pool.install(|| {
