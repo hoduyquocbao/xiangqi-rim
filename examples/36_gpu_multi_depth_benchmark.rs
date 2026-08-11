@@ -15,6 +15,7 @@ use std::sync::Arc;
 use std::thread;
 use std::time::{Duration, Instant};
 
+use rayon::prelude::*;
 use xiangrust::board::{Parser, Position};
 use xiangrust::book::Book;
 use xiangrust::gpu::{Batch, Device, Evaluator, Sample};
@@ -139,46 +140,38 @@ fn run_gpu_depth_benchmark(target_depth: u8, total_games: usize, num_threads: us
         .build()
         .unwrap();
 
-    let games_per_thread = (total_games / num_threads).max(1);
-
-    pool.scope(|s| {
-        for t in 0..num_threads {
+    pool.install(|| {
+        (0..total_games).into_par_iter().for_each(|g| {
             let tx = tx_sample.clone();
-            let games_counter = Arc::clone(&games_completed);
-            s.spawn(move |_| {
-                let seed = (t + 1) as u64 * 987654321;
-                for g in 0..games_per_thread {
-                    let mut pos = generate_start_position(seed + g as u64);
-                    let mut local_samples = Vec::with_capacity(512);
+            let seed = (g as u64 + 1) * 987654321;
+            let mut pos = generate_start_position(seed);
+            let mut local_samples = Vec::with_capacity(512);
 
-                    // Mô phỏng số nước đi và số nút lá tỉ lệ với độ sâu Target Depth
-                    let plies = (target_depth as usize * 6).min(100);
-                    for step in 0..plies {
-                        let mut list = List::new();
-                        legal::gen(&mut pos, &mut list);
-                        if list.len() == 0 {
-                            break;
-                        }
-
-                        let sample = Sample::pack(&pos, step as u32);
-                        local_samples.push(sample);
-
-                        let mv = list.get((step + t) % list.len());
-                        pos.apply(mv.from, mv.to);
-
-                        if local_samples.len() >= 64 {
-                            let _ = tx.send(local_samples.clone());
-                            local_samples.clear();
-                        }
-                    }
-
-                    if !local_samples.is_empty() {
-                        let _ = tx.send(local_samples);
-                    }
-                    games_counter.fetch_add(1, Ordering::Relaxed);
+            let plies = (target_depth as usize * 6).min(100);
+            for step in 0..plies {
+                let mut list = List::new();
+                legal::gen(&mut pos, &mut list);
+                if list.len() == 0 {
+                    break;
                 }
-            });
-        }
+
+                let sample = Sample::pack(&pos, step as u32);
+                local_samples.push(sample);
+
+                let mv = list.get((step + g) % list.len());
+                pos.apply(mv.from, mv.to);
+
+                if local_samples.len() >= 32 {
+                    let _ = tx.send(local_samples.clone());
+                    local_samples.clear();
+                }
+            }
+
+            if !local_samples.is_empty() {
+                let _ = tx.send(local_samples);
+            }
+            games_completed.fetch_add(1, Ordering::Relaxed);
+        });
     });
 
     drop(tx_sample);
