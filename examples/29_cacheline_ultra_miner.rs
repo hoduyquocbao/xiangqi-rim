@@ -16,14 +16,17 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 use rayon::prelude::*;
-use xiangrust::board::{Parser, Position, Serializer};
+use xiangrust::board::{Parser, Serializer};
 use xiangrust::book::Book;
 use xiangrust::eval::Hce;
 use xiangrust::movegen::{legal, List};
 
+
 /// Struct `CacheAlignedState` căn lề 64 bytes (1 CPU Cache Line) để triệt tiêu False Sharing giữa các luồng
 #[repr(align(64))]
+#[allow(dead_code)]
 struct CacheAlignedState {
+
     games_completed: AtomicUsize,
     pad1: [u8; 56], // Padding đạt đúng 64 bytes
     samples_collected: AtomicUsize,
@@ -174,6 +177,7 @@ fn main() {
                 }
             }
 
+            let hce = Hce::new();
             // 2. Tự đấu cờ siêu tốc và trích xuất FEN
             for _step in 0..60 {
                 let mut moves = List::new();
@@ -183,11 +187,12 @@ fn main() {
                 }
 
                 // Đánh giá thế cờ bằng HCE / Evaluator siêu tốc
-                let eval_score = Hce::eval(&pos);
+                let eval_score = hce.evaluate(&pos);
+
                 let move_idx = (fast_xorshift64(&mut rng_seed) as usize) % moves.len();
                 let chosen_move = moves.items[move_idx];
 
-                let fen_str = Serializer::fen(&pos);
+                let fen_str = Serializer::export(&pos);
                 let move_uci = format!(
                     "{}{}{}{}",
                     (b'a' + (chosen_move.from % 9)) as char,
@@ -225,12 +230,13 @@ fn main() {
     println!("============================================================");
     println!(" 📊 KẾT QUẢ BENCHMARK TIỆM CẬN GIỚI HẠN VẬT LÝ CPU CACHE LINE:");
     println!("============================================================");
-    println!("  • Tổng số FEN sinh ra : {:,} FENs", final_samples);
+    println!("  • Tổng số FEN sinh ra : {} FENs", final_samples);
     println!("  • Thời gian thực thi  : {:.2} giây", total_elapsed);
     println!(
-        "  🚀 THÔNG LƯỢNG TỐC ĐỘ  : {:,} FEN/sec ({:.2} MILLION FEN/min!)",
-        final_speed as usize,
+        "  🚀 THÔNG LƯỢNG TỐC ĐỘ  : {:.0} FEN/sec ({:.2} MILLION FEN/min!)",
+        final_speed,
         (final_speed * 60.0) / 1_000_000.0
     );
     println!("============================================================");
 }
+
