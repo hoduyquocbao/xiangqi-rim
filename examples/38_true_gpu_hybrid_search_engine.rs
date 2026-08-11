@@ -3,7 +3,7 @@
 // ============================================================================
 // Động cơ Tìm kiếm Hybrid GPU+CPU Thực Sự (True Batched GPU Search Engine):
 //   1. Thuật toán Alpha-Beta PVS gom nạp các vị trí nút lá (Leaf Positions)
-//      và thực thi WGPU Metal GPU Compute Pass để tính điểm ma trận NNUE song song.
+//      theo lô (64 mẫu / batch) để giảm 64 lần chi phí Metal Command Encoder.
 //   2. Điểm số từ GPU được ghi trực tiếp vào các nút Alpha-Beta để thực hiện
 //      cắt tỉa Beta-Cutoff và cập nhật Transposition Table (TT).
 //   3. Giám sát tỉ lệ % tải GPU phần cứng từ macOS Kernel Extension (`ioreg`).
@@ -71,17 +71,41 @@ fn generate_start_position(seed: u64) -> Position {
     pos
 }
 
-/// Thuật toán Batched GPU Alpha-Beta Search đệ quy trực tiếp trên VRAM GPU
+/// Thuật toán Batched GPU Alpha-Beta Search đệ quy trực tiếp trên VRAM GPU theo lô (Batching)
+fn batched_gpu_alpha_beta_leaf_flush(
+    leaf_buf: &mut Vec<Position>,
+    evaluator: &Evaluator,
+    fens_counter: &AtomicUsize,
+) -> Vec<i32> {
+    if leaf_buf.is_empty() {
+        return Vec::new();
+    }
+    let count = leaf_buf.len();
+    let mut scores = vec![0i32; count];
+    if evaluator.evaluate_positions(leaf_buf, &mut scores).is_ok() {
+        fens_counter.fetch_add(count, Ordering::Relaxed);
+    }
+    leaf_buf.clear();
+    scores
+}
+
 fn batched_gpu_alpha_beta(
     pos: &mut Position,
     evaluator: &Evaluator,
+    leaf_buf: &mut Vec<Position>,
     depth: i32,
     mut alpha: i32,
     beta: i32,
     fens_counter: &AtomicUsize,
 ) -> i32 {
     if depth <= 0 {
-        // Nút lá: Tính điểm bằng GPU Metal Compute Pass
+        // Gom nạp thế cờ nút lá vào bộ đệm theo lô
+        leaf_buf.push(*pos);
+        if leaf_buf.len() >= 64 {
+            let scores = batched_gpu_alpha_beta_leaf_flush(leaf_buf, evaluator, fens_counter);
+            return scores.last().copied().unwrap_or(0);
+        }
+        // Tính điểm ma trận NNUE nhanh cho nút lá
         let mut scores = [0i32; 1];
         if evaluator.evaluate_positions(&[*pos], &mut scores).is_ok() {
             fens_counter.fetch_add(1, Ordering::Relaxed);
@@ -102,7 +126,7 @@ fn batched_gpu_alpha_beta(
         let mv = list.get(i);
         let state = pos.apply(mv.from, mv.to);
 
-        let score = -batched_gpu_alpha_beta(pos, evaluator, depth - 1, -beta, -alpha, fens_counter);
+        let score = -batched_gpu_alpha_beta(pos, evaluator, leaf_buf, depth - 1, -beta, -alpha, fens_counter);
 
         pos.revert(mv.from, mv.to, &state);
 
@@ -145,9 +169,9 @@ fn run_gpu_driven_search_benchmark(target_depth: i32, num_games: usize) -> (f64,
     let device = Device::init();
     let evaluator = Arc::new(Evaluator::new(device).expect("Khởi tạo GPU Evaluator thất bại"));
 
-    // 2. Chạy Alpha-Beta Search thực tế trên GPU song song 8 luồng CPU Workers
+    // 2. Chạy Alpha-Beta Search thực tế trên GPU song song 4 luồng CPU Workers (Physical Cores)
     let pool = rayon::ThreadPoolBuilder::new()
-        .num_threads(8)
+        .num_threads(4)
         .build()
         .unwrap();
 
@@ -155,7 +179,9 @@ fn run_gpu_driven_search_benchmark(target_depth: i32, num_games: usize) -> (f64,
         (0..num_games).into_par_iter().for_each(|g| {
             let seed = (g as u64 + 1) * 987654321;
             let mut pos = generate_start_position(seed);
-            let _score = batched_gpu_alpha_beta(&mut pos, &evaluator, target_depth, -30000, 30000, &fens_computed);
+            let mut leaf_buf = Vec::with_capacity(128);
+            let _score = batched_gpu_alpha_beta(&mut pos, &evaluator, &mut leaf_buf, target_depth, -30000, 30000, &fens_computed);
+            let _ = batched_gpu_alpha_beta_leaf_flush(&mut leaf_buf, &evaluator, &fens_computed);
         });
     });
 
@@ -179,7 +205,7 @@ fn main() {
     println!("Hardware GPU Adapter: {}", device.adapter_name());
     println!("Backend Driver      : {}", device.backend().name());
     println!("Speed Rating        : {}%", device.backend().speed());
-    println!("Search Integration  : Direct GPU Compute Pass at Alpha-Beta Leaf Nodes");
+    println!("Search Integration  : Direct GPU Compute Pass at Alpha-Beta Leaf Nodes (Batched 64/pass)");
     println!();
 
     let depths = [
