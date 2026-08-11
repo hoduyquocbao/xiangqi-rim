@@ -96,6 +96,7 @@ fn run_gpu_depth_benchmark(target_depth: u8, total_games: usize, num_threads: us
 
     let flag_gpu = Arc::clone(&finished_flag);
     let count_gpu = Arc::clone(&fens_computed);
+    let dispatch_threshold = if target_depth >= 10 { 1024 } else { 2048 };
 
     // Luồng Dedicated GPU Evaluator
     let gpu_worker = thread::spawn(move || {
@@ -107,12 +108,12 @@ fn run_gpu_depth_benchmark(target_depth: u8, total_games: usize, num_threads: us
                 while !flag_gpu.load(Ordering::Relaxed) || !accumulated.is_empty() {
                     while let Ok(samples) = rx_sample.try_recv() {
                         accumulated.extend(samples);
-                        if accumulated.len() >= 4096 {
+                        if accumulated.len() >= dispatch_threshold {
                             break;
                         }
                     }
 
-                    if accumulated.len() >= 4096 || (flag_gpu.load(Ordering::Relaxed) && !accumulated.is_empty()) {
+                    if accumulated.len() >= dispatch_threshold || (flag_gpu.load(Ordering::Relaxed) && !accumulated.is_empty()) {
                         let chunk_size = accumulated.len().min(batch_size);
                         let chunk: Vec<Sample> = accumulated.drain(..chunk_size).collect();
                         batch.clear();
@@ -148,7 +149,7 @@ fn run_gpu_depth_benchmark(target_depth: u8, total_games: usize, num_threads: us
                 let seed = (t + 1) as u64 * 987654321;
                 for g in 0..games_per_thread {
                     let mut pos = generate_start_position(seed + g as u64);
-                    let mut local_samples = Vec::with_capacity(1024);
+                    let mut local_samples = Vec::with_capacity(512);
 
                     // Mô phỏng số nước đi và số nút lá tỉ lệ với độ sâu Target Depth
                     let plies = (target_depth as usize * 6).min(100);
@@ -165,7 +166,7 @@ fn run_gpu_depth_benchmark(target_depth: u8, total_games: usize, num_threads: us
                         let mv = list.get((step + t) % list.len());
                         pos.apply(mv.from, mv.to);
 
-                        if local_samples.len() >= 256 {
+                        if local_samples.len() >= 64 {
                             let _ = tx.send(local_samples.clone());
                             local_samples.clear();
                         }
