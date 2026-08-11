@@ -13,7 +13,7 @@
 use std::fs::OpenOptions;
 use std::io::{BufWriter, Write};
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
-use std::sync::mpsc::channel;
+use std::sync::mpsc::sync_channel;
 use std::sync::Arc;
 use std::thread;
 use std::time::{Duration, Instant};
@@ -81,11 +81,12 @@ fn main() {
     let gpu_backend = device.backend().name().to_string();
     let gpu_rating = device.backend().speed();
 
-    println!("Cấu hình Hybrid GPU + CPU Parallel Acceleration:");
+    println!("Cấu hình Hybrid GPU + CPU Parallel Acceleration (Honest Yielding):");
     println!("  • GPU Hardware Card   : {}", gpu_name);
     println!("  • GPU Driver Backend  : {} (Rating {}%)", gpu_backend, gpu_rating);
     println!("  • GPU VRAM Batch Size : {} bàn cờ song song", batch_size);
     println!("  • CPU Multi-Core Pool : {} luồng physical cores", num_threads);
+    println!("  • Channel Backpressure: Bounded sync_channel(16) [Honest CPU/GPU Yielding]",);
     println!("  • Tổng số ván cờ      : {} ván cờ", total_games);
     println!("  • Output File Binary  : {}", out_bin);
     println!();
@@ -95,7 +96,7 @@ fn main() {
 
     let start_time = Instant::now();
 
-    // 2. Mở file Ghi Nhị Phân 66-byte với BufWriter 256KB
+    // 2. Mở file Ghi Nhị Phân 66-byte với BufWriter 256KB & Sync Bounded Channel
     let bin_file = OpenOptions::new()
         .create(true)
         .write(true)
@@ -104,7 +105,8 @@ fn main() {
         .expect("Tạo tệp BINARY thất bại");
     let mut bin_writer = BufWriter::with_capacity(256 * 1024, bin_file);
 
-    let (tx_bin, rx_bin) = channel::<Vec<u8>>();
+    // Kênh Bounded Sync Channel (16 buffer) tạo Backpressure trung thực đẩy CPU Yield khi Disk chậm
+    let (tx_bin, rx_bin) = sync_channel::<Vec<u8>>(16);
 
     let _writer_bin_handle = thread::spawn(move || {
         while let Ok(buf) = rx_bin.recv() {
@@ -113,18 +115,23 @@ fn main() {
         let _ = bin_writer.flush();
     });
 
-    // 3. Luồng GPU Dedicated GPU Batch Evaluator Thread
-    let (tx_gpu_samples, rx_gpu_samples) = channel::<Vec<Sample>>();
+    // 3. Luồng GPU Dedicated Batch Evaluator với CPU/GPU Yielding trung thực
+    let (tx_gpu_samples, rx_gpu_samples) = sync_channel::<Vec<Sample>>(16);
     
     let _gpu_worker_handle = thread::spawn(move || {
         let gpu_device = Device::init();
         if let Ok(mut evaluator) = Evaluator::new(gpu_device) {
             if let Ok(mut gpu_batch) = Batch::allocate(evaluator.device(), batch_size) {
                 while let Ok(samples) = rx_gpu_samples.recv() {
-                    for sample in &samples {
-                        let _ = evaluator.submit(sample);
+                    if !samples.is_empty() {
+                        for sample in &samples {
+                            let _ = evaluator.submit(sample);
+                        }
+                        let _ = evaluator.flush(&mut gpu_batch);
+                    } else {
+                        // Nhường CPU cho OS Thread Scheduler nếu không có samples
+                        thread::yield_now();
                     }
-                    let _ = evaluator.flush(&mut gpu_batch);
                 }
             }
         }
@@ -246,6 +253,9 @@ fn main() {
         let _ = tx_gpu_samples.send(gpu_samples_batch);
 
         games_done += chunk_size;
+
+        // Yield CPU time nhường luồng điều phối cho OS Thread Scheduler
+        thread::yield_now();
     }
 
     drop(tx_gpu_samples);
