@@ -18,9 +18,9 @@ import torch.nn.functional as F # Module chứa các hàm kích hoạt phi tuy�
 
 # 1. Khai báo hằng số môi trường tính toán và kích thước lô batch
 GPU_DEVICE_NAME = "cuda:0" # Tên thiết bị card đồ họa GPU NVIDIA trên Colab
-BATCH_GAMES_COUNT = 16384 # Số lượng ván cờ chạy song song trên 16384 slot VRAM
-TOTAL_MINING_SAMPLES = 6500000 # Tổng số vị trí FEN mục tiêu cần đào (6.5 triệu FEN)
-OUTPUT_DATA_FILEPATH = "data/selfplay_samples_gen7.jsonl" # Đường dẫn tệp dữ liệu JSONL
+BATCH_GAMES_COUNT = int(os.environ.get("BATCH_SIZE", "16384")) # Số lượng ván cờ chạy song song trên 16384 slot VRAM
+TOTAL_MINING_SAMPLES = int(os.environ.get("TARGET_FENS", "10000000")) # Tổng số vị trí FEN mục tiêu cần đào (mặc định 10 triệu FEN)
+OUTPUT_DATA_FILEPATH = os.environ.get("OUTPUT", "data/selfplay_samples_gen8_100m.jsonl") # Đường dẫn tệp dữ liệu JSONL
 
 # 2. Khởi tạo thiết bị compute GPU CUDA
 device_object = torch.device(GPU_DEVICE_NAME if torch.cuda.is_available() else "cpu") # Thể hiện đối tượng thiết bị PyTorch CUDA
