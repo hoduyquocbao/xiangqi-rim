@@ -45,7 +45,7 @@ configs:
 - config_name: default
   data_files:
   - split: train
-    path: "chunks/*.jsonl"
+    path: "chunks/*.parquet"
 dataset_info:
   features:
   - name: fen
@@ -60,10 +60,10 @@ dataset_info:
 
 # 🪓 Xiangqi-RIM 1 Billion Native Rust Engine NNUE Dataset
 
-High-performance native Rust engine generated dataset containing **1,000,000,000 (1 Billion)** Chinese Chess (Xiangqi) positions, UCI best moves, centipawn evaluations, and search depths.
+High-performance native Rust engine generated dataset containing **1,000,000,000 (1 Billion)** Chinese Chess (Xiangqi) positions, UCI best moves, centipawn evaluations, and search depths stored in **Apache Parquet (`.parquet`)** format.
 
 ## 📊 Dataset Structure
-Each chunk in `chunks/chunk_XXX_10m.jsonl` contains 10,000,000 FEN samples formatted as JSON Lines:
+Each chunk in `chunks/chunk_XXX_10m.parquet` contains 10,000,000 FEN samples compressed with Snappy Parquet (file size ~190 MB per 10M FENs):
 
 ```json
 {"fen":"rnbakabnr/9/1c5c1/p1p1p1p1p/9/9/P1P1P1P1P/1C5C1/9/RNBAKABNR w - - 0 1","best_move":"h2e2","score":15,"depth":4}

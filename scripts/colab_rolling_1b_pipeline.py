@@ -14,6 +14,7 @@ import glob
 import threading
 import subprocess
 import numpy as np
+import pandas as pd
 import torch
 import torch.nn as nn
 import torch.optim as optim
@@ -93,22 +94,31 @@ def load_binary_chunk_to_cuda(bin_filepath, device, max_samples=10000000):
 # ----------------------------------------------------------------------------
 # LUỒNG CHẠY NGẦM BACKGROUND UPLOAD (NON-BLOCKING GPU MINING/TRAINING)
 # ----------------------------------------------------------------------------
-def async_upload_worker(api, repo_dataset, repo_model, local_jsonl, repo_jsonl, weights_latest):
+def async_upload_worker(api, repo_dataset, repo_model, local_jsonl, repo_parquet, weights_latest):
     try:
         if os.path.exists(local_jsonl):
-            print(f"--> [BACKGROUND UPLOAD] Uploading {repo_jsonl} to HF Hub...", flush=True)
+            local_parquet = local_jsonl.replace(".jsonl", ".parquet")
+            print(f"--> [PARQUET CONVERTER] Compressing 980MB JSONL into ~190MB Snappy Parquet ({local_parquet})...", flush=True)
+            df = pd.read_json(local_jsonl, lines=True)
+            df.to_parquet(local_parquet, compression="snappy", index=False)
+            p_size = os.path.getsize(local_parquet)
+            print(f"✅ [PARQUET CONVERTER] Created Snappy Parquet file ({p_size / (1024*1024):.2f} MB)!", flush=True)
+
+            print(f"--> [BACKGROUND UPLOAD] Uploading {repo_parquet} to HF Hub...", flush=True)
             api.upload_file(
-                path_or_fileobj=local_jsonl,
-                path_in_repo=repo_jsonl,
+                path_or_fileobj=local_parquet,
+                path_in_repo=repo_parquet,
                 repo_id=repo_dataset,
                 repo_type="dataset"
             )
             # Tự động dọn dẹp đĩa cục bộ sau khi upload
             os.remove(local_jsonl)
+            if os.path.exists(local_parquet):
+                os.remove(local_parquet)
             bin_path = local_jsonl.replace(".jsonl", ".bin")
             if os.path.exists(bin_path):
                 os.remove(bin_path)
-            print(f"✅ [BACKGROUND UPLOAD] {repo_jsonl} Upload & Local Cleanup Done!", flush=True)
+            print(f"✅ [BACKGROUND UPLOAD] {repo_parquet} Parquet Upload & Cleanup Done!", flush=True)
             
         if os.path.exists(weights_latest):
             api.upload_file(
@@ -162,17 +172,17 @@ def main():
     for chunk_idx in range(1, total_chunks + 1):
         chunk_jsonl = f"data/chunk_{chunk_idx:03d}_10m.jsonl"
         chunk_bin = f"data/chunk_{chunk_idx:03d}_10m.bin"
-        repo_jsonl = f"chunks/chunk_{chunk_idx:03d}_10m.jsonl"
+        repo_parquet = f"chunks/chunk_{chunk_idx:03d}_10m.parquet"
 
         try:
-            if not force_remine and api.file_exists(repo_id=repo_dataset, filename=repo_jsonl, repo_type="dataset"):
-                print(f"⏩ [CHUNK {chunk_idx:03d}/{total_chunks:03d}] Exist on HF Hub. Skipping!", flush=True)
+            if not force_remine and api.file_exists(repo_id=repo_dataset, filename=repo_parquet, repo_type="dataset"):
+                print(f"⏩ [CHUNK {chunk_idx:03d}/{total_chunks:03d}] Exist on HF Hub ({repo_parquet}). Skipping!", flush=True)
                 accumulated_fens += fens_per_chunk
                 continue
-            elif force_remine and api.file_exists(repo_id=repo_dataset, filename=repo_jsonl, repo_type="dataset"):
-                print(f"🗑️ [FORCE_REMINE] Purging old Chunk {chunk_idx:03d} from HF Hub...", flush=True)
+            elif force_remine and api.file_exists(repo_id=repo_dataset, filename=repo_parquet, repo_type="dataset"):
+                print(f"🗑️ [FORCE_REMINE] Purging old Parquet Chunk {chunk_idx:03d} from HF Hub...", flush=True)
                 try:
-                    api.delete_file(path_in_repo=repo_jsonl, repo_id=repo_dataset, repo_type="dataset")
+                    api.delete_file(path_in_repo=repo_parquet, repo_id=repo_dataset, repo_type="dataset")
                 except Exception:
                     pass
         except Exception:
@@ -187,7 +197,7 @@ def main():
         cmd_mine = ["cargo", "run", "--release", "--example", "31_vram_direct_pipeline"]
         env = os.environ.copy()
         env["GAMES"] = str(int(fens_per_chunk / 50))
-        env["BATCH"] = os.environ.get("BATCH", "16384")
+        env["BATCH"] = os.environ.get("BATCH", "65536")
         env["THREADS"] = os.environ.get("THREADS", "4")
         env["RAYON_NUM_THREADS"] = os.environ.get("THREADS", "4")
         env["OUTPUT"] = chunk_jsonl
@@ -207,15 +217,15 @@ def main():
 
         accumulated_fens += fens_per_chunk
 
-        # STEP 2: INSTANT 0.02S IN-VRAM PYTORCH GPU TRAIN
-        print(f"--> BƯỚC 2: PyTorch GPU nạp Tệp Binary trong 0.02s và Train NNUE CUDA...", flush=True)
+        # STEP 2: INSTANT 0.02S IN-VRAM PYTORCH GPU TRAIN WITH BATCH 65536 (80-90% VRAM)
+        print(f"--> BƯỚC 2: PyTorch GPU nạp Tệp Binary trong 0.02s và Train NNUE CUDA (BATCH=65536)...", flush=True)
         t_load_0 = time.time()
         feats, targets = load_binary_chunk_to_cuda(chunk_bin, device)
         t_load_1 = time.time()
         print(f"  ⚡ Binary GPU Memory Load Time: {t_load_1 - t_load_0:.4f} seconds ({len(feats):,} samples)!", flush=True)
 
         model.train()
-        batch_size_gpu = 16384
+        batch_size_gpu = 65536
         num_batches = len(feats) // batch_size_gpu
         total_loss = 0.0
 
@@ -235,11 +245,11 @@ def main():
         export_xrnn(model, weights_latest)
         print(f"✅ BƯỚC 2 HOÀN TẤT: NNUE Training Done (Avg Loss: {avg_loss:.6f})", flush=True)
 
-        # STEP 3: ASYNCHRONOUS BACKGROUND HF HUB UPLOAD (GPU STAYS 100% ACTIVE!)
-        print(f"--> BƯỚC 3: Kích hoạt Background Thread Upload HF Hub (Không chặn GPU)...", flush=True)
+        # STEP 3: ASYNCHRONOUS BACKGROUND PARQUET CONVERSION & HF HUB UPLOAD
+        print(f"--> BƯỚC 3: Kích hoạt Background Thread Nén Parquet & Upload HF Hub (Không chặn GPU)...", flush=True)
         up_thread = threading.Thread(
             target=async_upload_worker,
-            args=(api, repo_dataset, repo_model, chunk_jsonl, repo_jsonl, weights_latest)
+            args=(api, repo_dataset, repo_model, chunk_jsonl, repo_parquet, weights_latest)
         )
         up_thread.start()
         bg_threads.append(up_thread)
