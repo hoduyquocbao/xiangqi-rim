@@ -192,9 +192,9 @@ def main():
         print(f" 🚀 [CHUNK {chunk_idx:03d}/{total_chunks:03d}] 10 MILLION FEN IN-VRAM PIPELINE (TOTAL: {accumulated_fens + fens_per_chunk:,} FENs)", flush=True)
         print(f"============================================================", flush=True)
 
-        # STEP 1: NATIVE RUST IN-VRAM BINARY MINER (31_vram_direct_pipeline)
-        print(f"--> BƯỚC 1: Native Rust GPU Engine (31_vram_direct_pipeline) xuất 66-byte BINARY + JSONL...", flush=True)
-        cmd_mine = ["cargo", "run", "--release", "--example", "31_vram_direct_pipeline"]
+        # STEP 1: NATIVE RUST HYBRID GPU + CPU PIPELINE (32_hybrid_gpu_cpu_pipeline)
+        print(f"--> BƯỚC 1: Native Rust Engine (32_hybrid_gpu_cpu_pipeline) chạy GPU Compute + CPU Multi-Core song song...", flush=True)
+        cmd_mine = ["cargo", "run", "--release", "--example", "32_hybrid_gpu_cpu_pipeline"]
         env = os.environ.copy()
         env["GAMES"] = str(int(fens_per_chunk / 50))
         env["BATCH"] = "16384"
