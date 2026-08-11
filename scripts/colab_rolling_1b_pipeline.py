@@ -128,7 +128,13 @@ def main():
     
     _T1 = "hf_olRVlCHGkrZTKzX"
     _T2 = "dDEEHGUuqRFivahQLFu"
-    token = userdata.get('HF_TOKEN') or os.environ.get("HF_TOKEN") or (_T1 + _T2)
+    token = None
+    try:
+        token = userdata.get('HF_TOKEN')
+    except Exception:
+        pass
+    if not token:
+        token = os.environ.get("HF_TOKEN") or (_T1 + _T2)
     api = HfApi(token=token)
     
     user_info = api.whoami()
