@@ -175,14 +175,21 @@ def main():
         cmd_mine = ["cargo", "run", "--release", "--example", "20_parallel_mine"]
         env = os.environ.copy()
         env["GAMES"] = str(int(fens_per_chunk / 50))  # 200,000 ván cờ self-play = ~10 TRIỆU FENs
-        env["BATCH"] = "16384"
-        env["THREADS"] = "4"
-        env["RAYON_NUM_THREADS"] = "4"
+        env["BATCH"] = os.environ.get("BATCH", "16384")
+        env["THREADS"] = os.environ.get("THREADS", "4")
+        env["RAYON_NUM_THREADS"] = os.environ.get("THREADS", "4")
         env["OUTPUT"] = chunk_file
         
-        proc = subprocess.run(cmd_mine, env=env, stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT)
-        if proc.returncode != 0 or not os.path.exists(chunk_file):
-            print(f"❌ Lỗi khi đào Chunk {chunk_idx:03d}", flush=True)
+        proc_mine = subprocess.Popen(
+            cmd_mine, env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1
+        )
+        for line in iter(proc_mine.stdout.readline, ''):
+            print(line, end='', flush=True)
+        proc_mine.stdout.close()
+        code_mine = proc_mine.wait()
+        
+        if code_mine != 0 or not os.path.exists(chunk_file):
+            print(f"❌ Lỗi khi đào Chunk {chunk_idx:03d} (Exit Code: {code_mine})", flush=True)
             continue
             
         chunk_size = os.path.getsize(chunk_file)
