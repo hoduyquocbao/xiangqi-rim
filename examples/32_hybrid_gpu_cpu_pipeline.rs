@@ -77,7 +77,7 @@ fn main() {
     let num_threads: usize = std::env::var("THREADS")
         .ok()
         .and_then(|v| v.parse().ok())
-        .unwrap_or(4);
+        .unwrap_or(8);
     let base_seed: u64 = std::env::var("SEED")
         .ok()
         .and_then(|v| v.parse().ok())
@@ -95,9 +95,9 @@ fn main() {
     println!("  • GPU Hardware Card   : {}", gpu_name);
     println!("  • GPU Driver Backend  : {} (Rating {}%)", gpu_backend, gpu_rating);
     println!("  • GPU VRAM Batch Size : {} bàn cờ song song", batch_size);
-    println!("  • CPU Multi-Core Pool : {} luồng physical cores", num_threads);
+    println!("  • CPU Multi-Core Pool : {} luồng physical/logical cores", num_threads);
     println!("  • Search Engine Depth : Depth {}", search_depth);
-    println!("  • Channel Backpressure: Bounded sync_channel(16) [Honest CPU/GPU Yielding]");
+    println!("  • Channel Backpressure: Bounded sync_channel(128) [Stream-lined GPU/CPU Pipeline]");
     println!("  • Tổng số ván cờ      : {} ván cờ", total_games);
     println!("  • Output File Binary  : {}", out_bin);
     println!();
@@ -116,8 +116,8 @@ fn main() {
         .expect("Tạo tệp BINARY thất bại");
     let mut bin_writer = BufWriter::with_capacity(256 * 1024, bin_file);
 
-    // Kênh Bounded Sync Channel (16 buffer) tạo Backpressure trung thực đẩy CPU Yield khi Disk chậm
-    let (tx_bin, rx_bin) = sync_channel::<Vec<u8>>(16);
+    // Kênh Bounded Sync Channel (32 buffer) tạo Backpressure trung thực đẩy CPU Yield khi Disk chậm
+    let (tx_bin, rx_bin) = sync_channel::<Vec<u8>>(32);
 
     let _writer_bin_handle = thread::spawn(move || {
         while let Ok(buf) = rx_bin.recv() {
@@ -127,28 +127,27 @@ fn main() {
     });
 
     // 3. Luồng GPU Dedicated Batch Evaluator kích hoạt 100% phần cứng GPU Compute Shader
-    let (tx_gpu_samples, rx_gpu_samples) = sync_channel::<Vec<Sample>>(16);
+    let (tx_gpu_samples, rx_gpu_samples) = sync_channel::<Vec<Sample>>(128);
     
     let _gpu_worker_handle = thread::spawn(move || {
         let gpu_device = Device::init();
         if let Ok(evaluator) = Evaluator::new(gpu_device) {
             if let Ok(mut gpu_batch) = Batch::allocate(evaluator.device(), batch_size) {
-                let mut accumulated_samples: Vec<Sample> = Vec::with_capacity(16384);
+                let mut accumulated_samples: Vec<Sample> = Vec::with_capacity(32768);
                 
                 while let Ok(samples) = rx_gpu_samples.recv() {
                     accumulated_samples.extend(samples);
 
-                    // Ép nạp lô ≥ 1024 mẫu vào Batch để thực thi 100% WGPU Compute Shader trên card GPU phần cứng liên tục
-                    if accumulated_samples.len() >= 1024 {
+                    // Ép nạp lô ≥ 2048 mẫu vào Batch để vắt cạn phần cứng GPU Metal liên tục
+                    while accumulated_samples.len() >= 2048 {
+                        let drain_cnt = accumulated_samples.len().min(batch_size);
+                        let chunk: Vec<Sample> = accumulated_samples.drain(..drain_cnt).collect();
                         gpu_batch.clear();
-                        for sample in &accumulated_samples {
+                        for sample in &chunk {
                             let _ = gpu_batch.push(sample);
                         }
                         let count = gpu_batch.count();
                         let _ = evaluator.execute(&mut gpu_batch, count);
-                        accumulated_samples.clear();
-                    } else {
-                        thread::yield_now();
                     }
                 }
 
@@ -194,13 +193,13 @@ fn main() {
         .expect("Khởi tạo Rayon Thread Pool thất bại");
 
     let mut games_done = 0;
-    let mini_batch_size = 16; // Micro-batch 16 ván cờ Depth 6 stream song song GPU/CPU
+    let mini_batch_size = 32; // Micro-batch 32 ván cờ Depth 6 stream song song GPU/CPU
 
     while games_done < total_games {
         let chunk_size = std::cmp::min(mini_batch_size, total_games - games_done);
         let state_rayon = Arc::clone(&state);
 
-        // CPU Workers sinh ván cờ Alpha-Beta Depth 6 song song trên 4 luồng physical cores
+        // CPU Workers sinh ván cờ Alpha-Beta Depth 6 song song trên 8 luồng cores
         let chunk_results: Vec<(Vec<u8>, usize, Vec<Sample>)> = pool.install(|| {
             (0..chunk_size)
                 .into_par_iter()
