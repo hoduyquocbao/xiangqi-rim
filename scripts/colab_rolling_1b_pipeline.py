@@ -200,7 +200,7 @@ def main():
         env["BATCH"] = "16384"
         env["THREADS"] = "4"
         env["RAYON_NUM_THREADS"] = "4"
-        env["DEPTH"] = os.environ.get("DEPTH", "4")
+        env["DEPTH"] = os.environ.get("DEPTH", "0")  # Depth 0 = HCE Direct Evaluation 160,000 FEN/s (60s / 10M Chunk)
         env["OUTPUT"] = chunk_jsonl
         env["OUTPUT_BIN"] = chunk_bin
         env["OCL_ICD_FILENAMES"] = "/usr/lib/x86_64-linux-gnu/libnvidia-opencl.so.1"
