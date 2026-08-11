@@ -132,9 +132,13 @@ def main():
     total_parts = int(os.environ.get("PARTS", "10"))
     fens_per_part = int(os.environ.get("FENS_PER_PART", "100000000"))  # 100M FENs / part
     
-    _T1 = "hf_olRVlCHGkrZTKzX"
-    _T2 = "dDEEHGUuqRFivahQLFu"
-    token = userdata.get('HF_TOKEN') or os.environ.get("HF_TOKEN") or (_T1 + _T2)
+    token = None
+    try:
+        token = userdata.get('HF_TOKEN')
+    except Exception:
+        token = None
+    if not token:
+        token = os.environ.get("HF_TOKEN") or (_T1 + _T2)
     api = HfApi(token=token)
     
     username = api.whoami()['name']
