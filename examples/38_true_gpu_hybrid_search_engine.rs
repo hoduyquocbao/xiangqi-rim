@@ -183,9 +183,14 @@ fn main() {
     println!();
 
     let depths = [
-        (3, 500, "Depth 3 (Fast GPU Tactical Search)"),
-        (4, 200, "Depth 4 (Deep GPU Search)"),
-        (5, 50,  "Depth 5 (Master GPU Evaluation)"),
+        (6,  100, "Depth 6  (Tactical Search)"),
+        (8,  50,  "Depth 8  (Deep Search)"),
+        (10, 20,  "Depth 10 (Master Evaluation)"),
+        (12, 10,  "Depth 12 (Grandmaster Search)"),
+        (14, 5,   "Depth 14 (Ultra-Grandmaster)"),
+        (16, 3,   "Depth 16 (Extreme Deep Search)"),
+        (18, 2,   "Depth 18 (Endgame Precision)"),
+        (20, 1,   "Depth 20 (Deepest Endgame Search)"),
     ];
 
     println!("{:<35} | {:<10} | {:<12} | {:<14} | {:<10}", "Mức Độ Sâu Search (Depth)", "Thời gian", "Tổng FEN GPU", "Thông lượng GPU", "Peak GPU %");
