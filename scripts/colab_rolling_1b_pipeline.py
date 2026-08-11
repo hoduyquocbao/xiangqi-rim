@@ -245,8 +245,22 @@ def main():
         export_xrnn(model, weights_latest)
         print(f"✅ BƯỚC 2 HOÀN TẤT: NNUE Training Done (Avg Loss: {avg_loss:.6f})", flush=True)
 
+        # BƯỚC 2.5: TỰ ĐỘNG ĐO BENCHMARK ELO CHO MÔ HÌNH VỪA HUẤN LUYỆN
+        print(f"\n--> BƯỚC 2.5: 🏆 Tự động đo ELO Benchmark cho Mô Hình NNUE vừa huấn luyện (Depth 4, 40 ván)...", flush=True)
+        cmd_elo = ["cargo", "run", "--release", "--example", "26_tournament_benchmark"]
+        env_elo = os.environ.copy()
+        env_elo["GAMES"] = "40"
+        env_elo["DEPTH"] = "4"
+        proc_elo = subprocess.Popen(
+            cmd_elo, env=env_elo, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1
+        )
+        for line in iter(proc_elo.stdout.readline, ''):
+            print(line, end='', flush=True)
+        proc_elo.stdout.close()
+        proc_elo.wait()
+
         # STEP 3: ASYNCHRONOUS BACKGROUND PARQUET CONVERSION & HF HUB UPLOAD
-        print(f"--> BƯỚC 3: Kích hoạt Background Thread Nén Parquet & Upload HF Hub (Không chặn GPU)...", flush=True)
+        print(f"\n--> BƯỚC 3: Kích hoạt Background Thread Nén Parquet & Upload HF Hub (Không chặn GPU)...", flush=True)
         up_thread = threading.Thread(
             target=async_upload_worker,
             args=(api, repo_dataset, repo_model, chunk_jsonl, repo_parquet, weights_latest)
