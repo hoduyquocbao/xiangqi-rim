@@ -83,15 +83,23 @@ impl Device { // Khối triển khai các phương thức cho Device
             ..Default::default() // Sử dụng mặc định cho các trường còn lại
         }); // Kết thúc khởi tạo Instance
 
-        let mut adapter = pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions { // Yêu cầu HighPerformance GPU
-            power_preference: wgpu::PowerPreference::HighPerformance, // Ưu tiên GPU hiệu năng cao
-            compatible_surface: None, // Không yêu cầu GUI surface
-            force_fallback_adapter: false, // Không ép buộc CPU fallback
-        })); // Kết thúc yêu cầu Adapter
+        // Liệt kê tất cả các Adapter và ưu tiên chọn card phần cứng thực sự, loại bỏ 100% Cpu/llvmpipe
+        let mut adapter = None;
+        for a in instance.enumerate_adapters(wgpu::Backends::all()) {
+            let info = a.get_info();
+            let name_lc = info.name.to_lowercase();
+            if info.device_type != wgpu::DeviceType::Cpu 
+               && !name_lc.contains("llvmpipe") 
+               && !name_lc.contains("softpipe") 
+               && !name_lc.contains("swrast") {
+                adapter = Some(a);
+                break;
+            }
+        }
 
-        if adapter.is_none() { // Nếu HighPerformance không khớp -> Thử lại với LowPower/None cho Linux Vulkan ICD
+        if adapter.is_none() { // Nếu chưa tìm được qua enumeration -> Dùng request_adapter fallback
             adapter = pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions {
-                power_preference: wgpu::PowerPreference::None,
+                power_preference: wgpu::PowerPreference::HighPerformance,
                 compatible_surface: None,
                 force_fallback_adapter: false,
             }));
