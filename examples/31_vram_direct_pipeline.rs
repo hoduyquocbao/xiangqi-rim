@@ -193,7 +193,7 @@ fn main() {
                     let mut samples_vec: Vec<Sample> = Vec::with_capacity(40);
                     let mut sample_count = 0;
 
-                    let mut search = Search::new(2);
+                    let mut search = Search::new(0);
                     let mut limits = Limits::new();
                     limits.depth = search_depth;
 
