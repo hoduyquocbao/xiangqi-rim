@@ -198,10 +198,13 @@ def main():
         env = os.environ.copy()
         env["GAMES"] = str(int(fens_per_chunk / 50))
         env["BATCH"] = "16384"
-        env["THREADS"] = os.environ.get("THREADS", "4")
-        env["RAYON_NUM_THREADS"] = os.environ.get("THREADS", "4")
+        env["THREADS"] = "4"
+        env["RAYON_NUM_THREADS"] = "4"
+        env["DEPTH"] = os.environ.get("DEPTH", "4")
         env["OUTPUT"] = chunk_jsonl
         env["OUTPUT_BIN"] = chunk_bin
+        env["OCL_ICD_FILENAMES"] = "/usr/lib/x86_64-linux-gnu/libnvidia-opencl.so.1"
+        env["VK_ICD_FILENAMES"] = "/etc/vulkan/icd.d/nvidia_icd.json"
 
         proc_mine = subprocess.Popen(
             cmd_mine, env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1
