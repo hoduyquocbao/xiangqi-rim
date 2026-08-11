@@ -45,19 +45,16 @@ class Network(nn.Module):
         Hàm truyền xuôi forward tính toán điểm đánh giá bàn cờ
         """
         # Ánh xạ đặc trưng bàn cờ qua Feature Transformer và kẹp giá trị
-        active = self.clamp(self.ft(feature))
+        active = self.clamp(self.ft(feature))  # [batch, 256]
         
-        # Tách đặc trưng thành 2 nửa góc nhìn (Phía Đỏ và Phía Đen)
-        red, black = active.chunk(2, dim=1)
-        
-        # Tải tích hợp 2 nửa góc nhìn thành vectơ 512 phần tử
-        concat = torch.cat([red, black], dim=1)
+        # Nhân đôi đệm góc nhìn tạo vectơ 512 phần tử phù hợp với lớp L1
+        concat = torch.cat([active, active], dim=1)  # [batch, 512]
         
         # Tính toán qua Lớp Ẩn 1 và kẹp giá trị
-        hidden = self.clamp(self.l1(concat))
+        hidden = self.clamp(self.l1(concat))  # [batch, 32]
         
         # Tính toán giá trị đầu ra
-        result = self.out(hidden)
+        result = self.out(hidden)  # [batch, 1]
         return result
 
 # ----------------------------------------------------------------------------
