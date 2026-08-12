@@ -5,12 +5,16 @@ import React from 'react';
 
 // Danh sách các mốc dung lượng RAM băm Transposition Table (MB)
 const sizes = [128, 256, 512, 1024, 2048, 4096, 8192];
+// Danh sách các mốc thời gian suy nghĩ tối đa mỗi nước (ms)
+const times = [500, 1000, 2000, 5000, 10000, 30000, 60000];
 
 export default function Panel({
   depth = 6,
   level,
   hash = 256,
   alloc,
+  timeLimit = 2000,
+  setTimeLimit,
   playMode = 'ai',
   setPlayMode,
   hint,
@@ -137,6 +141,31 @@ export default function Panel({
           <span>128MB</span>
           <span>1GB</span>
           <span>8GB</span>
+        </div>
+      </div>
+
+      {/* Chọn Thời gian Suy nghĩ Tối đa / Nước đi (Move Time Limit: 0.5s .. 60s) */}
+      <div className="flex flex-col gap-2">
+        <div className="flex justify-between items-center text-xs">
+          <span className="text-gold/70 font-semibold">THỜI GIAN / NƯỚC (TIME LIMIT)</span>
+          <span className="text-amber-400 font-bold font-mono bg-amber-500/10 border border-amber-500/30 px-2 py-0.5 rounded">
+            {timeLimit >= 1000 ? `${(timeLimit / 1000).toFixed(1)}s` : `${timeLimit}ms`}
+          </span>
+        </div>
+        <input
+          type="range"
+          aria-label="Move Time Limit"
+          min="0"
+          max="6"
+          step="1"
+          value={times.indexOf(timeLimit) >= 0 ? times.indexOf(timeLimit) : 2}
+          onChange={(e) => setTimeLimit && setTimeLimit(times[Number(e.target.value)])}
+          className="w-full accent-amber-400 bg-obsidian h-2 rounded-lg cursor-pointer"
+        />
+        <div className="flex justify-between text-[10px] text-gold/40 font-mono">
+          <span>0.5s</span>
+          <span>2.0s</span>
+          <span>60.0s</span>
         </div>
       </div>
 

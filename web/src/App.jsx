@@ -36,6 +36,7 @@ export default function App() {
     index: 0,
     depth: 6,
     hash: 256,
+    timeLimit: 2000,
     score: 0,
     line: [],
     show: false,
@@ -219,9 +220,9 @@ export default function App() {
       }
       update((prev) => ({ ...prev, status: 'searching' }));
       engine.position(game.fen);
-      engine.search(game.depth, 2000, game.history);
+      engine.search(game.depth, game.timeLimit || 2000, game.history);
     }
-  }, [game.fen, game.bot, game.autoplay, turn, game.status, game.view, game.depth, game.over]);
+  }, [game.fen, game.bot, game.autoplay, turn, game.status, game.view, game.depth, game.timeLimit, game.over]);
 
   // Kích hoạt phát hiệu ứng âm thanh
   const play = (type) => {
@@ -418,7 +419,7 @@ export default function App() {
     if (game.over) return;
     update((prev) => ({ ...prev, status: 'searching' }));
     engine.position(game.fen);
-    engine.search(game.depth, 3000, game.history);
+    engine.search(game.depth, game.timeLimit || 2000, game.history);
   };
 
   // Dừng tính toán AI (Stop)
@@ -661,6 +662,8 @@ export default function App() {
               level={level}
               hash={game.hash}
               alloc={alloc}
+              timeLimit={game.timeLimit || 2000}
+              setTimeLimit={(val) => update((prev) => ({ ...prev, timeLimit: val }))}
               playMode={game.playMode || (game.bot ? 'ai' : 'pvp')}
               setPlayMode={setPlayMode}
               hint={search}
