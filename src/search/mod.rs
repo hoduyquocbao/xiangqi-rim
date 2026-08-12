@@ -14,6 +14,8 @@
 pub mod core;
 /// Module con `diversity` quản lý đa dạng hóa tìm kiếm nguyên tố và hệ số lịch sử
 pub mod diversity;
+/// Module con `hybrid` động cơ tìm kiếm kết hợp GPU+CPU tối ưu hóa tải
+pub mod hybrid;
 /// Module con `limit` quản lý thời gian và tín hiệu Abort
 pub mod limit;
 /// Module con `order` sắp xếp thứ tự ưu tiên nước đi
@@ -29,9 +31,9 @@ pub mod see;
 /// Module con `stack` bộ nhớ đệm Stack đệ quy
 pub mod stack;
 
-
 pub use core::Core;
 pub use diversity::{Diversity, PRIMES};
+pub use hybrid::HybridEngine;
 pub use limit::{Limits, Result, Timer};
 pub use order::{History, Killer, Order, Picker, Stage, VALUES};
 pub use prune::Prune;
