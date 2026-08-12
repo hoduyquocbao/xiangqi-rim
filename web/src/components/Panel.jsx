@@ -93,7 +93,7 @@ export default function Panel({
           type="range"
           aria-label="AI DEPTH LEVEL"
           min="4"
-          max="12"
+          max="60"
           value={depth}
           onChange={(e) => level && level(Number(e.target.value))}
           className="w-full accent-gold bg-obsidian h-2 rounded-lg cursor-pointer"
