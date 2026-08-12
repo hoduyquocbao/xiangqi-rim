@@ -77,6 +77,9 @@ pub struct Device { // Định nghĩa struct Device
 impl Device { // Khối triển khai các phương thức cho Device
     /// Khởi tạo thiết bị GPU Adapter mới, tự động phát hiện backend và kích hoạt Guard.
     pub fn init() -> Self { // Hàm khởi tạo init
+        if std::env::var("XDG_RUNTIME_DIR").is_err() {
+            std::env::set_var("XDG_RUNTIME_DIR", "/tmp");
+        }
         let instance = wgpu::Instance::new(&wgpu::InstanceDescriptor { // Khởi tạo wgpu Instance mới
             backends: wgpu::Backends::all(), // Hỗ trợ tất cả GPU Backend (Vulkan/Metal/DX12/GL)
             flags: wgpu::InstanceFlags::ALLOW_UNDERLYING_NONCOMPLIANT_ADAPTER, // Cho phép headless Vulkan GPU trên Linux Colab
