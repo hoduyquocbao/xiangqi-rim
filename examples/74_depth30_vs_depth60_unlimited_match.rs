@@ -18,9 +18,9 @@ use xiangrust::movegen::{legal, List};
 use xiangrust::search::{Limits, Search};
 
 /// Hằng số phiên bản ứng dụng APP_VERSION
-pub const APP_VERSION: &str = "v7.5.0-tournament-visualizer-fixed";
+pub const APP_VERSION: &str = "v7.7.0-live-unlimited-match-sync";
 /// Hằng số dấu thời gian đóng gói APP_BUILD_STAMP
-pub const APP_BUILD_STAMP: &str = "2026-08-12 13:46:00 ICT";
+pub const APP_BUILD_STAMP: &str = "2026-08-12 13:48:00 ICT";
 
 /// Trả về dung lượng RAM RSS thực tế của Process từ Kernel OS (MB)
 pub fn get_realtime_ram_rss_mb() -> f64 {
@@ -78,7 +78,7 @@ fn main() {
     let mut game_over = false;
     let mut outcome_str = "DRAW";
 
-    while !game_over && ply < 25 {
+    while !game_over && ply < 300 {
         ply += 1;
         let is_red = pos.side == 0;
         let side_name = if is_red { "RED (D30)" } else { "BLACK (D60)" };
