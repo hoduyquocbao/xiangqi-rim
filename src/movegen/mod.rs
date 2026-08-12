@@ -13,6 +13,8 @@
 pub mod legal;
 /// Module con `lookup` chứa các bảng tra cứu vị trí di chuyển và cản chân tĩnh
 pub mod lookup;
+/// Module con `order` sắp xếp nước đi MVV-LVA (align 64)
+pub mod order;
 /// Module con `perft` chạy kiểm thử cây nước đi Perft
 pub mod perft;
 /// Module con `pseudo` sinh nước đi giả lập sơ bộ
@@ -22,6 +24,7 @@ pub mod types;
 
 // Xuất bản các hàm và kiểu dữ liệu cốt lõi
 pub use legal::{check, fly, gen, legal};
+pub use order::{score, sort};
 pub use perft::{divide, perft};
 pub use pseudo::pseudo;
 pub use types::{List, Move};

@@ -13,12 +13,15 @@ pub mod breaker;
 pub mod check;
 /// Module con `config` cấu hình ngưỡng lỗi thất bại và thời gian chờ ngắt mạch
 pub mod config;
+/// Module con `flag` quản lý cờ tính năng và tự động Rollback
+pub mod flag;
 /// Module con `state` Enum các trạng thái ngắt mạch (Closed, Open, Half)
 pub mod state;
 
 pub use breaker::Breaker;
 pub use check::Check;
 pub use config::Config;
+pub use flag::{Feature, Manager};
 pub use state::State;
 
 // ----------------------------------------------------------------------------
