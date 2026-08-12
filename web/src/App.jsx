@@ -12,6 +12,7 @@ import History from './components/History.jsx';
 import Gym from './components/Gym.jsx';
 import Audit from './components/Audit.jsx';
 import Studio from './components/Studio.jsx';
+import Tournament from './components/Tournament.jsx';
 import { R1Studio } from './components/R1Studio.jsx';
 import { Debugger } from './components/Debugger.jsx';
 import { parse, fen, check, moves as getMoves, uciToMove, hasLegalMoves } from './rules/rules.js';
@@ -44,6 +45,7 @@ export default function App() {
     auditShow: false,
     studioShow: false,
     r1Show: false,
+    tournamentShow: false,
     active: null,
     hint: null,
     over: false,
@@ -511,6 +513,14 @@ export default function App() {
         {/* Dual-Engine Mode Switcher, Telemetry Debugger, R1 Studio & History Button */}
         <div className="flex items-center gap-2 flex-wrap justify-end">
           <button
+            onClick={() => update((prev) => ({ ...prev, tournamentShow: true }))}
+            className="px-3 py-2 rounded bg-gradient-to-r from-red-600/30 via-amber-500/30 to-blue-600/30 text-gold border border-gold/60 hover:border-gold text-xs font-bold transition flex items-center gap-1.5 shadow-glow animate-pulse"
+          >
+            <span>⚔️</span>
+            GIẢI ĐẤU (D30 vs D60)
+          </button>
+
+          <button
             onClick={() => update((prev) => ({ ...prev, r1Show: true }))}
             className="px-3 py-2 rounded bg-gradient-to-r from-gold/20 via-amber-500/20 to-gold/20 text-gold border border-gold/50 hover:border-gold text-xs font-bold transition flex items-center gap-1.5 shadow-glow"
           >
@@ -807,6 +817,11 @@ export default function App() {
         apply={(newFen) => apply('fen', newFen)}
         initialFen={game.fen}
       />
+
+      {/* Grand Tournament Visualizer Modal (Depth 30 vs Depth 60) */}
+      {game.tournamentShow && (
+        <Tournament onClose={() => update((prev) => ({ ...prev, tournamentShow: false }))} />
+      )}
 
       {/* Footer */}
       <footer className="border-t border-gold/20 bg-obsidian-card/90 px-6 py-3 text-center text-xs text-gold/50 font-body">
