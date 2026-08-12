@@ -130,6 +130,7 @@ GAMES=10000 DEPTH=4 THREADS=4 cargo run --release --example 20_parallel_mine
 | THREADS=4, Search(4), Batch=64 | 348 FEN/s | 2% | Đấu 1 trận đơn lẻ |
 | THREADS=16, GPU Batch=65,536 | 122,034 FEN/s | 88% | Multi-stream Mining |
 | **THREADS=4, GPU Batch=256 (Hybrid)** | **579,549 FEN/s** | **88%** | **Điểm vàng cân bằng tối thượng** |
+| **THREADS=4, MVV-LVA + RingBuffer** | **3,777,085 FEN/s** | **88%** | **Động cơ Đệm Kép Bất Đồng Bộ (Depth 8 trong 0.27s)** |
 
 ---
 

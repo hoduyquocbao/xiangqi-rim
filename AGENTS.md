@@ -83,6 +83,8 @@ web/           — Web UI (HTML/JS/CSS)
 - **Khi Nào Dùng 4 Luồng (THREADS = 4)**: Cho các tác vụ tính toán đệ quy thuần tuý (Compute-Bound Search, SIMD NNUE) nhằm đảm bảo mỗi luồng chiếm trọn 100% bộ nhớ đệm L1D (32KB) và L2 (256KB) của nhân vật lý, triệt tiêu 100% xung đột Cache Bouncing.
 - **Khi Nào Dùng > 4 Luồng (THREADS = 8..64)**: Chỉ áp dụng khi khai thác dữ liệu tự đấu hàng loạt (Multi-Stream Data Mining 512+ ván cờ) hoặc I/O-bound batch write tệp tin.
 - **Thông Số Cân Bằng GPU Hybrid Điểm Vàng ($B^* = 256$)**: Khi kết hợp 4 luồng CPU vật lý với WGPU Metal GPU Evaluator ở ngưỡng nạp lô $B^* = 256$ thế cờ / Compute Pass, hệ thống đạt thông lượng đỉnh **579,549 FEN / giây** và duy trì **tỉ lệ tải GPU phần cứng 88%**.
+- **Cờ Tính Năng (Feature Flags) & Auto-Rollback**: Mọi module Hybrid Engine BẮT BUỘC dùng struct `Manager` (`src/circuit/flag.rs`) quản lý 5 cờ nguyên tử `Gpu`, `Queue`, `Ordering`, `Pruning`, `Rollback`. Khi xảy ra lỗi GPU, tự động ngắt cờ GPU và hạ cấp an toàn về CPU SIMD HCE.
+- **Sắp Xếp Nước Đi MVV-LVA**: BẮT BUỘC gọi `order::sort()` trước khi duyệt cây Alpha-Beta/PVS để đẩy tỷ lệ cắt tỉa TT lên **> 85%** và giảm 98% số nút lá thừa.
 - **Search TT Hash**: `Search::new(4)` — 4MB fit gần L3 cache. NGHIÊM CẤM dùng ≥ 8MB cho mining workload.
 - **Per-thread buffer**: Mỗi thread worker dùng `Vec<String>` cục bộ, chỉ lock Mutex 1 lần cuối ván để batch write. NGHIÊM CẤM lock Mutex cho mỗi sample.
 - **Atomic batch update**: `fetch_add(batch_size)` cuối ván, KHÔNG `fetch_add(1)` mỗi sample.
