@@ -26,9 +26,9 @@ use xiangrust::movegen::{legal, List};
 use xiangrust::search::{LazySmp, Limits, Search};
 
 /// Hằng số phiên bản ứng dụng APP_VERSION
-pub const APP_VERSION: &str = "v7.6.0-realtime-yield";
+pub const APP_VERSION: &str = "v7.7.0-hce-reuse-optimization";
 /// Hằng số dấu thời gian đóng gói APP_BUILD_STAMP
-pub const APP_BUILD_STAMP: &str = "2026-08-12 18:15:00 ICT";
+pub const APP_BUILD_STAMP: &str = "2026-08-12 18:22:00 ICT";
 
 /// Hàm `read_macos_gpu_load_pct`: Đọc % mức độ tải GPU phần cứng từ macOS Kernel `ioreg`.
 fn read_macos_gpu_load_pct() -> u32 {
@@ -77,10 +77,11 @@ fn generate_start_position(seed: u64) -> Position {
     pos
 }
 
-/// Hàm `double_buffered_gpu_alpha_beta`: Thuật toán Alpha-Beta nạp đệm RingBuffer tại nút lá.
+/// Hàm `double_buffered_gpu_alpha_beta`: Thuật toán Alpha-Beta nạp đệm RingBuffer tại nút lá với Evaluator dùng lại.
 fn double_buffered_gpu_alpha_beta(
     pos: &mut Position,
     queue: &mut RingBuffer,
+    hce: &Hce,
     depth: i32,
     mut alpha: i32,
     beta: i32,
@@ -90,7 +91,7 @@ fn double_buffered_gpu_alpha_beta(
         let sample = Sample::pack(pos, 1);
         let _ = queue.push(&sample);
         fens_counter.fetch_add(1, Ordering::Relaxed);
-        return Hce::new().evaluate(pos);
+        return hce.evaluate(pos);
     }
 
     let mut list = List::new();
@@ -105,7 +106,7 @@ fn double_buffered_gpu_alpha_beta(
         let mv = list.get(i);
         let state = pos.apply(mv.from, mv.to);
 
-        let score = -double_buffered_gpu_alpha_beta(pos, queue, depth - 1, -beta, -alpha, fens_counter);
+        let score = -double_buffered_gpu_alpha_beta(pos, queue, hce, depth - 1, -beta, -alpha, fens_counter);
 
         pos.revert(mv.from, mv.to, &state);
 
@@ -228,9 +229,10 @@ fn main() {
         (0..num_games).into_par_iter().for_each(|g| {
             let seed = (g as u64 + 1) * 987654321;
             let mut pos = generate_start_position(seed);
+            let hce = Hce::new(); // Evaluator khởi tạo 1 lần per game thread!
 
             if let Ok(mut queue) = RingBuffer::allocate(evaluator.device(), batch_capacity) {
-                let _ = double_buffered_gpu_alpha_beta(&mut pos, &mut queue, 4, -30000, 30000, &fens_computed);
+                let _ = double_buffered_gpu_alpha_beta(&mut pos, &mut queue, &hce, 4, -30000, 30000, &fens_computed);
                 let _ = queue.flush_gpu(&evaluator);
             }
 
