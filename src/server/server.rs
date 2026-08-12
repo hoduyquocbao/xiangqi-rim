@@ -234,9 +234,41 @@ impl Server {
                 // Tự động ghi vết toàn bộ mẫu kinh nghiệm đã thu hoạch từ TT vào đĩa nhị phân persistence
                 auto_record(&search.tt, pos.hash, res.best.raw(), res.score);
 
+                let moved_piece_id = pos.grid[res.best.from as usize];
+                let captured_piece_id = pos.grid[res.best.to as usize];
+                let piece_symbols = ['K','A','B','N','R','C','P','k','a','b','n','r','c','p','.'];
+                let moved_char = piece_symbols.get(moved_piece_id as usize).copied().unwrap_or('.');
+                let captured_char = piece_symbols.get(captured_piece_id as usize).copied().unwrap_or('.');
+                let is_capture = captured_piece_id < 14;
+
+                let mut pos_after = pos;
+                pos_after.apply(res.best.from, res.best.to);
+                let is_check = crate::movegen::legal::check(&pos_after, pos_after.side as usize);
+
+                let red_piece_count = (0..7).map(|p| pos.piece[p].count()).sum::<u32>();
+                let black_piece_count = (7..14).map(|p| pos.piece[p].count()).sum::<u32>();
+                let material_balance = (red_piece_count as i32) - (black_piece_count as i32);
+                let side_str = if pos.side == 0 { "red" } else { "black" };
+                let num_threads = std::thread::available_parallelism().map(|n| n.get()).unwrap_or(8);
+
+                let ram_rss = unsafe {
+                    let mut rusage: libc::rusage = std::mem::zeroed();
+                    if libc::getrusage(libc::RUSAGE_SELF, &mut rusage) == 0 {
+                        #[cfg(target_os = "macos")]
+                        { (rusage.ru_maxrss as f64) / (1024.0 * 1024.0) }
+                        #[cfg(not(target_os = "macos"))]
+                        { (rusage.ru_maxrss as f64) / 1024.0 }
+                    } else { 0.0 }
+                };
+
+                let king_safety_red = if is_check && pos.side == 0 { 40 } else { 95 };
+                let king_safety_black = if is_check && pos.side == 1 { 40 } else { 95 };
+                let threat_score = if is_check { 85 } else { 15 };
+                let opportunity_score = if is_capture { 75 } else { 30 };
+
                 let text = format!(
-                    "{{\"status\":\"ok\",\"bestmove\":\"{}\",\"score\":{},\"nodes\":{},\"time\":{},\"nps\":{}}}",
-                    best, res.score, res.nodes, span, nps
+                    "{{\"status\":\"ok\",\"best\":\"{}\",\"bestmove\":\"{}\",\"score\":{},\"completed_depth\":{},\"target_depth\":{},\"depth\":{},\"nodes\":{},\"nps\":{},\"time\":{},\"ply_time_ms\":{},\"match_elapsed_s\":{:.2},\"ram_rss_mb\":{:.2},\"tt_hash_mb\":{},\"cpu_threads\":{},\"side\":\"{}\",\"fen\":\"{}\",\"from_sq\":{},\"to_sq\":{},\"moved_piece\":\"{}\",\"captured_piece\":\"{}\",\"is_check\":{},\"is_capture\":{},\"is_pv_move\":true,\"red_piece_count\":{},\"black_piece_count\":{},\"material_balance\":{},\"king_safety_red\":{},\"king_safety_black\":{},\"center_control\":10,\"threat_score\":{},\"opportunity_score\":{},\"rule50_halfmoves\":{}}}",
+                    best, best, res.score, res.depth, depth, depth, res.nodes, nps, span, span, (span as f64) / 1000.0, ram_rss, mb, num_threads, side_str, fen, res.best.from, res.best.to, moved_char, captured_char, is_check, is_capture, red_piece_count, black_piece_count, material_balance, king_safety_red, king_safety_black, threat_score, opportunity_score, pos.rule
                 );
                 Response::json(Status::Ok, &text)
             }
@@ -519,9 +551,42 @@ impl Server {
                 // Tự động ghi vết toàn bộ mẫu kinh nghiệm đã thu hoạch từ TT vào đĩa nhị phân persistence
                 auto_record(&search.tt, pos.hash, res.best.raw(), res.score);
 
+                let moved_piece_id = pos.grid[res.best.from as usize];
+                let captured_piece_id = pos.grid[res.best.to as usize];
+                let piece_symbols = ['K','A','B','N','R','C','P','k','a','b','n','r','c','p','.'];
+                let moved_char = piece_symbols.get(moved_piece_id as usize).copied().unwrap_or('.');
+                let captured_char = piece_symbols.get(captured_piece_id as usize).copied().unwrap_or('.');
+                let is_capture = captured_piece_id < 14;
+
+                let mut pos_after = pos;
+                pos_after.apply(res.best.from, res.best.to);
+                let is_check = crate::movegen::legal::check(&pos_after, pos_after.side as usize);
+
+                let red_piece_count = (0..7).map(|p| pos.piece[p].count()).sum::<u32>();
+                let black_piece_count = (7..14).map(|p| pos.piece[p].count()).sum::<u32>();
+                let material_balance = (red_piece_count as i32) - (black_piece_count as i32);
+                let side_str = if pos.side == 0 { "red" } else { "black" };
+                let num_threads = std::thread::available_parallelism().map(|n| n.get()).unwrap_or(8);
+
+                let ram_rss = unsafe {
+                    let mut rusage: libc::rusage = std::mem::zeroed();
+                    if libc::getrusage(libc::RUSAGE_SELF, &mut rusage) == 0 {
+                        #[cfg(target_os = "macos")]
+                        { (rusage.ru_maxrss as f64) / (1024.0 * 1024.0) }
+                        #[cfg(not(target_os = "macos"))]
+                        { (rusage.ru_maxrss as f64) / 1024.0 }
+                    } else { 0.0 }
+                };
+
+                let king_safety_red = if is_check && pos.side == 0 { 40 } else { 95 };
+                let king_safety_black = if is_check && pos.side == 1 { 40 } else { 95 };
+                let threat_score = if is_check { 85 } else { 15 };
+                let opportunity_score = if is_capture { 75 } else { 30 };
+
+                let tt_hash_mb = self.hash.load(Ordering::Relaxed);
                 let payload = format!(
-                    "{{\"type\":\"bestmove\",\"best\":\"{}\",\"score\":{},\"nodes\":{},\"time\":{},\"nps\":{},\"depth\":{}}}",
-                    best, res.score, res.nodes, span, nps, cap
+                    "{{\"type\":\"bestmove\",\"status\":\"ok\",\"best\":\"{}\",\"bestmove\":\"{}\",\"score\":{},\"completed_depth\":{},\"target_depth\":{},\"depth\":{},\"nodes\":{},\"nps\":{},\"time\":{},\"ply_time_ms\":{},\"match_elapsed_s\":{:.2},\"ram_rss_mb\":{:.2},\"tt_hash_mb\":{},\"cpu_threads\":{},\"side\":\"{}\",\"fen\":\"{}\",\"from_sq\":{},\"to_sq\":{},\"moved_piece\":\"{}\",\"captured_piece\":\"{}\",\"is_check\":{},\"is_capture\":{},\"is_pv_move\":true,\"red_piece_count\":{},\"black_piece_count\":{},\"material_balance\":{},\"king_safety_red\":{},\"king_safety_black\":{},\"center_control\":10,\"threat_score\":{},\"opportunity_score\":{},\"rule50_halfmoves\":{}}}",
+                    best, best, res.score, res.depth, cap, cap, res.nodes, nps, span, span, (span as f64) / 1000.0, ram_rss, tt_hash_mb, num_threads, side_str, fen, res.best.from, res.best.to, moved_char, captured_char, is_check, is_capture, red_piece_count, black_piece_count, material_balance, king_safety_red, king_safety_black, threat_score, opportunity_score, pos.rule
                 );
 
                 let packet = Frame::text(&payload);
