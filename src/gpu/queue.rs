@@ -127,3 +127,38 @@ impl RingBuffer { // Khối triển khai các phương thức cho RingBuffer
         self.closed.load(Ordering::Acquire) // Đọc cờ nguyên tử Acquire
     } // Kết thúc hàm is_closed
 } // Kết thúc khối impl RingBuffer
+
+// ----------------------------------------------------------------------------
+// KHU VỰC BÀI KIỂM THỬ ĐƠN VỊ (UNIT TESTS) CHO MODULE QUEUE RINGBUFFER
+// ----------------------------------------------------------------------------
+#[cfg(test)]
+mod tests { // Mod kiểm thử tests
+    use super::*; // Nhập tất cả các phần tử từ module cha
+
+    /// Kiểm thử căn lề bộ nhớ 64-byte và kích thước struct RingBuffer.
+    #[test]
+    fn test_ring_buffer_alignment() { // Hàm test test_ring_buffer_alignment
+        assert_eq!(std::mem::align_of::<RingBuffer>(), 64); // Căn lề 64-byte
+    } // Kết thúc test_ring_buffer_alignment
+
+    /// Kiểm thử các thao tác đẩy dữ liệu, tráo đổi đệm và đóng hàng đợi RingBuffer.
+    #[test]
+    fn test_ring_buffer_operations() { // Hàm test test_ring_buffer_operations
+        let device = Device::init(); // Khởi tạo thiết bị device
+        if let Ok(mut ring) = RingBuffer::allocate(&device, 16) { // Cấp phát RingBuffer với 16 mẫu
+            assert_eq!(ring.is_ready(), false); // Cờ sẵn sàng ban đầu false
+            assert_eq!(ring.is_closed(), false); // Cờ đóng ban đầu false
+
+            let pos = crate::board::Parser::parse(crate::board::Parser::DEFAULT); // Tạo bàn cờ pos
+            let sample = Sample::pack(&pos, 1); // Tạo mẫu sample
+
+            assert!(ring.push(&sample).is_ok()); // Đẩy mẫu vào đệm A thành công
+            ring.swap(); // Tráo đổi đệm A ↔ B
+            assert_eq!(ring.is_ready(), true); // Cờ ready bằng true sau khi swap
+
+            ring.close(); // Đóng hàng đợi
+            assert_eq!(ring.is_closed(), true); // Cờ closed bằng true sau khi close
+        }
+    } // Kết thúc test_ring_buffer_operations
+} // Kết thúc mod tests
+

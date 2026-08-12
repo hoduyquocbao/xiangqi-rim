@@ -78,14 +78,14 @@ impl Device { // Khối triển khai các phương thức cho Device
     /// Khởi tạo thiết bị GPU Adapter mới, tự động phát hiện backend và kích hoạt Guard.
     pub fn init() -> Self { // Hàm khởi tạo init
         let instance = wgpu::Instance::new(&wgpu::InstanceDescriptor { // Khởi tạo wgpu Instance mới
-            backends: wgpu::Backends::all(), // Hỗ trợ tất cả các GPU Backend (Metal/Vulkan/DX12)
+            backends: wgpu::Backends::PRIMARY, // Hỗ trợ các GPU Backend chính (Metal/Vulkan/DX12)
             flags: wgpu::InstanceFlags::ALLOW_UNDERLYING_NONCOMPLIANT_ADAPTER, // Cho phép headless Vulkan GPU trên Linux Colab
             ..Default::default() // Sử dụng mặc định cho các trường còn lại
         }); // Kết thúc khởi tạo Instance
 
         // Liệt kê tất cả các Adapter và ưu tiên chọn card phần cứng thực sự, loại bỏ 100% Cpu/llvmpipe
         let mut adapter = None;
-        for a in instance.enumerate_adapters(wgpu::Backends::all()) {
+        for a in instance.enumerate_adapters(wgpu::Backends::PRIMARY) {
             let info = a.get_info();
             let name_lc = info.name.to_lowercase();
             if info.device_type != wgpu::DeviceType::Cpu 
@@ -109,6 +109,7 @@ impl Device { // Khối triển khai các phương thức cho Device
         let mut context = None; // Khởi tạo mặc định context None
 
         // 1. Thử nhận diện qua opencl3 Native GPU trên Linux / Colab CUDA Driver Container
+        #[cfg(target_os = "linux")]
         if let Ok(platforms) = opencl3::platform::get_platforms() {
             for platform in platforms {
                 if let Ok(devices) = platform.get_devices(opencl3::device::CL_DEVICE_TYPE_GPU) {
