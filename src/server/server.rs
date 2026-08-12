@@ -11,6 +11,7 @@ use std::net::{TcpListener, TcpStream};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::thread;
+use std::time::Duration;
 use super::base64::Base64;
 use super::frame::{Frame, Opcode};
 use super::json;
@@ -226,6 +227,12 @@ impl Server {
         let listener = TcpListener::bind(&addr).map_err(|e| e.to_string())?;
         println!("[Server] Lắng nghe tại HTTP REST & WebSocket: http://{}", addr);
 
+        // Khởi chạy luồng ngầm tự động làm giàu ký ức kinh nghiệm liên tục (Continuous Autonomous Enrichment)
+        let server_enrich = self.clone();
+        thread::spawn(move || {
+            server_enrich.start_autonomous_enrichment();
+        });
+
         for stream in listener.incoming() {
             match stream {
                 Ok(mut stream) => {
@@ -241,6 +248,49 @@ impl Server {
         }
 
         Ok(())
+    }
+
+    /// Luồng tự động ngầm làm giàu ký ức kinh nghiệm liên tục (.agents/memory/experience_store.bin)
+    pub fn start_autonomous_enrichment(&self) {
+        println!("[AUTONOMOUS ENRICHMENT] 🚀 Đã kích hoạt Luồng Ngầm Tự Động Làm Giàu Ký Ức Kinh Nghiệm...");
+        let base_fens = [
+            "rnbakabnr/9/1c5c1/p1p1p1p1p/9/9/P1P1P1P1P/1C5C1/9/RNBAKABNR w - - 0 1",
+            "rnbakabnr/9/1c5c1/p1p1p1p1p/9/9/P1P1P1P1P/1C4NC1/9/RNBAKAB1R b - - 0 1",
+            "rnbakab1r/9/1c4nc1/p1p1p1p1p/9/9/P1P1P1P1P/1C4NC1/9/RNBAKAB1R w - - 0 1",
+            "r1bakab2/8r/2n3nc1/p1p1p1p1p/4c4/2P1P1P2/P7P/4C1NC1/8R/RNBAKAB2 b - - 0 1",
+        ];
+
+        let mut step = 0;
+        loop {
+            thread::sleep(Duration::from_millis(1500));
+            let fen_str = base_fens[step % base_fens.len()];
+            step += 1;
+
+            let mut pos = Parser::parse(fen_str);
+
+            // Thực hiện nước đi hợp lệ ngẫu nhiên để mở rộng không gian trạng thái (State Space Expansion)
+            let mut moves = List::new();
+            gen(&mut pos, &mut moves);
+            if moves.len() > 0 {
+                let m = moves[step % moves.len()];
+                pos.apply(m.from, m.to);
+            }
+
+            let mb = self.hash.load(Ordering::Relaxed);
+            let mut search = Search::new(mb);
+            let mut limit = Limits::new();
+            limit.depth = 6; // Độ sâu 6 làm giàu ngầm hiệu năng cao 0₫
+
+            let mut replay = Replay::new();
+            if LearnStore::load(&mut replay, DATASET).is_ok() {
+                search.tt.populate(&replay);
+            }
+
+            let res = search.go(&pos, &limit);
+            if res.nodes > 0 {
+                auto_record(&search.tt, pos.hash, res.best.raw(), res.score);
+            }
+        }
     }
 
     /// Xử lý một luồng kết nối TCP stream từ client
