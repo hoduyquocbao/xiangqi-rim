@@ -153,7 +153,7 @@ pub fn build_128_telemetry_json(
             "\"attack_vector_x\":0,\"attack_vector_y\":0,\"search_pv_len\":1,\"search_seldepth\":{},\"search_hashfull\":12,",
             "\"search_tbhits\":0,\"search_qnodes\":{},\"search_tb_eval\":0,\"os_cpu_pct\":88.5,\"os_ram_rss_bytes\":{},",
             "\"os_ram_virt_mb\":1024,\"os_threads\":{},\"os_pid\":{},\"os_page_faults\":0,\"os_context_switches\":0,",
-            "\"os_clock_hz\":3800000000,\"engine_ver\":\"v8.3.0\",\"engine_build\":\"2026-08-12\",\"engine_mode\":\"hybrid\",\"engine_bits\":64,",
+            "\"os_clock_hz\":3800000000,\"engine_ver\":\"v8.4.0\",\"engine_build\":\"2026-08-12\",\"engine_mode\":\"hybrid\",\"engine_bits\":64,",
             "\"tt_used_pct\":12.5,\"tt_hit_rate_pct\":85.2,\"tt_collisions\":0,\"tt_overwrites\":0,\"flag_gpu\":true,",
             "\"flag_queue\":true,\"flag_ordering\":true,\"flag_pruning\":true,\"flag_rollback\":false,\"move_mvv_lva_score\":100,",
             "\"move_history_score\":250,\"move_killer_slot\":0,\"move_pv_index\":0,\"move_san_symbol\":\"{}\",\"game_ply_total\":{},",

@@ -75,8 +75,8 @@ export default function App() {
             const parsedBoard = parse(prev.fen).board;
             const validExist = hasLegalMoves(parsedBoard, currentTurn);
 
-            // Kiểm tra bị chiếu bí (Checkmate) hoặc hết nước đi (Stalemate)
-            if (!validExist || !best || Math.abs(score) >= 20000) {
+            // Kiểm tra bị chiếu bí (Checkmate) hoặc hết nước đi (Stalemate) thực tế trên bàn cờ
+            if (!validExist || (!best && !validExist)) {
               const isMated = check(parsedBoard, currentTurn);
               const winner = isMated ? (currentTurn === 'w' ? 'b' : 'w') : 'draw';
               const reason = isMated ? 'CHECKMATE' : 'STALEMATE';
