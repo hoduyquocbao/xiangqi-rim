@@ -38,6 +38,9 @@ pub mod status; // Khai báo submodule status định nghĩa mã kết quả ho�
 /// Submodule `aggregator`: Bộ gom mẫu vị trí cờ lá không khóa lock-free căn lề 64-byte
 pub mod aggregator; // Khai báo submodule aggregator quản lý gom mẫu cờ lá
 
+/// Submodule `cuda`: Tích hợp GPU CUDA Native C++ FFI cho NVIDIA Colab
+pub mod cuda;
+
 /// Submodule `queue`: Hàng đợi đệm kép bất đồng bộ RingBuffer 0-copy căn lề 64-byte
 pub mod queue; // Khai báo submodule queue quản lý hàng đợi đệm kép
 
