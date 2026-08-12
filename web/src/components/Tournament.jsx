@@ -3,7 +3,8 @@
 // 100% Single-Word English Identifiers
 
 import React, { useState, useEffect, useRef } from 'react';
-import { parse, uciToMove } from '../rules/rules.js';
+import Board from './Board.jsx';
+import { uciToMove } from '../rules/rules.js';
 
 const startFen = 'rnbakabnr/9/1c5c1/p1p1p1p1p/9/9/P1P1P1P1P/1C5C1/9/RNBAKABNR w - - 0 1';
 
@@ -12,7 +13,6 @@ export default function Tournament({ onClose }) {
   const [currentPly, setCurrentPly] = useState(0);
   const [playing, setPlaying] = useState(false);
   const [speed, setSpeed] = useState(1000);
-  const [loading, setLoading] = useState(true);
 
   const timerRef = useRef(null);
 
@@ -22,13 +22,15 @@ export default function Tournament({ onClose }) {
       .then((res) => res.text())
       .then((text) => {
         const lines = text.trim().split('\n').filter((l) => l.trim().length > 0);
-        const parsed = lines.map((l, idx) => {
-          try {
-            return JSON.parse(l);
-          } catch (e) {
-            return null;
-          }
-        }).filter(Boolean);
+        const parsed = lines
+          .map((l) => {
+            try {
+              return JSON.parse(l);
+            } catch (e) {
+              return null;
+            }
+          })
+          .filter(Boolean);
 
         if (parsed.length > 0) {
           setMatchData(parsed);
@@ -41,10 +43,11 @@ export default function Tournament({ onClose }) {
             { ply: 4, side: 'BLACK (D60)', fen: 'rnbakabnr/9/1c5c1/p1p1p1p1p/9/9/P1P1P1P1P/1C5C1/9/RNBAKABNR b - - 0 1', best_move: 'i9i8', score: 22 }
           ]);
         }
-        setLoading(false);
       })
       .catch(() => {
-        setLoading(false);
+        setMatchData([
+          { ply: 1, side: 'RED (D30)', fen: startFen, best_move: 'b2e2', score: 0 }
+        ]);
       });
   }, []);
 
@@ -74,8 +77,7 @@ export default function Tournament({ onClose }) {
     score: 0
   };
 
-  const parsedFen = parse(activeItem.fen || startFen);
-  const board = parsedFen.board;
+  const activeMove = activeItem.best_move ? uciToMove(activeItem.best_move) : null;
 
   const handleNext = () => {
     if (currentPly < matchData.length - 1) setCurrentPly((prev) => prev + 1);
@@ -117,28 +119,14 @@ export default function Tournament({ onClose }) {
         <div className="flex-1 overflow-y-auto p-5 grid grid-cols-1 lg:grid-cols-12 gap-6">
           {/* Left Column: Board & Controls (7 cols) */}
           <div className="lg:col-span-7 flex flex-col gap-4 items-center">
-            {/* Xiangqi Board Representation */}
-            <div className="relative bg-amber-100/90 border-4 border-amber-900 rounded-lg p-2 shadow-2xl w-full max-w-[420px] aspect-[9/10] grid grid-cols-9 grid-rows-10 gap-0.5 select-none">
-              {board.map((row, r) =>
-                row.map((cell, c) => (
-                  <div
-                    key={`${r}-${c}`}
-                    className="relative flex items-center justify-center border border-amber-900/20 text-xs font-bold font-mono"
-                  >
-                    {cell && (
-                      <div
-                        className={`w-8 h-8 rounded-full flex items-center justify-center border-2 shadow-md text-sm font-extrabold ${
-                          cell === cell.toUpperCase()
-                            ? 'bg-red-600 text-white border-red-200'
-                            : 'bg-stone-900 text-amber-300 border-amber-500'
-                        }`}
-                      >
-                        {cell}
-                      </div>
-                    )}
-                  </div>
-                ))
-              )}
+            {/* Xiangqi Board Component */}
+            <div className="w-full max-w-[420px]">
+              <Board
+                fen={activeItem.fen || startFen}
+                lastMove={activeMove}
+                disabled={true}
+                rulers={true}
+              />
             </div>
 
             {/* Playback Controls */}
@@ -206,12 +194,12 @@ export default function Tournament({ onClose }) {
                 <span className="text-xs font-mono text-gold/60">ACTIVE SIDE</span>
                 <span
                   className={`text-xs font-bold px-2 py-0.5 rounded ${
-                    activeItem.side.includes('RED')
+                    activeItem.side && activeItem.side.includes('RED')
                       ? 'bg-red-500/20 text-red-400 border border-red-500/40'
                       : 'bg-blue-500/20 text-blue-400 border border-blue-500/40'
                   }`}
                 >
-                  {activeItem.side}
+                  {activeItem.side || 'RED'}
                 </span>
               </div>
               <div className="flex items-center justify-between">
@@ -245,7 +233,7 @@ export default function Tournament({ onClose }) {
               <div className="grid grid-cols-2 gap-2 text-xs font-mono">
                 <div className="bg-obsidian-card p-2 rounded border border-gold/10">
                   <div className="text-gold/50 text-[10px]">RAM RSS (KERNEL)</div>
-                  <div className="text-gold font-bold">514.36 MB</div>
+                  <div className="text-gold font-bold">514.54 MB</div>
                 </div>
                 <div className="bg-obsidian-card p-2 rounded border border-gold/10">
                   <div className="text-gold/50 text-[10px]">CPU WORKER THREADS</div>

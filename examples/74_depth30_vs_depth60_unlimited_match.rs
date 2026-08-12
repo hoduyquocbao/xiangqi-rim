@@ -18,9 +18,9 @@ use xiangrust::movegen::{legal, List};
 use xiangrust::search::{Limits, Search};
 
 /// Hằng số phiên bản ứng dụng APP_VERSION
-pub const APP_VERSION: &str = "v7.4.0-depth30-vs-depth60-unlimited-match";
+pub const APP_VERSION: &str = "v7.5.0-tournament-visualizer-fixed";
 /// Hằng số dấu thời gian đóng gói APP_BUILD_STAMP
-pub const APP_BUILD_STAMP: &str = "2026-08-12 13:42:00 ICT";
+pub const APP_BUILD_STAMP: &str = "2026-08-12 13:46:00 ICT";
 
 /// Trả về dung lượng RAM RSS thực tế của Process từ Kernel OS (MB)
 pub fn get_realtime_ram_rss_mb() -> f64 {
