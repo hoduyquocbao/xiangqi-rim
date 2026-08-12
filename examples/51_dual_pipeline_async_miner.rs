@@ -178,6 +178,9 @@ pub fn dual_pipeline_mine(target_samples: usize, out_path: &str, threads: usize)
                     steps += 1;
                 }
 
+                // Tính toán lại khóa băm Zobrist Hash 64-bit chuẩn xác cho thế cờ pos hiện tại
+                pos.hash = pos.compute();
+
                 // Lọc trùng thế cờ bằng Sieve 1MB O(1)
                 let hash = pos.hash;
                 if sieve.contains(hash) {

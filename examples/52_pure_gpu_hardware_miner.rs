@@ -160,8 +160,8 @@ pub fn gpu_hardware_mine(target_samples: usize, out_path: &str, threads: usize) 
 
     // CPU WORKERS: Chạy Alpha-Beta PVS Search tìm best_move và đóng gói batch nộp cho GPU
     pool.install(|| {
-        let chunk_size = 512; // Lô 512 thế cờ nạp GPU
-        let total_chunks = (target_samples / chunk_size).max(1);
+        let chunk_size = 128; // Micro-batch 128 thế cờ nạp GPU
+        let total_chunks = (target_samples / chunk_size + 1) * 4;
 
         (0..total_chunks).into_par_iter().for_each(|c_idx| {
             let mut search_engine = Search::new(1); // 1MB TT Hash per thread worker (4MB total < 6MB L3)
@@ -201,6 +201,9 @@ pub fn gpu_hardware_mine(target_samples: usize, out_path: &str, threads: usize) 
                     pos.apply(mv.from, mv.to);
                     steps += 1;
                 }
+
+                // Tính toán lại khóa băm Zobrist Hash 64-bit chuẩn xác cho thế cờ pos hiện tại
+                pos.hash = pos.compute();
 
                 // Lọc trùng thế cờ bằng Sieve 1MB
                 let hash = pos.hash;
