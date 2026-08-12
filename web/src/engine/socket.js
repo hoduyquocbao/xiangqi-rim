@@ -53,7 +53,7 @@ export class Driver {
               const isGpu = (data.depth || 0) > 8;
               const tag = isGpu ? '⚡ GPU Metal Batch Evaluator' : '💻 CPU SIMD Engine';
               logger.log('debug', 'socket', `[${tag}] Streaming PV Info: Depth=${data.depth}, Score=${data.score}cp, Nodes=${data.nodes}, NPS=${nps}`, data);
-              logger.updateMetrics({ depth: data.depth, score: data.score, nodes: count, nps, time: ms, hardware: isGpu ? 'GPU' : 'CPU', mode: tag });
+              logger.updateMetrics({ depth: data.depth, score: data.score, nodes: count, nps, time: ms, hardware: isGpu ? 'GPU' : 'CPU', mode: tag, rawTelemetry: data });
               this.emit('info', data);
             } else if (data.type === 'bestmove') {
               const best = data.best || data.bestmove;
@@ -64,7 +64,7 @@ export class Driver {
               const isGpu = d > 8;
               const tag = isGpu ? '⚡ GPU Metal Batch Evaluator (512MB VRAM)' : '💻 CPU SIMD Engine (8-Cores)';
               logger.log('telemetry', 'socket', `[${tag}] WebSocket Search BestMove: ${best}, Score=${data.score}cp, Nodes=${count}, Time=${ms}ms, NPS=${nps}`, data);
-              logger.updateMetrics({ status: 'ready', best, score: data.score, nodes: count, nps, time: ms, depth: d, hardware: isGpu ? 'GPU' : 'CPU', mode: tag });
+              logger.updateMetrics({ status: 'ready', best, score: data.score, nodes: count, nps, time: ms, depth: d, hardware: isGpu ? 'GPU' : 'CPU', mode: tag, rawTelemetry: data });
               this.emit('search', data);
             } else {
               this.emit(data.type || 'message', data);
