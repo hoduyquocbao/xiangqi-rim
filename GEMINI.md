@@ -225,4 +225,10 @@ GAMES=10000 DEPTH=4 THREADS=4 cargo run --release --example 20_parallel_mine
 - **Ràng Buộc Sắt Bằng Mọi Giá Cho Gemini**: BẤT KỲ LẦN NÀO thực thi mã Rust Engine (mining, batch evaluation, NNUE search), Gemini BẮT BUỘC phải ưu tiên phần cứng GPU (NVIDIA CUDA / Vulkan / WGPU / Metal Native) bằng mọi giá.
 - **NGHIÊM CẤM** ngã về CPU fallback khi đang trong môi trường có GPU phần cứng. Luôn đảm bảo nạp đúng driver Vulkan ICD JSON (`/etc/vulkan/icd.d/nvidia_icd.json`) hoặc CUDA backend để vRAM và Compute Units của GPU được kích hoạt 100%!
 
+### 7.10 QUY TẮC BẮT BUỘC YIELD KẾT QUẢ TỨC THÌ & MONITOR TELEMETRY (MANDATORY IMMEDIATE YIELD & REALTIME TELEMETRY PROTOCOL)
+- **Ràng Buộc Sắt Cho Gemini**: BẤT KỲ LẦN NÀO viết hoặc chỉnh sửa mã `examples/`, `tests/`, hoặc `scripts/`, Gemini BẮT BUỘC phải:
+  1. **Yield Live Output Tức Thì**: In kết quả trung gian dòng theo dòng ra `stdout` (`println!`, `stdout().flush()`) lập tức trong vòng lặp thay vì im lặng chờ hết batch.
+  2. **Monitor Hạ Tầng Thực Tế**: In chi tiết 3 chỉ số RAM RSS (MB), CPU Threads %, và GPU Compute Load % / VRAM.
+- **NGHIÊM CẤM** im lặng im ỉm chạy ngầm mù thông tin hoặc báo cáo số liệu khống chưa đo đạc!
+
 

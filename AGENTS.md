@@ -275,5 +275,14 @@ python3 scripts/test_quantization.py data/nnue_weights_gen5.bin
 - **Ràng Buộc Sắt Bằng Mọi Giá**: BẤT KỲ LẦN NÀO thực thi mã Rust Engine (mining, batch evaluation, NNUE search), Agent BẮT BUỘC phải ưu tiên phần cứng GPU (NVIDIA CUDA / Vulkan / WGPU / Metal Native) bằng mọi giá.
 - **NGHIÊM CẤM** ngã về CPU fallback khi đang trong môi trường có GPU phần cứng. Luôn đảm bảo nạp đúng driver Vulkan ICD JSON (`/etc/vulkan/icd.d/nvidia_icd.json`) hoặc CUDA backend để vRAM và Compute Units của GPU được kích hoạt 100%!
 
+### 8.10 QUY TẮC BẮT BUỘC YIELD KẾT QUẢ TỨC THÌ & MONITOR TELEMETRY (MANDATORY IMMEDIATE YIELD & REALTIME TELEMETRY PROTOCOL)
+- **Ràng Buộc Sắt Cho Mã Example / Test / Script**: BẤT KỲ LẦN NÀO viết hoặc chỉnh sửa các tệp mã nguồn trong `examples/`, `src/`, `tests/`, hoặc `scripts/`, Agent BẮT BUỘC phải thực hiện 2 yêu cầu:
+  1. **Yield Kết Quả Trực Tiếp Tức Thì (Immediate Live Yield)**: Trong các vòng lặp xử lý, mã nguồn BẮT BUỘC phải in trực tiếp thông số tiến độ và kết quả trung gian ra màn hình ngay lập tức (dùng `println!`, `stdout().flush()`, hoặc JSON stream) theo chu kỳ từng 1,000 mẫu hoặc mỗi 300ms. NGHIÊM CẤM im lặng chờ đến khi chạy xong toàn bộ mới in kết quả!
+  2. **Monitor Thông Số Hạ Tầng Thực Tế (Mandatory Realtime Telemetry Monitoring)**: BẮT BUỘC phải in và đo đạc đầy đủ 3 chỉ số phần cứng đi kèm:
+     - **RAM RSS Memory Usage**: Dung lượng RAM đang chiếm dụng (tính bằng MB).
+     - **CPU Utilization / Worker Threads**: Số luồng CPU / tỷ lệ tải CPU (tính bằng %).
+     - **GPU Hardware Compute Load / VRAM**: Tải GPU % và dung lượng VRAM allocated.
+- **Mục Đích**: Triệt tiêu 100% hiện tượng "chạy ngầm mù thông tin" và ngăn chặn hành vi báo cáo khống chưa qua đo đạc thực tế!
+
 
 
