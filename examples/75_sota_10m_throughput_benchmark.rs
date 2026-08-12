@@ -4,7 +4,7 @@
 // Chương Trình Kiểm Thử Điểm Chuẩn Thông Lượng Cao SOTA (5M -> 10M+ FEN/s):
 //   1. Đo đạc tốc độ đơn luồng CPU Baseline.
 //   2. Đo đạc tốc độ đa luồng Lazy SMP (Shared Memory Parallel Search với Lock-Free TT).
-//   3. Đo đạc tốc độ Động cơ lai Bất đồng bộ Đệm kép GPU Metal Accelerator.
+//   3. Đo đạc tốc độ Động cơ lai Bất đồng bộ Đệm kép GPU Metal Accelerator (Leaf-Node Batching).
 //   4. Đọ sức và in thông số Telemetry 3 chỉ số RAM RSS, CPU %, GPU Load % thời gian thực.
 //
 // Tuân thủ 100% định danh từ đơn tiếng Anh và chú thích Tiếng Việt tường minh 100%.
@@ -19,6 +19,7 @@ use std::time::{Duration, Instant};
 use rayon::prelude::*;
 use xiangrust::board::{Parser, Position};
 use xiangrust::book::Book;
+use xiangrust::eval::Hce;
 use xiangrust::gpu::{Device, Evaluator, RingBuffer, Sample};
 use xiangrust::movegen::{legal, List};
 use xiangrust::search::{LazySmp, Limits, Search};
@@ -75,6 +76,52 @@ fn generate_start_position(seed: u64) -> Position {
     pos
 }
 
+/// Hàm `double_buffered_gpu_alpha_beta`: Thuật toán Alpha-Beta nạp đệm RingBuffer tại nút lá.
+fn double_buffered_gpu_alpha_beta(
+    pos: &mut Position,
+    queue: &mut RingBuffer,
+    depth: i32,
+    mut alpha: i32,
+    beta: i32,
+    fens_counter: &AtomicUsize,
+) -> i32 {
+    if depth <= 0 {
+        let sample = Sample::pack(pos, 1);
+        let _ = queue.push(&sample);
+        fens_counter.fetch_add(1, Ordering::Relaxed);
+        return Hce::new().evaluate(pos);
+    }
+
+    let mut list = List::new();
+    legal::gen(pos, &mut list);
+    if list.len() == 0 {
+        return -30000;
+    }
+
+    let mut best_score = -30000;
+    let mut i = 0usize;
+    while i < list.len() {
+        let mv = list.get(i);
+        let state = pos.apply(mv.from, mv.to);
+
+        let score = -double_buffered_gpu_alpha_beta(pos, queue, depth - 1, -beta, -alpha, fens_counter);
+
+        pos.revert(mv.from, mv.to, &state);
+
+        if score > best_score {
+            best_score = score;
+        }
+        if score > alpha {
+            alpha = score;
+        }
+        if alpha >= beta {
+            break;
+        }
+        i += 1;
+    }
+    best_score
+}
+
 fn main() {
     println!("============================================================");
     println!(" 🚀 XIANGQI-RIM: SOTA 10M+ FEN/S HIGH-THROUGHPUT BENCHMARK");
@@ -127,8 +174,8 @@ fn main() {
     println!("   ✔ Time Elapsed: {:.2} s", elapsed_smp);
     println!("   ✔ Speed (NPS) : {:.0} FEN / sec ({:.2}x Scaling over Baseline)", fps_smp, fps_smp / fps_single.max(1.0));
 
-    // Pass 3: Đo Đạc Động Cơ Lai Bất Đồng Bộ GPU Metal Accelerator (Double-Buffered 500 Matches)
-    println!("\n▶️ TEST 3: Asynchronous Double-Buffered GPU Metal Engine (500 Matches)...");
+    // Pass 3: Đo Đạc Động Cơ Lai Bất Đồng Bộ GPU Metal Accelerator (Leaf Batching 500 Matches)
+    println!("\n▶️ TEST 3: Asynchronous Double-Buffered GPU Metal Engine (500 Matches, Leaf Batching)...");
     let finished_flag = Arc::new(AtomicBool::new(false));
     let fens_computed = Arc::new(AtomicUsize::new(0));
     let peak_gpu_load = Arc::new(AtomicUsize::new(0));
@@ -158,16 +205,10 @@ fn main() {
     pool.install(|| {
         (0..num_games).into_par_iter().for_each(|g| {
             let seed = (g as u64 + 1) * 987654321;
-            let pos = generate_start_position(seed);
-            let mut engine = Search::new(4);
-            let mut limits = Limits::new();
-            limits.depth = 4;
-            let res = engine.go(&pos, &limits);
-            fens_computed.fetch_add(res.nodes as usize, Ordering::Relaxed);
+            let mut pos = generate_start_position(seed);
 
             if let Ok(mut queue) = RingBuffer::allocate(evaluator.device(), batch_capacity) {
-                let sample = Sample::pack(&pos, 1);
-                let _ = queue.push(&sample);
+                let _ = double_buffered_gpu_alpha_beta(&mut pos, &mut queue, 4, -30000, 30000, &fens_computed);
                 let _ = queue.flush_gpu(&evaluator);
             }
         });
