@@ -136,8 +136,8 @@ pub fn dual_pipeline_mine(target_samples: usize, out_path: &str, threads: usize)
         let total_chunks = (target_samples / chunk_size).max(1);
 
         (0..total_chunks).into_par_iter().for_each(|c_idx| {
-            // PRE-ALLOCATE ENGINE MỘT LẦN DUY NHẤT CHO MỖI THREAD WORKER (CẤM MALLOC HÀNG LOẠT TRONG VÒNG LẶP)
-            let mut search_engine = Search::new(2);
+            // PRE-ALLOCATE ENGINE MỘT LẦN DUY NHẤT VỚI 1MB TT HASH (4 THREADS x 1MB = 4MB < 6MB L3 CACHE TỐI ƯU CỰC ĐẠI)
+            let mut search_engine = Search::new(1);
             search_engine.auto_load();
 
             for i in 0..chunk_size {
