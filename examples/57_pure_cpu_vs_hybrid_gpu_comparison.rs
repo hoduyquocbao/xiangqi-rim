@@ -1,12 +1,12 @@
 // ============================================================================
-// EXAMPLE 57: PURE CPU VS HYBRID GPU HARDWARE MINING COMPARISON BENCHMARK
+// EXAMPLE 57: PURE CPU VS HYBRID GPU HARDWARE BENCHMARK (10,000 SAMPLES STEDY-STATE)
 // ============================================================================
 // Chương trình so sánh đối đầu 100% Thực Tế giữa 2 Kiến Trúc Engine:
 //   Pass 1: Thuần CPU Engine (CPU SIMD Evaluator + 8 Rayon Workers)
 //   Pass 2: Kiến Trúc Lai CPU + GPU Hardware (Rayon Workers + GPU Compute Shader Batch)
 //
 // Cùng tham số đầu vào:
-//   - Mục tiêu        : 2,000 mẫu dữ liệu JSONL
+//   - Mục tiêu        : 10,000 mẫu dữ liệu JSONL (Đo tốc độ gia tốc sau khởi động)
 //   - Số luồng CPU    : 8 vCPU threads (Intel i5-8259U)
 //   - Độ sâu Minimax  : Depth 4-5 (50% Opening Book + 50% Random)
 //   - Lọc trùng lặp   : Sieve 1MB Bloom Filter
@@ -31,9 +31,9 @@ use xiangrust::movegen::{legal, List};
 use xiangrust::search::{Limits, Search};
 
 /// Hằng số phiên bản ứng dụng APP_VERSION
-pub const APP_VERSION: &str = "v5.7.0-pure-cpu-vs-hybrid-gpu-benchmark";
+pub const APP_VERSION: &str = "v5.7.1-steady-state-10k-benchmark";
 /// Hằng số dấu thời gian đóng gói APP_BUILD_STAMP
-pub const APP_BUILD_STAMP: &str = "2026-08-12 11:55:00 ICT";
+pub const APP_BUILD_STAMP: &str = "2026-08-12 11:58:00 ICT";
 
 /// Struct `CompareItem`: Mẫu dữ liệu cờ tướng sản xuất.
 pub struct CompareItem {
@@ -61,8 +61,9 @@ pub fn run_pure_cpu_mining(target_samples: usize, threads: usize) -> (usize, f64
             .open(&out_file_path)
             .expect("Không thể tạo tệp JSONL thuần CPU");
 
-        let mut writer = BufWriter::with_capacity(256 * 1024, file);
+        let mut writer = BufWriter::with_capacity(512 * 1024, file);
         let mut count = 0usize;
+        let mut last_print = Instant::now();
 
         while let Ok(item) = rx.recv() {
             let line = format!(
@@ -71,6 +72,16 @@ pub fn run_pure_cpu_mining(target_samples: usize, threads: usize) -> (usize, f64
             );
             let _ = writer.write_all(line.as_bytes());
             count += 1;
+
+            if count % 1000 == 0 || count >= target_samples {
+                let elapsed = start_time.elapsed().as_secs_f64();
+                let speed = if elapsed > 0.0 { count as f64 / elapsed } else { 0.0 };
+                if last_print.elapsed().as_millis() > 300 || count >= target_samples {
+                    println!("  🚀 [PURE CPU PROGRESS] {:6} / {:6} samples | Time: {:6.2}s | Speed: {:6.0} samples/s", count, target_samples, elapsed, speed);
+                    let _ = stdout().flush();
+                    last_print = Instant::now();
+                }
+            }
         }
         let _ = writer.flush();
         count
@@ -83,7 +94,7 @@ pub fn run_pure_cpu_mining(target_samples: usize, threads: usize) -> (usize, f64
 
     pool.install(|| {
         let chunk_size = 128;
-        let total_chunks = (target_samples / chunk_size + 1) * threads * 2;
+        let total_chunks = (target_samples / chunk_size + 1) * threads * 4;
 
         (0..total_chunks).into_par_iter().for_each(|c_idx| {
             let mut search_engine = Search::new(1);
@@ -192,6 +203,7 @@ pub fn run_hybrid_gpu_mining(target_samples: usize, threads: usize) -> (usize, f
 
         let mut writer = BufWriter::with_capacity(512 * 1024, file);
         let mut count = 0usize;
+        let mut last_print = Instant::now();
 
         while let Ok(items) = rx.recv() {
             let chunk_len = items.len();
@@ -217,6 +229,16 @@ pub fn run_hybrid_gpu_mining(target_samples: usize, threads: usize) -> (usize, f
                 );
                 local_buf.extend_from_slice(line.as_bytes());
                 count += 1;
+
+                if count % 1000 == 0 || count >= target_samples {
+                    let elapsed = start_time.elapsed().as_secs_f64();
+                    let speed = if elapsed > 0.0 { count as f64 / elapsed } else { 0.0 };
+                    if last_print.elapsed().as_millis() > 300 || count >= target_samples {
+                        println!("  🚀 [HYBRID GPU PROGRESS] {:6} / {:6} samples | Time: {:6.2}s | Speed: {:6.0} samples/s", count, target_samples, elapsed, speed);
+                        let _ = stdout().flush();
+                        last_print = Instant::now();
+                    }
+                }
             }
             let _ = writer.write_all(&local_buf);
         }
@@ -232,7 +254,7 @@ pub fn run_hybrid_gpu_mining(target_samples: usize, threads: usize) -> (usize, f
 
     pool.install(|| {
         let chunk_size = 128;
-        let total_chunks = (target_samples / chunk_size + 1) * threads * 2;
+        let total_chunks = (target_samples / chunk_size + 1) * threads * 4;
 
         (0..total_chunks).into_par_iter().for_each(|c_idx| {
             let mut search_engine = Search::new(1);
@@ -338,7 +360,7 @@ fn main() {
     let target_samples = std::env::var("SAMPLES")
         .ok()
         .and_then(|s| s.parse::<usize>().ok())
-        .unwrap_or(2000);
+        .unwrap_or(10000);
 
     println!("Detected vCPU Cores : {} Workers", detected_threads);
     println!("Target Samples      : {} samples / Pass", target_samples);
@@ -358,11 +380,11 @@ fn main() {
     println!("  ✅ [HYBRID GPU COMPLETED] {:5} mẫu | Thời gian: {:6.2}s | Speed: {:6.0} samples/s", gpu_samples, gpu_time, gpu_speed);
     let _ = stdout().flush();
 
-    let speedup = if cpu_time > 0.0 { gpu_time / cpu_time } else { 1.0 };
     let delta_speed = gpu_speed - cpu_speed;
+    let ratio = if cpu_speed > 0.0 { gpu_speed / cpu_speed } else { 1.0 };
 
     println!("\n============================================================");
-    println!(" 📊 BẢNG SO SÁNH ĐỐI ĐẦU THỰC TẾ (EMPIRICAL BENCHMARK):");
+    println!(" 📊 BẢNG SO SÁNH ĐỐI ĐẦU THỰC TẾ (10,000 SAMPLES STEADY-STATE):");
     println!("------------------------------------------------------------");
     println!("   Chỉ số đo lường        | Thuần CPU Engine | Kiến trúc Lai GPU");
     println!("------------------------------------------------------------");
@@ -371,7 +393,7 @@ fn main() {
     println!("   Thông lượng (samples/s)| {:14.0}   | {:14.0}", cpu_speed, gpu_speed);
     println!("------------------------------------------------------------");
     println!("   Chênh lệch tốc độ      : {:+.0} samples/giây", delta_speed);
-    println!("   Tỷ lệ tăng trưởng      : {:.2}x", if cpu_speed > 0.0 { gpu_speed / cpu_speed } else { 1.0 });
+    println!("   Tỷ lệ gia tốc tăng     : {:.2}x", ratio);
     println!("============================================================");
     let _ = stdout().flush();
 }
