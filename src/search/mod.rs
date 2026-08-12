@@ -28,6 +28,8 @@ pub mod pv;
 pub mod quiesce;
 /// Module con `see` tính toán tĩnh chuỗi đổi quân Static Exchange Evaluation
 pub mod see;
+/// Module con `smp` động cơ tìm kiếm song song đa luồng Lazy SMP
+pub mod smp;
 /// Module con `stack` bộ nhớ đệm Stack đệ quy
 pub mod stack;
 
@@ -40,6 +42,7 @@ pub use prune::Prune;
 pub use pv::Pv;
 pub use quiesce::Quiesce;
 pub use see::See;
+pub use smp::LazySmp;
 pub use stack::Stack;
 
 
