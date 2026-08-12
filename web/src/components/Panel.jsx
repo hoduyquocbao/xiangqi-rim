@@ -44,20 +44,30 @@ export default function Panel({
         <span className="text-xs font-semibold text-gold/70 uppercase">
           CHẾ ĐỘ CHƠI & PHÂN TÍCH
         </span>
-        <div className="grid grid-cols-3 gap-1 bg-obsidian/80 p-1.5 rounded-lg border border-gold/20">
+        <div className="grid grid-cols-4 gap-1 bg-obsidian/80 p-1.5 rounded-lg border border-gold/20">
           <button
             onClick={() => setPlayMode && setPlayMode('ai')}
-            className={`py-2 px-1.5 text-[11px] font-bold rounded transition flex items-center justify-center gap-1 ${
+            className={`py-2 px-1 text-[10px] font-bold rounded transition flex items-center justify-center gap-0.5 ${
               playMode === 'ai'
                 ? 'bg-gold text-slate-950 shadow-md font-black'
                 : 'text-gold/70 hover:text-gold hover:bg-gold/10'
             }`}
           >
-            🤖 AI TRAINER
+            🤖 TRAINER
+          </button>
+          <button
+            onClick={() => setPlayMode && setPlayMode('auto')}
+            className={`py-2 px-1 text-[10px] font-bold rounded transition flex items-center justify-center gap-0.5 ${
+              playMode === 'auto'
+                ? 'bg-amber-400 text-slate-950 shadow-md font-black animate-pulse'
+                : 'text-gold/70 hover:text-gold hover:bg-gold/10'
+            }`}
+          >
+            ⚡ AUTOPLAY
           </button>
           <button
             onClick={() => setPlayMode && setPlayMode('pvp')}
-            className={`py-2 px-1.5 text-[11px] font-bold rounded transition flex items-center justify-center gap-1 ${
+            className={`py-2 px-1 text-[10px] font-bold rounded transition flex items-center justify-center gap-0.5 ${
               playMode === 'pvp'
                 ? 'bg-gold text-slate-950 shadow-md font-black'
                 : 'text-gold/70 hover:text-gold hover:bg-gold/10'
@@ -70,7 +80,7 @@ export default function Panel({
               if (setPlayMode) setPlayMode('editor');
               if (open) open();
             }}
-            className={`py-2 px-1.5 text-[11px] font-bold rounded transition flex items-center justify-center gap-1 ${
+            className={`py-2 px-1 text-[10px] font-bold rounded transition flex items-center justify-center gap-0.5 ${
               playMode === 'editor'
                 ? 'bg-gold text-slate-950 shadow-md font-black'
                 : 'text-gold/70 hover:text-gold hover:bg-gold/10'
