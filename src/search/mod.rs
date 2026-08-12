@@ -65,6 +65,8 @@ pub struct Search {
     pub timer: Timer,
     /// Kết quả tìm kiếm (Best move, Score, Nodes, Time)
     pub result: Result,
+    /// Mảng lưu vết Zobrist Hashes của toàn bộ các nước đi đã đấu trong ván cờ
+    pub past_hashes: Vec<u64>,
 }
 
 impl Search {
@@ -78,6 +80,7 @@ impl Search {
             killer: Killer::new(),
             timer: Timer::new(),
             result: Result::new(),
+            past_hashes: Vec::with_capacity(256),
         }
     }
 
@@ -93,7 +96,15 @@ impl Search {
             std::ptr::write(&mut (*ptr).killer, Killer::new());
             std::ptr::write(&mut (*ptr).timer, Timer::new());
             std::ptr::write(&mut (*ptr).result, Result::new());
+            std::ptr::write(&mut (*ptr).past_hashes, Vec::with_capacity(256));
             Box::from_raw(ptr)
+        }
+    }
+
+    /// Đưa Zobrist Hash của nước cờ vừa đấu vào mảng past_hashes lịch sử toàn ván.
+    pub fn push_history(&mut self, hash: u64) {
+        if !self.past_hashes.contains(&hash) {
+            self.past_hashes.push(hash);
         }
     }
 
@@ -124,6 +135,7 @@ impl Search {
         self.history.clear();
         self.killer.clear();
         self.tt.clear();
+        self.past_hashes.clear();
         self.result = Result::new();
     }
 
@@ -135,7 +147,11 @@ impl Search {
 
     /// Thực thi lệnh tìm kiếm `go` từ vị trí bàn cờ `pos` với các giới hạn `limits`.
     pub fn go(&mut self, pos: &Position, limits: &Limits) -> Result {
-        self.go_with_history(pos, limits, &[])
+        if !self.past_hashes.contains(&pos.hash) {
+            self.past_hashes.push(pos.hash);
+        }
+        let past_slice = self.past_hashes.clone();
+        self.go_with_history(pos, limits, &past_slice)
     }
 
     /// Thực thi lệnh tìm kiếm `go_with_history` tích hợp mảng past hashes lịch sử ván cờ ngăn lặp cờ toàn ván.
