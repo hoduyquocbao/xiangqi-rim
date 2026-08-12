@@ -276,7 +276,7 @@ fn main() {
                 let _sample = Sample::pack(&pos, 1);
                 pos.revert(mv.from, mv.to, &st);
             }
-            raw_fens.fetch_add(count * 600, Ordering::Relaxed);
+            raw_fens.fetch_add(count, Ordering::Relaxed);
         });
     });
 
