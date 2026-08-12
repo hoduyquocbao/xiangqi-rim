@@ -1,15 +1,14 @@
 // ============================================================================
-// EXAMPLE 74: UNLIMITED MATCH (DEPTH 30 RED VS DEPTH 60 BLACK) - V7.8.0 PERPETUAL CHECK FIX
+// EXAMPLE 74: UNLIMITED MATCH (DEPTH 30 RED VS DEPTH 60 BLACK) - V7.9.0 DYNAMIC CONFIG
 // ============================================================================
-// Động Cơ Thực Thi Trận Đấu Không Giới Hạn Ply Giữa Depth 30 (Đỏ) và Depth 60 (Đen):
-//   1. Red AI: Depth 30 (1,500ms/nước đi).
-//   2. Black AI: Depth 60 (2,000ms/nước đi).
-//   3. Tự động lưu vết Zobrist Hash lịch sử ván cờ vào `red_engine` và `black_engine`.
-//   4. Xử LÝ TRIỆT ĐỂ LỖI LẮP CỜ & TRƯỜNG CHIẾU (PERPETUAL CHECK & REPETITION RULE):
-//      - Xử THUA NGAY LẬP TỨC nếu bên chiếu thực hiện Trường Chiếu (Perpetual Check Loss).
-//      - Xử HÒA cờ nếu lặp thế cờ 3 lần không chiếu (3-Fold Repetition Draw).
-//   5. Xuất toàn bộ biến thể trận đấu ra `data/depth30_vs_depth60_match.jsonl` (Flush mỗi ply).
-//   6. Tuân thủ 100% Quy tắc 8.10/7.10: Live Yield từng nước đi & OS Kernel RAM RSS (`libc::getrusage`).
+// Tuân thủ 100% Quy tắc 8.11 / 7.11 (Mandatory Dynamic Configuration & External Exposure Protocol):
+//   1. Red AI: `RED_DEPTH` (mặc định 30), `RED_TIME_MS` (mặc định 1,500ms).
+//   2. Black AI: `BLACK_DEPTH` (mặc định 60), `BLACK_TIME_MS` (mặc định 2,000ms).
+//   3. Hạn mức Ply: `MAX_PLIES` (mặc định 300 plies).
+//   4. Dung lượng RAM TT: `HASH_MB` (mặc định 256 MB RAM / Agent).
+//   5. Đường dẫn tệp xuất: `MATCH_OUTPUT_PATH` (mặc định `data/depth30_vs_depth60_match.jsonl`).
+//   6. Tích hợp 100% Luật Trường Chiếu (Perpetual Check Loss) & Lặp Cờ (3-Fold Repetition Draw).
+//   7. Tuân thủ 100% Quy tắc 8.10/7.10: Live Yield từng nước đi & OS Kernel RAM RSS (`libc::getrusage`).
 // ============================================================================
 
 use std::fs::OpenOptions;
@@ -21,9 +20,9 @@ use xiangrust::movegen::{legal, List};
 use xiangrust::search::{Limits, Search};
 
 /// Hằng số phiên bản ứng dụng APP_VERSION
-pub const APP_VERSION: &str = "v7.8.0-perpetual-check-and-repetition-fix";
+pub const APP_VERSION: &str = "v7.9.0-dynamic-config-rule-8.11";
 /// Hằng số dấu thời gian đóng gói APP_BUILD_STAMP
-pub const APP_BUILD_STAMP: &str = "2026-08-12 13:54:00 ICT";
+pub const APP_BUILD_STAMP: &str = "2026-08-12 14:05:00 ICT";
 
 /// Trả về dung lượng RAM RSS thực tế của Process từ Kernel OS (MB)
 pub fn get_realtime_ram_rss_mb() -> f64 {
@@ -45,21 +44,28 @@ pub fn get_realtime_ram_rss_mb() -> f64 {
 }
 
 fn main() {
+    // Nạp toàn bộ thông số cấu hình động từ Biến Môi Trường OS (Rule 8.11 / 7.11)
+    let red_depth: u8 = std::env::var("RED_DEPTH").ok().and_then(|v| v.parse().ok()).unwrap_or(30);
+    let red_time_ms: u64 = std::env::var("RED_TIME_MS").ok().and_then(|v| v.parse().ok()).unwrap_or(1500);
+
+    let black_depth: u8 = std::env::var("BLACK_DEPTH").ok().and_then(|v| v.parse().ok()).unwrap_or(60);
+    let black_time_ms: u64 = std::env::var("BLACK_TIME_MS").ok().and_then(|v| v.parse().ok()).unwrap_or(2000);
+
+    let max_plies: usize = std::env::var("MAX_PLIES").ok().and_then(|v| v.parse().ok()).unwrap_or(300);
+    let hash_mb: usize = std::env::var("HASH_MB").ok().and_then(|v| v.parse().ok()).unwrap_or(256);
+    let output_path = std::env::var("MATCH_OUTPUT_PATH").unwrap_or_else(|_| "data/depth30_vs_depth60_match.jsonl".to_string());
+
     println!("============================================================");
-    println!(" ⚔️ XIANGQI-RIM: UNLIMITED MATCH (DEPTH 30 RED VS DEPTH 60 BLACK)");
+    println!(" ⚔️ XIANGQI-RIM: UNLIMITED MATCH (DYNAMIC CONFIGURATION RULE 8.11)");
     println!("    Engine Version : {}", APP_VERSION);
     println!("    Build Timestamp: {}", APP_BUILD_STAMP);
     println!("============================================================");
-    let _ = stdout().flush();
-
-    let output_path = "data/depth30_vs_depth60_match.jsonl";
-
-    println!("⚡ BẮT ĐẦU TRẬN ĐẤU (TÍCH HỢP XỬ THUA TRƯỜNG CHIẾU & LẶP CỜ):");
-    println!("   • Phe Đỏ (Red AI)   : DEPTH 30 (1,500ms limit / move)");
-    println!("   • Phe Đen (Black AI) : DEPTH 60 (2,000ms limit / move)");
-    println!("   • Luật Trường Chiếu  : Xử THUA bên chiếu lặp (-28,000 cp)");
-    println!("   • Luật Lặp Cờ 3 Lần : Xử HÒA cờ (0 cp)");
-    println!("   • Tệp xuất dữ liệu   : {}", output_path);
+    println!("⚙️ THÔNG SỐ CẤU HÌNH ĐỘNG (DYNAMIC ENVIRONMENT CONFIG):");
+    println!("   • Phe Đỏ (Red AI)   : DEPTH {} (Giới hạn: {} ms / move) [Env: RED_DEPTH, RED_TIME_MS]", red_depth, red_time_ms);
+    println!("   • Phe Đen (Black AI) : DEPTH {} (Giới hạn: {} ms / move) [Env: BLACK_DEPTH, BLACK_TIME_MS]", black_depth, black_time_ms);
+    println!("   • Giới hạn Ply tối đa: {} plies [Env: MAX_PLIES]", max_plies);
+    println!("   • Dung lượng RAM TT  : {} MB RAM / Agent [Env: HASH_MB]", hash_mb);
+    println!("   • Tệp xuất dữ liệu   : {} [Env: MATCH_OUTPUT_PATH]", output_path);
     println!("============================================================");
     let _ = stdout().flush();
 
@@ -67,13 +73,13 @@ fn main() {
         .create(true)
         .write(true)
         .truncate(true)
-        .open(output_path)
+        .open(&output_path)
         .expect("Không thể tạo tệp xuất dữ liệu JSONL Trận đấu");
     let mut writer = BufWriter::with_capacity(1024 * 1024, file);
 
     let mut pos = Parser::parse(Parser::DEFAULT);
-    let mut red_engine = Search::new(256);
-    let mut black_engine = Search::new(256);
+    let mut red_engine = Search::new(hash_mb);
+    let mut black_engine = Search::new(hash_mb);
     red_engine.auto_load();
     black_engine.auto_load();
 
@@ -84,10 +90,14 @@ fn main() {
     let mut game_over = false;
     let mut outcome_str = "DRAW";
 
-    while !game_over && ply < 300 {
+    while !game_over && ply < max_plies {
         ply += 1;
         let is_red = pos.side == 0;
-        let side_name = if is_red { "RED (D30)" } else { "BLACK (D60)" };
+        let side_name = if is_red {
+            format!("RED (D{})", red_depth)
+        } else {
+            format!("BLACK (D{})", black_depth)
+        };
         let ply_start = Instant::now();
 
         // 1. Lưu Zobrist Hash hiện tại vào mảng lịch sử ván cờ
@@ -101,7 +111,6 @@ fn main() {
             game_over = true;
             let is_in_check = legal::check(&pos, pos.side as usize);
             if is_in_check {
-                // Bên đang đến lượt bị chiếu -> Bên vừa thực hiện nước đi bị XỬ THUA do Trường Chiếu!
                 outcome_str = if is_red {
                     "RED_WINS_BLACK_PERPETUAL_CHECK_LOSS"
                 } else {
@@ -128,11 +137,11 @@ fn main() {
 
         let mut limits = Limits::new();
         if is_red {
-            limits.depth = 30;
-            limits.exact = 1500;
+            limits.depth = red_depth;
+            limits.exact = red_time_ms;
         } else {
-            limits.depth = 60;
-            limits.exact = 2000;
+            limits.depth = black_depth;
+            limits.exact = black_time_ms;
         }
 
         let search_res = if is_red {
@@ -180,10 +189,10 @@ fn main() {
     let _ = writer.flush();
     let total_elapsed = match_start.elapsed().as_secs_f64();
     let final_ram = get_realtime_ram_rss_mb();
-    let file_size_mb = std::fs::metadata(output_path).map(|m| m.len()).unwrap_or(0) as f64 / (1024.0 * 1024.0);
+    let file_size_mb = std::fs::metadata(&output_path).map(|m| m.len()).unwrap_or(0) as f64 / (1024.0 * 1024.0);
 
     println!("============================================================");
-    println!(" 🏆 HOÀN THÀNH TRẬN ĐẤU ĐỐI ĐẦU DEPTH 30 VS DEPTH 60:");
+    println!(" 🏆 HOÀN THÀNH TRẬN ĐẤU ĐỐI ĐẦU ĐỘNG DEPTH {} VS DEPTH {}:", red_depth, black_depth);
     println!("------------------------------------------------------------");
     println!("   Kết quả trận đấu        : {}", outcome_str);
     println!("   Tổng số nước cờ đã đấu  : {} plies", ply);

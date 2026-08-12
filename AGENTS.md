@@ -284,5 +284,14 @@ python3 scripts/test_quantization.py data/nnue_weights_gen5.bin
      - **GPU Hardware Compute Load / VRAM**: Tải GPU % và dung lượng VRAM allocated.
 - **Mục Đích**: Triệt tiêu 100% hiện tượng "chạy ngầm mù thông tin" và ngăn chặn hành vi báo cáo khống chưa qua đo đạc thực tế!
 
+### 8.11 RÀNG BUỘC SẮT CẤU HÌNH ĐỘNG & BẢO TOÀN QUYỀN CHỈNH SỬA TỪ BÊN NGOÀI (MANDATORY DYNAMIC CONFIGURATION & EXTERNAL EXPOSURE MANDATE)
+- **NGHIÊM CẤM HARDCODE CỨNG BẤT KỲ THÔNG SỐ CẤU HÌNH NÀO IN-CODE**:
+  - Mọi thông số vận hành (như độ sâu tìm kiếm `depth`, giới hạn thời gian `time_limit_ms`, dung lượng RAM băm `hash_mb`, số luồng CPU `threads`, số nước tối đa `max_plies`, kích thước lô `batch_size`, đường dẫn tệp `output_path`, cờ GPU `gpu_enabled`, v.v.) **BẮT BUỘC phải được thiết lập ĐỘNG (Dynamic Configuration)** thông qua:
+    1. **Biến môi trường OS (Environment Variables)**: Đọc qua `std::env::var("KEY")` (Rust) hoặc `os.environ.get("KEY")` (Python) với giá trị mặc định hợp lý (fallback default).
+    2. **Tham số dòng lệnh (CLI Arguments / Flags)**: Hỗ trợ truyền tham số `--depth`, `--time`, `--threads`, `--hash`, `--max-plies`, `--batch-size` khi chạy file binary/script/example.
+    3. **Tệp cấu hình công khai (Public Configuration Files)**: Nạp cấu hình từ `.env`, `config.json`, hoặc `deployment.yaml`.
+- **RÀNG BUỘC TRUYỀN THÔNG TIN MINH BẠCH BÊN NGOÀI**:
+  - Tuyệt đối KHÔNG ĐƯỢC PHÉP ẩn giấu, giấu giếm hay hardcode ngầm thông số trong mã nguồn để đánh lừa người dùng hoặc các thế hệ Agent khác. Mọi thông số cấu hình BẮT BUỘC phải được in minh bạch ra log khởi động (Banner Startup) và cho phép người dùng/Agent khác dễ dàng thay đổi từ bên ngoài mà không cần sửa mã nguồn!
+
 
 

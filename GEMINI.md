@@ -231,4 +231,10 @@ GAMES=10000 DEPTH=4 THREADS=4 cargo run --release --example 20_parallel_mine
   2. **Monitor Hạ Tầng Thực Tế**: In chi tiết 3 chỉ số RAM RSS (MB), CPU Threads %, và GPU Compute Load % / VRAM.
 - **NGHIÊM CẤM** im lặng im ỉm chạy ngầm mù thông tin hoặc báo cáo số liệu khống chưa đo đạc!
 
+### 7.11 RÀNG BUỘC SẮT CẤU HÌNH ĐỘNG & BẢO TOÀN QUYỀN CHỈNH SỬA TỪ BÊN NGOÀI (MANDATORY DYNAMIC CONFIGURATION & EXTERNAL EXPOSURE MANDATE)
+- **NGHIÊM CẤM HARDCODE CỨNG BẤT KỲ THÔNG SỐ CẤU HÌNH NÀO IN-CODE**:
+  - Gemini BẮT BUỘC phải thiết lập **Cấu hình Động (Dynamic Configuration)** cho mọi thông số (`depth`, `exact_time_ms`, `hash_mb`, `threads`, `max_plies`, `batch_size`, v.v.) bằng cách ưu tiên đọc từ **Biến môi trường OS (`std::env::var`)** và **Tham số CLI / `.env` config file**.
+- **TRUYỀN THÔNG TIN MINH BẠCH**:
+  - In công khai toàn bộ cấu hình đang chạy ra màn hình (Startup Banner) và báo cáo minh bạch cho người dùng cũng như các Agent tiếp theo, tuyệt đối KHÔNG ngầm giấu giếm hay hardcode các giá trị giới hạn trong mã nguồn!
+
 
