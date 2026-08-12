@@ -91,6 +91,39 @@ impl Sieve {
         }
         self.count = 0;
     }
+
+    /// Phương thức `save`: Xuất toàn bộ trạng thái mảng bit Sieve 1MB ra tệp nhị phân đĩa.
+    pub fn save(&self, path: &str) -> std::io::Result<()> {
+        use std::fs::File;
+        use std::io::Write;
+
+        let mut file = File::create(path)?;
+        let mut buf = Vec::with_capacity(self.bits.len() * 8);
+        for atomic in &self.bits {
+            let val = atomic.load(Ordering::Relaxed);
+            buf.extend_from_slice(&val.to_le_bytes());
+        }
+        file.write_all(&buf)?;
+        file.flush()
+    }
+
+    /// Phương thức `load`: Nạp lại trạng thái mảng bit Sieve 1MB từ tệp nhị phân đĩa.
+    pub fn load(&mut self, path: &str) -> std::io::Result<()> {
+        use std::fs::File;
+        use std::io::Read;
+
+        let mut file = File::open(path)?;
+        let mut buf = Vec::new();
+        file.read_to_end(&mut buf)?;
+
+        if buf.len() == self.bits.len() * 8 {
+            for (i, chunk) in buf.chunks_exact(8).enumerate() {
+                let val = u64::from_le_bytes(chunk.try_into().unwrap());
+                self.bits[i].store(val, Ordering::Relaxed);
+            }
+        }
+        Ok(())
+    }
 }
 
 #[cfg(test)]
@@ -107,5 +140,21 @@ mod tests {
         sieve.push(hash1);
         assert!(sieve.contains(hash1));
         assert!(!sieve.contains(hash2));
+    }
+
+    #[test]
+    fn test_sieve_persistence() {
+        let sieve = Sieve::new();
+        let hash = 0xABCDEF1234567890u64;
+        sieve.push(hash);
+
+        let tmp_path = "target/test_sieve_dump.bin";
+        assert!(sieve.save(tmp_path).is_ok());
+
+        let mut loaded_sieve = Sieve::new();
+        assert!(loaded_sieve.load(tmp_path).is_ok());
+        assert!(loaded_sieve.contains(hash));
+
+        let _ = std::fs::remove_file(tmp_path);
     }
 }

@@ -60,8 +60,13 @@ pub struct TaskItem {
 pub fn dual_pipeline_mine(target_samples: usize, out_path: &str, threads: usize) -> (usize, f64, f64) {
     let start_time = Instant::now(); // Mốc thời gian bắt đầu
 
-    // Khởi tạo bộ lọc Bloom Filter Sieve 1MB chống trùng FEN
-    let sieve = Arc::new(Sieve::new());
+    // Khởi tạo bộ lọc Bloom Filter Sieve 1MB chống trùng FEN (Tải trạng thái cũ nếu có)
+    let mut sieve_inst = Sieve::new();
+    let sieve_dump_path = "data/sieve_state.bin";
+    if std::path::Path::new(sieve_dump_path).exists() {
+        let _ = sieve_inst.load(sieve_dump_path);
+    }
+    let sieve = Arc::new(sieve_inst);
     // Khởi tạo bộ đánh giá lô GPU Evaluator
     let evaluator = Arc::new(Evaluator::new(Device::init()).expect("Khởi tạo GPU Evaluator thất bại"));
 
@@ -216,6 +221,9 @@ pub fn dual_pipeline_mine(target_samples: usize, out_path: &str, threads: usize)
 
     drop(tx); // Đóng kênh sender để luồng GPU worker kết thúc
     let total_written = gpu_handle.join().unwrap_or(0);
+
+    // Lưu vết trạng thái mảng bit Sieve 1MB ra tệp nhị phân đĩa để tái sử dụng
+    let _ = sieve.save("data/sieve_state.bin");
 
     let elapsed = start_time.elapsed().as_secs_f64();
     let throughput = if elapsed > 0.0 { total_written as f64 / elapsed } else { 0.0 };
