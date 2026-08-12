@@ -136,6 +136,13 @@ impl Evaluator { // Khối triển khai các phương thức cho Evaluator
         // Kích thước byte bộ đệm nén Score Buffer (4 bytes x count) (chỉ 64KB thay vì 2MB!)
         let compact_score_bytes = count.saturating_mul(4);
 
+        // Mutex toàn cục bảo vệ GPU Queue Submission & Staging Mapping chống tranh chấp đa luồng
+        static EXEC_MUTEX: std::sync::Mutex<()> = std::sync::Mutex::new(());
+        let _guard = match EXEC_MUTEX.lock() {
+            Ok(g) => g,
+            Err(_) => return self.fallback(batch, count),
+        };
+
         // Truy xuất con trỏ bộ nhớ dữ liệu các mẫu FEN trong lô batch
         let ptr = batch.buffer().pointer(); // Lấy con trỏ thô buffer
         if ptr.is_null() { // Nếu con trỏ thô null
@@ -199,14 +206,17 @@ impl Evaluator { // Khối triển khai các phương thức cho Evaluator
                     score_staging.unmap(); // Bỏ map Compact Score Staging Buffer
                     return Ok(()); // Trả về thành công Ok
                 }
+                score_staging.unmap(); // Giải phóng unmap nếu channel nhận được lỗi
                 break;
             }
             if start_poll.elapsed().as_millis() > 5000 {
+                score_staging.unmap(); // Giải phóng unmap khi quá thời gian chờ 5s
                 break; // Timeout an toàn 5s
             }
             std::thread::yield_now(); // Nhường lượt ngắn tránh xoay vòng lãng phí CPU
         }
 
+        score_staging.unmap(); // Giải phóng unmap trước khi chuyển sang fallback
         self.fallback(batch, count) // Hạ cấp an toàn về CPU SIMD fallback nếu timeout
     } // Kết thúc hàm execute
 
