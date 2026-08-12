@@ -353,9 +353,14 @@ fn main() {
     println!("============================================================");
     let _ = stdout().flush();
 
-    let detected_threads = std::thread::available_parallelism()
-        .map(|n| n.get())
-        .unwrap_or(4);
+    let detected_threads = std::env::var("THREADS")
+        .ok()
+        .and_then(|s| s.parse::<usize>().ok())
+        .unwrap_or_else(|| {
+            std::thread::available_parallelism()
+                .map(|n| n.get())
+                .unwrap_or(4)
+        });
 
     let target_samples = std::env::var("SAMPLES")
         .ok()
