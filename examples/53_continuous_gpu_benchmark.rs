@@ -34,8 +34,8 @@ fn main() {
     let evaluator = Arc::new(Evaluator::new(Device::init()).expect("Khởi tạo GPU Evaluator thất bại"));
     let dev_ref = evaluator.device();
 
-    // Chuẩn bị sẵn 65,536 mẫu thế cờ FEN khởi tạo ban đầu để nạp GPU VRAM
-    let batch_size = 65536; // Lô cực đại 65,536 mẫu / Compute Pass
+    // Chuẩn bị sẵn 16,384 mẫu thế cờ FEN khởi tạo ban đầu để nạp GPU VRAM (Giới hạn tối đa Batch VRAM)
+    let batch_size = 16384; // Lô cực đại 16,384 mẫu / Compute Pass (2MB VRAM)
     let mut init_batch = Batch::allocate(dev_ref, batch_size).expect("Cấp phát VRAM Batch thất bại");
 
     let pos = Parser::parse(Parser::DEFAULT);
