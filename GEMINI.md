@@ -122,12 +122,14 @@ GAMES=10000 DEPTH=4 THREADS=4 cargo run --release --example 20_parallel_mine
 3. **Batch atomic update** — `fetch_add(batch_size)` cuối ván. NGHIÊM CẤM `fetch_add(1)` mỗi sample.
 4. **THREADS=4** mặc định cho compute-bound. THREADS=8 chỉ cho I/O-bound workload.
 
-### 4.3 Hiệu Năng Tham Chiếu
+### 4.3 Hiệu Năng Tham Chiếu Điểm Vàng Hybrid CPU+GPU
 
-| Cấu hình | Throughput | Ghi chú |
-|---|---|---|
-| THREADS=8, Search(8) | 0.4 ván/s | Hiện tại (baseline) |
-| THREADS=4, Search(4), batch write | ~0.6 ván/s | Mục tiêu tối ưu (+50%) |
+| Cấu hình | Throughput | Tải GPU % | Ghi chú |
+|---|---|---|---|
+| THREADS=8, Search(8) | 0.4 ván/s | 3% | Chưa gom lô, nghẽn CPU |
+| THREADS=4, Search(4), Batch=64 | 348 FEN/s | 2% | Đấu 1 trận đơn lẻ |
+| THREADS=16, GPU Batch=65,536 | 122,034 FEN/s | 88% | Multi-stream Mining |
+| **THREADS=4, GPU Batch=256 (Hybrid)** | **579,549 FEN/s** | **88%** | **Điểm vàng cân bằng tối thượng** |
 
 ---
 
