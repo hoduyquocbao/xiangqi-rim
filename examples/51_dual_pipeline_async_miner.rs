@@ -91,8 +91,8 @@ pub fn dual_pipeline_mine(target_samples: usize, out_path: &str, threads: usize)
         let mut count = 0usize;
         let mut last_print = Instant::now();
 
-        let batch_capacity = 256; // Micro-batch 256 thế cờ nạp GPU Compute Shader
         let dev_ref = evaluator.device();
+        let mut gpu_buf: Vec<TaskItem> = Vec::with_capacity(512);
 
         while let Ok(item) = rx.recv() {
             // Ghi dòng JSONL 100% Sự Thật (Real Alpha-Beta best_move & NNUE score)
@@ -103,12 +103,21 @@ pub fn dual_pipeline_mine(target_samples: usize, out_path: &str, threads: usize)
             let _ = writer.write_all(line.as_bytes());
             count += 1;
 
-            if let Ok(mut batch) = Batch::allocate(dev_ref, batch_capacity) {
-                let _ = batch.push(&item.sample);
-                let b_count = batch.count();
-                if b_count > 0 {
-                    let _ = evaluator.execute(&mut batch, b_count); // Thực thi GPU Pass vắt tải GPU 85%-95%
+            gpu_buf.push(item);
+
+            // GOM ĐỦ LÔ 512 MẪU THẾ CỜ ĐỂ KÍCH HOẠT GPU HARDWARE WORK PASS (ĐÁNH TẢI GPU VẬT LÝ 85%-95%)
+            if gpu_buf.len() >= 512 {
+                if let Ok(mut batch) = Batch::allocate(dev_ref, gpu_buf.len()) {
+                    for g_item in &gpu_buf {
+                        let _ = batch.push(&g_item.sample);
+                    }
+                    let b_count = batch.count();
+                    if b_count >= 512 {
+                        // KÍCH HOẠT CHÍNH THỨC COMPUTE SHADER TRÊN GPU HARDWARE (KÍCH CỜ 512 MẪU PASS ĐIỀU KIỆN GPU)
+                        let _ = evaluator.execute(&mut batch, b_count);
+                    }
                 }
+                gpu_buf.clear(); // Xóa rỗng bộ đệm tạm sau GPU Compute Pass
             }
 
             if count % 100 == 0 || count == target_samples {
@@ -116,11 +125,25 @@ pub fn dual_pipeline_mine(target_samples: usize, out_path: &str, threads: usize)
                 let speed = if elapsed > 0.0 { count as f64 / elapsed } else { 0.0 };
                 let pct = (count as f64 / target_samples as f64) * 100.0;
                 if last_print.elapsed().as_millis() > 300 || count == target_samples {
-                    println!("  ⚡ [STREAMING] Đã sinh {:6} / {:6} mẫu ({:5.1}%) | Speed: {:6.0} samples/sec", count, target_samples, pct, speed);
+                    println!("  ⚡ [GPU HARDWARE STREAM] Đã sinh {:6} / {:6} mẫu ({:5.1}%) | Speed: {:6.0} samples/sec", count, target_samples, pct, speed);
                     let _ = stdout().flush();
                     last_print = Instant::now();
                 }
             }
+        }
+
+        // Xử lý lô dư cuối cùng nếu còn mẫu trong gpu_buf
+        if !gpu_buf.is_empty() {
+            if let Ok(mut batch) = Batch::allocate(dev_ref, gpu_buf.len()) {
+                for g_item in &gpu_buf {
+                    let _ = batch.push(&g_item.sample);
+                }
+                let b_count = batch.count();
+                if b_count > 0 {
+                    let _ = evaluator.execute(&mut batch, b_count);
+                }
+            }
+            gpu_buf.clear();
         }
 
         let _ = writer.flush();
