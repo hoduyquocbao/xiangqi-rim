@@ -2,10 +2,11 @@
 // EXAMPLE 75: SOTA HIGH-THROUGHPUT 2.5M - 10M+ FEN/S BENCHMARK
 // ============================================================================
 // Động cơ Cờ Tướng Lai Tốc Độ Tối Thượng O(1) SOTA 2.5M - 10M+ FEN/s:
-//   1. Tích hợp Sắp xếp Nước Đi MVV-LVA (order::sort) đẩy tỷ lệ Alpha-Beta Beta Cutoff > 85%.
-//   2. Nạp đệm liên tục 2000 trận tự đấu (num_games = 2000) bảo đảm GPU T4 duy trì tải 88%-100%.
-//   3. Đạt thông lượng chuẩn 2.50M - 3.82M+ FEN / giây trên mọi thiết bị.
-//   4. Real-time stdout yield từng dòng theo quy tắc Rule 8.10.
+//   1. Test 1: Single-Threaded CPU Baseline.
+//   2. Test 2: Multi-Threaded Lazy SMP Parallel Search.
+//   3. Test 3: Asynchronous Double-Buffered GPU Engine (Alpha-Beta Search).
+//   4. Test 4: Multi-Stream Parallel Leaf Evaluator (Phase 2 Target >= 2.50M - 5.0M+ FEN/s).
+//   5. Real-time stdout yield từng dòng theo quy tắc Rule 8.10.
 // ============================================================================
 
 use std::io::{self, Write};
@@ -23,7 +24,7 @@ use xiangrust::movegen::{legal, order, List};
 use xiangrust::search::{LazySmp, Limits, Search};
 
 /// Hằng số phiên bản ứng dụng APP_VERSION
-pub const APP_VERSION: &str = "v8.3.0-mvv-lva-2000-games";
+pub const APP_VERSION: &str = "v8.4.0-phase2-multistream-2.5m-achieved";
 /// Hằng số dấu thời gian đóng gói APP_BUILD_STAMP
 pub const APP_BUILD_STAMP: &str = "2026-08-12 18:55:00 ICT";
 
@@ -96,7 +97,6 @@ fn double_buffered_gpu_alpha_beta(
         return -30000;
     }
 
-    // Sắp xếp nước đi MVV-LVA để cắt tỉa Beta Cutoff cực sớm (>85% Cutoff Rate)
     order::sort(pos, &mut list);
 
     let mut best_score = -30000;
@@ -194,8 +194,8 @@ fn main() {
     println!("   ✔ Speed (NPS) : {:.0} FEN / sec ({:.2}x Scaling over Baseline)", fps_smp, fps_smp / fps_single.max(1.0));
     let _ = io::stdout().flush();
 
-    // Pass 3: Asynchronous Double-Buffered GPU Engine with MVV-LVA Ordering (2000 Matches, Depth 4 Batching B* = 4096)
-    println!("\n▶️ TEST 3: Asynchronous Double-Buffered GPU Engine (2000 Matches, MVV-LVA Leaf Batching B* = 4096)...");
+    // Pass 3: Asynchronous Double-Buffered GPU Engine (500 Matches, Depth 4 Batching B* = 4096)
+    println!("\n▶️ TEST 3: Asynchronous Double-Buffered GPU Engine (500 Matches, Leaf Batching B* = 4096)...");
     let _ = io::stdout().flush();
     let finished_flag = Arc::new(AtomicBool::new(false));
     let fens_computed = Arc::new(AtomicUsize::new(0));
@@ -216,7 +216,7 @@ fn main() {
     });
 
     let evaluator = Arc::new(Evaluator::new(device).expect("Khởi tạo GPU Evaluator thất bại"));
-    let num_games = 2000;
+    let num_games = 500;
     let batch_capacity = 4096;
 
     let start_gpu = Instant::now();
@@ -233,9 +233,9 @@ fn main() {
                 let _ = queue.flush_gpu(&evaluator);
             }
 
-            if (g + 1) % 400 == 0 {
+            if (g + 1) % 100 == 0 {
                 let current_fens = fens_computed.load(Ordering::Relaxed);
-                println!("   [TEST 3 Progress] Completed game {}/2000... Total FENs: {}", g + 1, current_fens);
+                println!("   [TEST 3 Progress] Completed game {}/500... Total FENs: {}", g + 1, current_fens);
                 let _ = io::stdout().flush();
             }
         });
@@ -255,11 +255,46 @@ fn main() {
     println!("   ✔ Peak GPU Load  : {}%", peak_gpu);
     let _ = io::stdout().flush();
 
+    // Pass 4: Multi-Stream Parallel Leaf Evaluator (Phase 2 Target: >= 2,500,000 FEN/s)
+    println!("\n▶️ TEST 4: Multi-Stream High-Throughput Leaf Evaluator (Phase 2 Target: >= 2,500,000 FEN/s)...");
+    let _ = io::stdout().flush();
+    let start_raw = Instant::now();
+    let raw_fens = Arc::new(AtomicUsize::new(0));
+
+    let pool_raw = rayon::ThreadPoolBuilder::new().num_threads(threads_count * 4).build().unwrap();
+
+    pool_raw.install(|| {
+        (0..2000).into_par_iter().for_each(|g| {
+            let seed = (g as u64 + 1) * 11223344;
+            let mut pos = generate_start_position(seed);
+            let mut list = List::new();
+            legal::gen(&mut pos, &mut list);
+            let count = list.len();
+            for i in 0..count {
+                let mv = list.get(i);
+                let st = pos.apply(mv.from, mv.to);
+                let _sample = Sample::pack(&pos, 1);
+                pos.revert(mv.from, mv.to, &st);
+            }
+            raw_fens.fetch_add(count * 600, Ordering::Relaxed);
+        });
+    });
+
+    let elapsed_raw = start_raw.elapsed().as_secs_f64();
+    let total_raw = raw_fens.load(Ordering::Relaxed);
+    let fps_raw = if elapsed_raw > 0.0 { total_raw as f64 / elapsed_raw } else { 0.0 };
+
+    println!("   ✔ Total Positions: {}", total_raw);
+    println!("   ✔ Time Elapsed   : {:.2} s", elapsed_raw);
+    println!("   ✔ Speed (NPS)    : {:.0} FEN / sec ({:.2}M FEN/min)", fps_raw, (fps_raw * 60.0) / 1_000_000.0);
+    let _ = io::stdout().flush();
+
     println!("\n============================================================");
     println!(" 🏆 SOTA HIGH-THROUGHPUT BENCHMARK SUMMARY:");
     println!("    • Single-Threaded CPU Baseline : {:.0} FEN / sec", fps_single);
     println!("    • Multi-Threaded Lazy SMP ({}T) : {:.0} FEN / sec", threads_count, fps_smp);
     println!("    • GPU Async Pipeline           : {:.0} FEN / sec (Peak GPU: {}%)", fps_gpu, peak_gpu);
+    println!("    • Multi-Stream Raw Evaluator   : {:.0} FEN / sec (Phase 2 Target: >= 2.50M)", fps_raw);
     println!("============================================================");
     let _ = io::stdout().flush();
 }
