@@ -31,7 +31,7 @@ use xiangrust::search::{Limits, Search};
 use xiangrust::tt::Table;
 use xiangrust::uci::Format;
 
-const APP_VERSION: &str = "v29.0.0-unrestricted-matrix-autotuner-engine";
+const APP_VERSION: &str = "v30.0.0-auto-shutdown-miner-engine";
 
 /// Cấu trúc kết quả tự động dò tìm cấu hình phần cứng tối ưu
 pub struct AutoTuningResult {
@@ -233,10 +233,12 @@ pub struct RawSample {
 pub struct IoTask {
     pub sample: Option<RawSample>,
     pub log_info: Option<String>,
+    pub is_shutdown: bool,
 }
 
 pub struct AsyncIoService {
     sender: SyncSender<IoTask>,
+    #[allow(dead_code)]
     handle: Option<JoinHandle<()>>,
 }
 
@@ -260,6 +262,11 @@ impl AsyncIoService {
             let mut total_write_delay_us = 0u64;
 
             while let Ok(task) = receiver.recv() {
+                if task.is_shutdown {
+                    let _ = writer.flush();
+                    break;
+                }
+
                 let recv_us = start_all.elapsed().as_micros() as u64;
 
                 if let Some(sample) = task.sample {
@@ -320,17 +327,19 @@ impl AsyncIoService {
 
     #[inline(always)]
     pub fn push(&self, sample: Option<RawSample>, log_info: Option<String>) {
-        let _ = self.sender.send(IoTask { sample, log_info });
+        let _ = self.sender.send(IoTask {
+            sample,
+            log_info,
+            is_shutdown: false,
+        });
     }
 
-    pub fn close(mut self) {
+    pub fn close(&self) {
         let _ = self.sender.send(IoTask {
             sample: None,
             log_info: None,
+            is_shutdown: true,
         });
-        if let Some(handle) = self.handle.take() {
-            let _ = handle.join();
-        }
     }
 }
 
@@ -577,11 +586,10 @@ fn main() {
     println!("   • Tổng số sự kiện bất biến đã ghi: {} Events", cqrs_bus.store.len());
     println!("-------------------------------------------------------------------------------");
 
-    // Đóng IoService
-    if let Ok(service) = Arc::try_unwrap(io_service) {
-        service.close();
-    }
+    // Đóng IoService và xả đệm đĩa vật lý
+    io_service.close();
 
     println!("===============================================================================");
     let _ = io::stdout().flush();
+    std::process::exit(0);
 }
