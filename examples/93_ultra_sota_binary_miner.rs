@@ -1,15 +1,17 @@
 // ============================================================================
-// VÍ DỤ 93: ULTRA SOTA BINARY MINER V18.0.0 (DYNAMIC QoS SYSTEM LOAD GOVERNOR)
+// VÍ DỤ 93: ULTRA SOTA BINARY MINER V19.0.0 (HARDWARE BACKEND PROBE & DYNAMIC QoS)
 // CẤU TRÚC NHỊ PHÂN CĂN LỀ 64-BYTE + ĐỘNG CƠ TỰ ĐỘNG THÍCH ỨNG TẢI DYNAMIC TELEMETRY
 // ============================================================================
-// `93_ultra_sota_binary_miner.rs` nâng cấp cơ chế chẩn đoán và thích ứng tải thời gian thực:
+// `93_ultra_sota_binary_miner.rs` nâng cấp bộ chẩn đoán phần cứng và thích ứng tải thời gian thực:
 //   1. RawSample Struct 64-byte Alignment: Luồng Search Worker KHÔNG làm nhiệm vụ
 //      format chuỗi JSON UTF-8. Luồng chỉ copy byte FEN vào RawSample và đẩy qua channel.
 //   2. Dynamic QoS Load Governor: Giám sát tốc độ sinh mẫu FEN/giây và trễ hàng đợi thời gian thực.
 //      Tự động NÂNG LUỒNG (2 -> 4 -> 8 Workers) khi hệ thống rảnh rỗi và HẠ LUỒNG (8 -> 4 -> 2 Workers)
 //      khi phát hiện nghẽn CPU (ví dụ khi `rustc` biên dịch ngầm) để loại bỏ hoàn toàn hiện tượng quá tải!
-//   3. Hardware GPU Flush Auto-Tuner: Đo trực tiếp độ trễ vật lý Microsecond (μs) và Nanosecond (ns).
-//   4. Early Termination: Ngắt dừng ngay khi |score| >= 2500 hoặc plies >= 128.
+//   3. Hardware GPU Probe & Rejection: Tự động loại bỏ 100% các adapter bị giả lập phần mềm (llvmpipe/softpipe),
+//      hiển thị động tên nền tảng (Metal/CUDA/Vulkan/Dx12), đảm bảo GPU Compute Shader là phần cứng thực sự.
+//   4. Hardware GPU Flush Auto-Tuner: Đo trực tiếp độ trễ vật lý Microsecond (μs) và Nanosecond (ns).
+//   5. Early Termination: Ngắt dừng ngay khi |score| >= 2500 hoặc plies >= 128.
 // ============================================================================
 
 use std::fs::OpenOptions;
@@ -28,7 +30,7 @@ use xiangrust::movegen::{legal, List};
 use xiangrust::search::{Limits, Search};
 use xiangrust::uci::Format;
 
-const APP_VERSION: &str = "v18.0.0-dynamic-qos-load-governor";
+const APP_VERSION: &str = "v19.0.0-hardware-backend-probe-autotuner";
 
 /// Cấu trúc kết quả tự động dò tìm cấu hình phần cứng tối ưu
 pub struct AutoTuningResult {
@@ -42,14 +44,29 @@ pub struct AutoTuningResult {
 /// Module Tự Động Dò Tìm Cấu Hình Tốc Độ Nhanh Nhất (CPU-GPU Hardware Auto-Tuner Engine)
 pub fn run_hardware_autotuner(depth: u8, tt_mb: usize) -> AutoTuningResult {
     let device = Device::init();
+    let adapter_name = device.adapter_name();
+    let backend_name = device.backend().name();
+    let name_lc = adapter_name.to_lowercase();
+
+    // 🌟 KIỂM TRA GPU GIẢ LẬP PHẦN MỀM (LLVMPIPE / SOFTPIPE / SWRAST)
+    let is_emulated = name_lc.contains("llvmpipe")
+        || name_lc.contains("softpipe")
+        || name_lc.contains("swrast")
+        || name_lc.contains("cpu")
+        || name_lc.contains("llvm");
+
     println!("===============================================================================");
     println!("💎 XIANGQI-RIM: ULTRA SMART GPU SHADER HARDWARE AUTO-TUNER ({})", APP_VERSION);
     println!("   🔥 CÔNG NGHỆ BỘ ĐỀM THÔNG MINH MẬT ĐỘ CAO + TỰ ĐỘNG THÍCH ỨNG TẢI DYNAMIC QoS");
     println!("===============================================================================");
     println!("🔍 [HARDWARE DISCOVERY]");
-    println!("   • Thiết Bị GPU Hardware        : {} (Metal Native Shader Backend)", device.adapter_name());
+    println!("   • Thiết Bị GPU Hardware        : {} (Nền tảng GPU {})", adapter_name, backend_name);
     println!("   • Cấu Trúc Nhân CPU Phần CỨNG  : 4 Nhân vật lý (Physical Cores) / 8 Luồng Hyper-Threading");
     println!("   • Độ Tinh Khiết Đo Lường Latency: Nanoseconds (ns) & Microseconds (μs) vật lý");
+    if is_emulated {
+        println!("   ⚠️ [DISCOVERY ALERT] Phát hiện GPU bị giả lập phần mềm ('{}')!", adapter_name);
+        println!("      Tự động vô hiệu hóa GPU giả lập và chuyển sang 100% CPU SIMD Vector Engine để tránh lãng phí CPU!");
+    }
     println!("===============================================================================");
 
     let test_threads_candidates = vec![2, 4, 8];
@@ -107,7 +124,7 @@ pub fn run_hardware_autotuner(depth: u8, tt_mb: usize) -> AutoTuningResult {
     }
 
     // 2. KHẢO SÁT CHẤT LƯỢNG CAO MA TRẬN LÔ GPU (B*) X PHÂN CHIA LUỒNG (T)
-    println!("\n   --- ⚡ PHẦN 2: KHẢO SÁT THỜI GIAN THỰC COMPUTE PASS GPU METAL (B*) X THREADS (T) ---");
+    println!("\n   --- ⚡ PHẦN 2: KHẢO SÁT THỜI GIAN THỰC COMPUTE PASS GPU {} (B*) X THREADS (T) ---", backend_name.to_uppercase());
     println!("   [ Phân Chia Tải Lô GPU Batch Size (B*) & Mẫu Mỗi Luồng CPU Worker (S_thread = B* / T) ]\n");
 
     let mut best_gpu_fens_per_sec = 0.0f64;
@@ -116,54 +133,58 @@ pub fn run_hardware_autotuner(depth: u8, tt_mb: usize) -> AutoTuningResult {
 
     let batch_candidates = vec![64, 128, 256, 512, 1024];
 
-    if let Ok(mut evaluator) = Evaluator::new(Device::init()) {
-        let pos = Parser::parse(Parser::DEFAULT);
-        let sample = Sample::pack(&pos, depth as u32);
+    if !is_emulated {
+        if let Ok(mut evaluator) = Evaluator::new(Device::init()) {
+            let pos = Parser::parse(Parser::DEFAULT);
+            let sample = Sample::pack(&pos, depth as u32);
 
-        for &b_size in &batch_candidates {
-            if let Ok(mut batch) = Batch::allocate(&device, b_size) {
-                // Nạp mẫu thế cờ vào bộ đệm lô
-                for _ in 0..b_size {
-                    let _ = evaluator.submit(&sample);
-                }
+            for &b_size in &batch_candidates {
+                if let Ok(mut batch) = Batch::allocate(&device, b_size) {
+                    // Nạp mẫu thế cờ vào bộ đệm lô
+                    for _ in 0..b_size {
+                        let _ = evaluator.submit(&sample);
+                    }
 
-                let probe_passes = 100;
-                let probe_start = Instant::now();
-                let mut total_eval_fens = 0;
+                    let probe_passes = 100;
+                    let probe_start = Instant::now();
+                    let mut total_eval_fens = 0;
 
-                for _ in 0..probe_passes {
-                    if let Ok(count) = evaluator.flush(&mut batch) {
-                        total_eval_fens += count;
+                    for _ in 0..probe_passes {
+                        if let Ok(count) = evaluator.flush(&mut batch) {
+                            total_eval_fens += count;
+                        }
+                    }
+
+                    let dur_secs = probe_start.elapsed().as_secs_f64();
+                    let dur_micros = probe_start.elapsed().as_micros();
+                    let rate = if dur_secs > 0.0 { total_eval_fens as f64 / dur_secs } else { 0.0 };
+
+                    let us_per_pass = if probe_passes > 0 { dur_micros as f64 / probe_passes as f64 } else { 0.0 };
+                    let ns_per_sample = if total_eval_fens > 0 { (dur_micros as f64 * 1000.0) / total_eval_fens as f64 } else { 0.0 };
+                    let samples_per_thread = b_size / best_threads;
+
+                    let golden_tag = if b_size == 256 { "  <-- GOLDEN BALANCE POINT (32 samples/thread)" } else { "" };
+                    println!("   • Batch B* = {:>4} mẫu | {:>2} Threads -> {:>3} samples/thread | Trễ Pass: {:>6.2} μs | Trễ Mẫu: {:>6.1} ns/mẫu | Thông Lượng: {:>12.1} FEN/s{}", b_size, best_threads, samples_per_thread, us_per_pass, ns_per_sample, rate, golden_tag);
+
+                    if rate > best_gpu_fens_per_sec {
+                        best_gpu_fens_per_sec = rate;
+                        best_batch_size = b_size;
                     }
                 }
-
-                let dur_secs = probe_start.elapsed().as_secs_f64();
-                let dur_micros = probe_start.elapsed().as_micros();
-                let rate = if dur_secs > 0.0 { total_eval_fens as f64 / dur_secs } else { 0.0 };
-
-                let us_per_pass = if probe_passes > 0 { dur_micros as f64 / probe_passes as f64 } else { 0.0 };
-                let ns_per_sample = if total_eval_fens > 0 { (dur_micros as f64 * 1000.0) / total_eval_fens as f64 } else { 0.0 };
-                let samples_per_thread = b_size / best_threads;
-
-                let golden_tag = if b_size == 256 { "  <-- GOLDEN BALANCE POINT (32 samples/thread)" } else { "" };
-                println!("   • Batch B* = {:>4} mẫu | {:>2} Threads -> {:>3} samples/thread | Trễ Pass: {:>6.2} μs | Trễ Mẫu: {:>6.1} ns/mẫu | Thông Lượng: {:>12.1} FEN/s{}", b_size, best_threads, samples_per_thread, us_per_pass, ns_per_sample, rate, golden_tag);
-
-                if rate > best_gpu_fens_per_sec {
-                    best_gpu_fens_per_sec = rate;
-                    best_batch_size = b_size;
-                }
             }
-        }
 
-        if best_gpu_fens_per_sec > best_cpu_fens_per_sec {
-            use_gpu = true;
+            if best_gpu_fens_per_sec > best_cpu_fens_per_sec {
+                use_gpu = true;
+            }
+        } else {
+            println!("   ⚠️ Không tìm thấy GPU Compute Shader phù hợp, tự động ngả về CPU SIMD HCE Fallback.");
         }
     } else {
-        println!("   ⚠️ Không tìm thấy GPU Compute Shader phù hợp, tự động ngả về CPU SIMD HCE Fallback.");
+        println!("   ⚠️ Vô hiệu hóa GPU Probe vì GPU đang bị giả lập phần mềm ('{}'). Tự động dùng CPU SIMD Native.", adapter_name);
     }
 
     let mode_name = if use_gpu {
-        format!("CPU+GPU Hybrid Engine ({})", device.adapter_name())
+        format!("CPU+GPU Hybrid Engine ({})", adapter_name)
     } else {
         format!("CPU SIMD Engine ({} Physical Threads)", best_threads)
     };

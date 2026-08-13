@@ -80,6 +80,14 @@ impl Device { // Khối triển khai các phương thức cho Device
         if std::env::var("XDG_RUNTIME_DIR").is_err() {
             std::env::set_var("XDG_RUNTIME_DIR", "/tmp");
         }
+        // 🌟 TỰ ĐỘNG NẠP NVIDIA VULKAN ICD TRÊN LINUX COLAB NẾU CÓ CARD NVIDA
+        if std::env::var("VK_ICD_FILENAMES").is_err() {
+            if std::path::Path::new("/usr/share/vulkan/icd.d/nvidia_icd.json").exists() {
+                std::env::set_var("VK_ICD_FILENAMES", "/usr/share/vulkan/icd.d/nvidia_icd.json");
+            } else if std::path::Path::new("/etc/vulkan/icd.d/nvidia_icd.json").exists() {
+                std::env::set_var("VK_ICD_FILENAMES", "/etc/vulkan/icd.d/nvidia_icd.json");
+            }
+        }
         let instance = wgpu::Instance::new(&wgpu::InstanceDescriptor { // Khởi tạo wgpu Instance mới
             backends: wgpu::Backends::all(), // Hỗ trợ tất cả GPU Backend (Vulkan/Metal/DX12/GL)
             flags: wgpu::InstanceFlags::ALLOW_UNDERLYING_NONCOMPLIANT_ADAPTER, // Cho phép headless Vulkan GPU trên Linux Colab
