@@ -46,6 +46,11 @@ import threading  # Nhập threading hỗ trợ chạy luồng ngầm bất đ�
 VERSION = "v9.0.0-platinum-500m-rolling"  # Hằng số phiên bản kịch bản
 STAMP = "2026-08-13 03:45:00 ICT"  # Hằng số mốc thời gian đóng gói build
 REPO = "hoduyquocbao/xiangqi-gen6-platinum-dataset"  # Tên kho chứa Dataset HuggingFace Hub
+try:
+    from huggingface_hub import HfApi, create_repo
+except ImportError:
+    HfApi = None
+    create_repo = None
 
 def read_token():
     """
@@ -71,6 +76,7 @@ def execute_platinum_miner(chunk_id, games, depth, threads, batch_size, tt_mb, o
     
     # Thiết lập biến môi trường cấu hình động cho tiến trình Rust
     env = os.environ.copy()
+    env["AUTO_TUNE"] = "1"  # Kích hoạt tự động dò tìm cấu hình phần cứng tốc độ nhanh nhất!
     env["GAMES"] = str(games)  # Số ván cờ per chunk
     env["DEPTH"] = str(depth)  # Độ sâu tìm kiếm per ply
     env["THREADS"] = str(threads)  # Số luồng CPU vật lý
@@ -244,7 +250,7 @@ def main():
 
         # 4. TÍNH TOÁN BẢNG TELEMETRY VÀ THỜI GIAN DỰ KIẾN CÒN LẠI (ETA TELEMETRY)
         elapsed_sec = time.time() - start_campaign
-        completed_chunks = chunk_idx
+        completed_chunks = loop_counter
         remaining_chunks = total_target_chunks - completed_chunks
         avg_time_per_chunk = elapsed_sec / completed_chunks
         eta_sec = avg_time_per_chunk * remaining_chunks
