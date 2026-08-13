@@ -31,7 +31,7 @@ use xiangrust::search::{Limits, Search};
 use xiangrust::tt::Table;
 use xiangrust::uci::Format;
 
-const APP_VERSION: &str = "v27.0.0-cumulative-avg-telemetry-engine";
+const APP_VERSION: &str = "v28.0.0-max-fens-autotuner-engine";
 
 /// Cấu trúc kết quả tự động dò tìm cấu hình phần cứng tối ưu
 pub struct AutoTuningResult {
@@ -70,16 +70,16 @@ pub fn run_hardware_autotuner(depth: u8, tt_mb: usize) -> AutoTuningResult {
     }
     println!("===============================================================================");
 
-    let test_threads_candidates = vec![2, 4, 8];
+    let test_threads_candidates = vec![2, 4, 8, 16, 32];
     let mut best_threads = 4;
     let mut best_cpu_fens_per_sec = 0.0f64;
 
-    // 1. KHẢO SÁT CHÍNH XÁC NANO-GIÂY CPU SIMD (2, 4, 8 THREADS)
+    // 1. KHẢO SÁT CHÍNH XÁC NANO-GIÂY CPU SIMD (2, 4, 8, 16, 32 THREADS)
     println!("\n   --- 🖥️ PHẦN 1: KHẢO SÁT CHÍNH XÁC NANO-GIÂY ĐA LUỒNG CPU SIMD ---");
     for &num_threads in &test_threads_candidates {
         let probe_start = Instant::now();
         let probe_games = 12;
-        let games_per_worker = probe_games / num_threads;
+        let games_per_worker = (probe_games / num_threads).max(1);
         let sample_counter = Arc::new(AtomicUsize::new(0));
 
         let mut workers = Vec::with_capacity(num_threads);
@@ -126,13 +126,13 @@ pub fn run_hardware_autotuner(depth: u8, tt_mb: usize) -> AutoTuningResult {
 
     // 2. KHẢO SÁT CHẤT LƯỢNG CAO MA TRẬN LÔ GPU (B*) X PHÂN CHIA LUỒNG (T)
     println!("\n   --- ⚡ PHẦN 2: KHẢO SÁT THỜI GIAN THỰC COMPUTE PASS GPU {} (B*) X THREADS (T) ---", backend_name.to_uppercase());
-    println!("   [ Phân Chia Tải Lô GPU Batch Size (B*) & Mẫu Mỗi Luồng CPU Worker (S_thread = B* / T) ]\n");
+    println!("   [ Tìm Cấu Hình Cho Tốc Độ FEN/s Cao Nhất | Không Giới Hạn Threads & Batch Size ]\n");
 
     let mut best_gpu_fens_per_sec = 0.0f64;
-    let mut best_batch_size = 256;
+    let mut best_batch_size = 512;
     let mut use_gpu = false;
 
-    let batch_candidates = vec![64, 128, 256, 512, 1024];
+    let batch_candidates = vec![64, 128, 256, 512, 1024, 2048, 4096];
 
     if !is_emulated {
         if let Ok(mut evaluator) = Evaluator::new(Device::init()) {
@@ -164,8 +164,7 @@ pub fn run_hardware_autotuner(depth: u8, tt_mb: usize) -> AutoTuningResult {
                     let ns_per_sample = if total_eval_fens > 0 { (dur_micros as f64 * 1000.0) / total_eval_fens as f64 } else { 0.0 };
                     let samples_per_thread = b_size / best_threads;
 
-                    let golden_tag = if b_size == 256 { "  <-- GOLDEN BALANCE POINT (32 samples/thread)" } else { "" };
-                    println!("   • Batch B* = {:>4} mẫu | {:>2} Threads -> {:>3} samples/thread | Trễ Pass: {:>6.2} μs | Trễ Mẫu: {:>6.1} ns/mẫu | Thông Lượng: {:>12.1} FEN/s{}", b_size, best_threads, samples_per_thread, us_per_pass, ns_per_sample, rate, golden_tag);
+                    println!("   • Batch B* = {:>4} mẫu | {:>2} Threads -> {:>3} samples/thread | Trễ Pass: {:>6.2} μs | Trễ Mẫu: {:>6.1} ns/mẫu | Thông Lượng: {:>12.1} FEN/s", b_size, best_threads, samples_per_thread, us_per_pass, ns_per_sample, rate);
 
                     if rate > best_gpu_fens_per_sec {
                         best_gpu_fens_per_sec = rate;
@@ -197,14 +196,14 @@ pub fn run_hardware_autotuner(depth: u8, tt_mb: usize) -> AutoTuningResult {
     let winning_us_per_pass = (winning_ns_per_sample * best_batch_size as f64) / 1000.0;
 
     println!("\n===============================================================================");
-    println!("🏆 [AUTO-TUNER DECISION MATRIX] KẾT QUẢ ĐO ĐẠC ĐIỂM VÀNG TOÀN DIỆN PHẦN CỨNG:");
+    println!("🏆 [MAX FENs AUTO-TUNER DECISION] CẤU HÌNH ĐẠT TỐC ĐỘ THÔNG LƯỢNG CAO NHẤT:");
     println!("   • Chế Độ Vận Hành Vàng          : `{}`", mode_name);
     println!("   • Luồng CPU Tự Đấu (T)          : {} Luồng Game Workers (Lock-Free Async RingBuffer)", best_threads);
-    println!("   • Kích Thước Lô GPU Tổng (B*)   : {} Mẫu FEN / Compute Pass (Nạp tối đa vRAM GPU)", best_batch_size);
-    println!("   • Phân Phối Tải Mỗi Luồng (S_t) : {} Mẫu FEN / Worker Thread / Batch Pass (0% Lock Contention)", samples_per_thread_winning);
+    println!("   • Kích Thước Lô GPU Tổng (B*)   : {} Mẫu FEN / Compute Pass", best_batch_size);
+    println!("   • Phân Phối Tải Mỗi Luồng (S_t) : {} Mẫu FEN / Worker Thread / Batch Pass", samples_per_thread_winning);
     println!("   • Trễ Pass GPU Thực Tế (τ_pass) : {:>7.2} Microseconds (μs) / Compute Pass", winning_us_per_pass);
     println!("   • Trễ Mẫu FEN Thực Tế (τ_sample): {:>7.1} Nanoseconds (ns) / Mẫu Thế Cờ", winning_ns_per_sample);
-    println!("   • Tốc Độ Động Cơ Đạt Được       : {:>12.1} FEN / Giây (Gia tốc {:>8.1}x so với CPU SIMD)", winner_fens, speedup);
+    println!("   • Tốc Độ Động Cơ ĐỈNH CAO NHẤT  : {:>12.1} FEN / Giây (Gia tốc {:>8.1}x so với CPU SIMD)", winner_fens, speedup);
     println!("===============================================================================\n");
 
     AutoTuningResult {
@@ -352,7 +351,7 @@ fn main() {
     println!("   🔥 CÔNG NGHỆ NHỊ PHÂN CĂN LỀ 64-BYTE + FIXED THREAD ARCHITECTURE (100% FIXED WORKERS)");
     println!("===============================================================================");
 
-    let total_games: usize = std::env::var("GAMES").ok().and_then(|v| v.parse().ok()).unwrap_or(1024);
+    let total_games: usize = std::env::var("GAMES").ok().and_then(|v| v.parse().ok()).unwrap_or(200);
     let depth: u8 = std::env::var("DEPTH").ok().and_then(|v| v.parse().ok()).unwrap_or(4);
     let tt_mb: usize = std::env::var("TT_MB").ok().and_then(|v| v.parse().ok()).unwrap_or(1024);
     let max_plies: usize = std::env::var("MAX_PLIES").ok().and_then(|v| v.parse().ok()).unwrap_or(128);
