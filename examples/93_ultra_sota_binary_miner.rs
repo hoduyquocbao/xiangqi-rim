@@ -296,8 +296,8 @@ impl AsyncIoService {
                         let avg_write = total_write_delay_us / 5000;
                         println!(
                             "📊 [LATENCY PROFILING] Mẫu #{:<6} | Trễ Hàng Đợi (Queue Delay): {:<4} μs | Trễ Ghi Đĩa (Disk Write): {:<4} μs | Trạng Thái: {}",
-                            "📊 [LATENCY PROFILING] Mẫu #{:<6} | Trễ Hàng Đợi (Queue Delay): {:<4} μs | Trễ Ghi Đĩa (Disk Write): {:<4} μs",
-                            sample_counter, avg_queue, avg_write
+                            sample_counter, avg_queue, avg_write,
+                            if avg_queue < 500 && avg_write < 1000 { "🟢 CỰC NHANH (0% Nghẽn)" } else { "🟡 CÓ DẤU HIỆU NGHẼN" }
                         );
                         let _ = stdout.flush();
                         total_queue_delay_us = 0;
