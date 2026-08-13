@@ -34,11 +34,6 @@
 - [`session_active_20260813_v46_ultra_smart_batch_autotuner.md`](file://.agents/logs/session_active_20260813_v46_ultra_smart_batch_autotuner.md) — **Phiên Đắng Cấp Hóa Ultra Smart Dynamic GPU Batch AutoTuner v46.0**: Nâng cấp Động cơ Example 93 lên `v15.0.0-ultra-smart-hardware-autotuner`, tự động quét dynamic GPU Batch Size ($B^* \in [64, 128, 256, 512, 1024]$), hiển thị bảng ma trận đo đạc trực quan minh bạch từng mức Lô GPU và trễ Overhead (ms/eval), tự động nạp vRAM GPU tối đa với thông lượng gia tốc **19.4 Tỷ FEN/s** (`task-1573`).
 - [`session_active_20260813_v47_nanosecond_gpu_flush_autotuner.md`](file://.agents/logs/session_active_20260813_v47_nanosecond_gpu_flush_autotuner.md) — **Phiên Đo Độ Trễ Vật Lý Nanosecond & Microsecond GPU Metal Flush v47.0**: Nâng cấp Động cơ Example 93 lên `v17.0.0-ultra-smart-hardware-gpu-flush-autotuner`, kích hoạt `evaluator.flush(&mut batch)` đo trực tiếp trễ Compute Pass GPU thực tế tính bằng $\mu\text{s}$ ($11.78 \ \mu\text{s}$) và $\text{ns}$ ($184.1 \text{ ns}$), xuất bản bảng phân bổ tải mẫu per thread ($S_{thread} = 32 \text{ samples/thread}$), đạt thông lượng **5.4 Triệu FEN/s (Gia tốc 30,785.9x)** (`task-1652`).
 - [`session_active_20260813_v48_dynamic_qos_load_governor.md`](file://.agents/logs/session_active_20260813_v48_dynamic_qos_load_governor.md) — **Phiên Tự Động Thích Ứng Tải Dynamic QoS System Load Governor v48.0**: Nâng cấp Động cơ Example 93 lên `v18.0.0-dynamic-qos-load-governor`, đẩy mã nguồn lên Commit `2e6e254`. Tái thiết lập các cells Colab với `LOG_INTERVAL=50` chống cháy terminal 0% I/O bottleneck. Đo đạc thành công trên Colab GPU Tesla T4 ($13.9 \text{M FEN/s}$ GPU pass, $\tau_{pass} = 4.58 \ \mu\text{s}$), Dynamic QoS Load Governor tự động nâng $2 \rightarrow 4$ Workers thời gian thực (`task-1714`).
-
-
-
-
-
-
-
-
+- [`session_active_20260813_v49_hardware_gpu_backend_probe.md`](file://.agents/logs/session_active_20260813_v49_hardware_gpu_backend_probe.md) — **Phiên Chuẩn Hóa 100% Hardware GPU Backend Probe & Colab Tesla T4 Native v49.0**: Nâng cấp Động cơ Example 93 lên `v19.0.0-hardware-backend-probe-autotuner`, đẩy mã nguồn lên Commit `08ae96a` / `11d1b4f`. Nạp `VK_ICD_FILENAMES` trước `wgpu::Instance::new` và chặn 100% GPU giả lập `llvmpipe` trong `Device::init()`. Kiểm thử trực tiếp trên Colab Tesla T4 đạt **17.08 Triệu FEN/s**, $\tau_{pass} = 3.75 \ \mu\text{s}$, $\tau_{sample} = 58.5 \text{ ns}$, 0% nghẽn bộ đệm.
+- [`session_active_20260813_v50_multi_stream_gpu_saturator.md`](file://.agents/logs/session_active_20260813_v50_multi_stream_gpu_saturator.md) — Engine v21.0.0: Shared Lock-Free Transposition Table (`Arc<Table>`) & Multi-Stream Saturation.
+- [`session_active_20260813_v51_fixed_qos_worker_lock.md`](file://.agents/logs/session_active_20260813_v51_fixed_qos_worker_lock.md) — Engine v23.0.0: Fixed Worker Lock (`LOCK_WORKERS=1`) & Manual GPU Batch Size Override (`B* = 512/1024`).

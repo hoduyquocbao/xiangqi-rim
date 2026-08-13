@@ -255,10 +255,11 @@ python3 scripts/test_quantization.py data/nnue_weights_gen5.bin
   4. **Kiểm Thử Biên Dịch Mới Cho Phép Commit**: Chạy `python3 -m py_compile app.py` hoặc `cargo check` để đảm bảo bản build mới hoạt động 100% trước khi push.
 - **Lý Do Tối Thượng**: Nếu sửa lỗi mã nguồn mà KHÔNG tăng số phiên bản và dấu thời gian, người dùng khi reload trang web sẽ rơi vào trạng thái "mù thông tin", không thể phân biệt được ứng dụng đang chạy bản cũ hay bản mới đã sửa lỗi!
 
-### 8.6 QUY TẮC CẤM GHI ĐÈ KÝ ỨC CŨ — BẮT BUỘC NỐI THÊM (STRICT IMMUTABLE APPEND-ONLY MEMORY MANDATE)
-- **NGHIÊM CẤM** xóa bỏ, cắt xén, tóm tắt hoặc sử dụng `replace_file_content` làm đè / mất các Mục bài học cũ trong tệp `.agents/memory/pain_points_*.md`.
-- **BẮT BUỘC APPEND-ONLY**: Mọi bài học mới khi bổ sung vào tệp ký ức BẮT BUỘC phải được ghi nối tiếp vào cuối tệp mà không làm ảnh hưởng tới bất kỳ dòng chữ nào của các Mục bài học trước đó.
-- **TẠO TỆP MỚI KHI DUNG LƯỢNG LỚN**: Nếu tệp ký ức hiện tại quá lớn (> 15KB), Agent phải tạo tệp mới mang mốc thời gian (ví dụ `.agents/memory/pain_points_[YYYYMMDD_HHMM].md`) và đăng ký vào bảng mục lục `INDEX.md`.
+### 8.6 QUY TẮC CẤM GHI ĐÈ KÝ ỨC CŨ — BẮT BUỘC CHỨA DẤU THỜI GIAN GIỜ PHÚT `[YYYYMMDD_HHMM]` (STRICT IMMUTABLE TIMESTAMPED MEMORY MANDATE)
+- **NGHIÊM CẤM** xóa bỏ, cắt xén, tóm tắt hoặc ghi đè làm mất các Bài học cũ trong tệp `.agents/memory/pain_points_*.md`.
+- **BẮT BUỘC DẤU THỜI GIAN GIỜ PHÚT (`YYYYMMDD_HHMM`) HOẶC PHIÊN (`_vN_`)**: Mọi tệp ký ức bài học mới khi tạo ra BẮT BUỘC phải đặt tên theo định dạng chứa mốc thời gian chính xác đến phút hoặc số phiên, ví dụ: `.agents/memory/pain_points_[YYYYMMDD_HHMM]_[chủ_đề].md` (ví dụ: `pain_points_20260813_1618_cargo_jobs.md`) hoặc `pain_points_[YYYYMMDD]_v[N]_[chủ_đề].md`.
+- **CẤM TẠO TỆP CHỈ CÓ NGÀY TRUNG CHUNG**: NGHIÊM CẤM tạo tệp dạng `pain_points_[YYYYMMDD].md` không có giờ phút/số phiên, vì tên tệp chung chung này dễ bị các thế hệ Agent tiếp theo trong cùng ngày sử dụng `write_to_file(Overwrite: true)` ghi đè xóa mất tri thức cũ!
+- **BẮT BUỘC ĐĂNG KÝ MỤC LỤC**: Sau khi tạo tệp ký ức mới, BẮT BUỘC phải bổ sung đường dẫn tệp vào [`INDEX.md`](file://.agents/memory/INDEX.md).
 
 ### 8.7 QUY TẮC CUNG CẤP LINK GOOGLE COLAB KÈM MCP PROXY TOKEN (MANDATORY COLAB MCP LINK MANDATE)
 - **Ràng Buộc Sắt**: BẤT KỲ LẦN NÀO cung cấp đường dẫn Google Colab cho người dùng, Agent BẮT BUỘC phải đọc token/port mới nhất từ `.agents/memory/colab_mcp_proxy.json` và gắn trực tiếp chuỗi hash fragment vào cuối URL:
