@@ -31,7 +31,7 @@ use xiangrust::search::{Limits, Search};
 use xiangrust::tt::Table;
 use xiangrust::uci::Format;
 
-const APP_VERSION: &str = "v26.0.0-clean-qos-governor-toggle";
+const APP_VERSION: &str = "v27.0.0-dynamic-nproc-qos-engine";
 
 /// Cấu trúc kết quả tự động dò tìm cấu hình phần cứng tối ưu
 pub struct AutoTuningResult {
@@ -441,26 +441,35 @@ fn main() {
                 || std::env::var("LOCK_WORKERS").ok().map(|v| v == "1" || v == "true").unwrap_or(false)
                 || std::env::var("DISABLE_QOS").ok().map(|v| v == "1" || v == "true").unwrap_or(false);
 
-            // 🌟 LOGIC TÁI ĐÁNH GIÁ THÔNG LƯỢNG THỜI GIAN THỰC (DYNAMIC LOAD BALANCE PROBE)
+            // 🌟 GIỚI HẠN NÂNG/HẠ LUỒNG ĐỘNG THEO CẤU HÌNH THỜI GIAN THỰC (0% HARDCODING)
+            let max_target_workers = initial_threads_count;
+            let min_target_workers = (initial_threads_count / 2).max(1);
+
             if is_locked {
                 if current_active != initial_threads_count {
                     active_workers_cloned.store(initial_threads_count, Ordering::Relaxed);
                 }
                 continue; // 🌟 TẮT HOÀN TOÀN QoS GOVERNOR KHI enable_qos_governor = False
-            } else if current_rate > 350.0 && current_active < 4 {
-                active_workers_cloned.store(4, Ordering::Relaxed);
-                let msg = format!(
-                    "🔄 [DYNAMIC QoS GOVERNOR] Tải CPU Rảnh Rỗi ({:.1} FEN/s) | Tự Động Nâng Luồng: {} ➔ 4 Workers (Tối Ưu Thông Lượng)",
-                    current_rate, current_active
-                );
-                io_service_gov.push(None, Some(msg));
-            } else if current_rate < 150.0 && current_active > 2 {
-                active_workers_cloned.store(2, Ordering::Relaxed);
-                let msg = format!(
-                    "⚠️ [DYNAMIC QoS GOVERNOR] Phát Hiện Nghẽn CPU/Build Task ({:.1} FEN/s) | Tự Động Hạ Luồng: {} ➔ 2 Workers (Tránh CPU Context Switch)",
-                    current_rate, current_active
-                );
-                io_service_gov.push(None, Some(msg));
+            } else if current_rate > 350.0 && current_active < max_target_workers {
+                let next_active = std::cmp::min(current_active * 2, max_target_workers);
+                if next_active > current_active {
+                    active_workers_cloned.store(next_active, Ordering::Relaxed);
+                    let msg = format!(
+                        "🔄 [DYNAMIC QoS GOVERNOR] Tải CPU Rảnh Rỗi ({:.1} FEN/s) | Tự Động Nâng Luồng: {} ➔ {} Workers (Tối Ưu Thông Lượng)",
+                        current_rate, current_active, next_active
+                    );
+                    io_service_gov.push(None, Some(msg));
+                }
+            } else if current_rate < 150.0 && current_active > min_target_workers {
+                let next_active = std::cmp::max(current_active / 2, min_target_workers);
+                if next_active < current_active {
+                    active_workers_cloned.store(next_active, Ordering::Relaxed);
+                    let msg = format!(
+                        "⚠️ [DYNAMIC QoS GOVERNOR] Phát Hiện Nghẽn CPU/Build Task ({:.1} FEN/s) | Tự Động Hạ Luồng: {} ➔ {} Workers (Tránh CPU Context Switch)",
+                        current_rate, current_active, next_active
+                    );
+                    io_service_gov.push(None, Some(msg));
+                }
             }
         }
     });
