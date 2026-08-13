@@ -1,12 +1,11 @@
 # ============================================================================
 # CẤU HÌNH GIA TỐC BIÊN DỊCH BỨT PHÁ TỐC ĐỘ CARGO & RUSTC (MAX PERFORMANCE)
 # ============================================================================
-# Tối đa hóa số luồng CPU, kích hoạt target-cpu=native và bộ đệm Incremental.
+# Tự động nhận diện số luồng CPU (nproc), kích hoạt target-cpu=native và bộ đệm Incremental.
 # ============================================================================
 
 [build]
-# Tận dụng tối đa 8 luồng CPU Hyper-Threading trên phần cứng hệ thống
-jobs = 8
+# Tự động nhận diện số luồng CPU hệ thống (nproc): 2 luồng trên Colab, 8 luồng trên MacBook (Tránh CPU Context Switch)
 # Ép rustc tối ưu trực tiếp cho tập lệnh CPU phần cứng native (AVX2 / FMA / SIMD)
 rustflags = ["-C", "target-cpu=native"]
 
