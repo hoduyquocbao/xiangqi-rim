@@ -20,7 +20,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::mpsc::{sync_channel, SyncSender};
 use std::sync::Arc;
 use std::thread::{self, JoinHandle};
-use std::time::{Duration, Instant};
+use std::time::Instant;
 
 use xiangrust::board::{Parser, Serializer};
 use xiangrust::book::Book;
@@ -31,7 +31,7 @@ use xiangrust::search::{Limits, Search};
 use xiangrust::tt::Table;
 use xiangrust::uci::Format;
 
-const APP_VERSION: &str = "v27.0.0-dynamic-nproc-qos-engine";
+const APP_VERSION: &str = "v25.0.0-fixed-thread-architecture";
 
 /// Cấu trúc kết quả tự động dò tìm cấu hình phần cứng tối ưu
 pub struct AutoTuningResult {
@@ -406,100 +406,21 @@ fn main() {
     let completed_games = Arc::new(AtomicUsize::new(0));
     let current_game_counter = Arc::new(AtomicUsize::new(1));
 
-    // 🌟 QUẢN LÝ THÍCH ỨNG TẢI THỜI GIAN THỰC (DYNAMIC QoS GOVERNOR CONTROL)
-    let max_possible_workers = std::cmp::max(initial_threads_count, 64usize);
-    let active_workers_target = Arc::new(AtomicUsize::new(initial_threads_count));
-
-    // KÍCH HOẠT LUỒNG GIÁM SÁT DYNAMIC QoS GOVERNOR NGẦM
-    let active_workers_cloned = Arc::clone(&active_workers_target);
-    let total_samples_gov = Arc::clone(&total_samples);
-    let completed_games_gov = Arc::clone(&completed_games);
-    let io_service_gov = Arc::clone(&io_service);
-
-    thread::spawn(move || {
-        let mut last_samples = 0usize;
-        let mut last_time = Instant::now();
-
-        loop {
-            thread::sleep(Duration::from_secs(4));
-            let done = completed_games_gov.load(Ordering::Relaxed);
-            if done >= total_games {
-                break;
-            }
-
-            let current_samples = total_samples_gov.load(Ordering::Relaxed);
-            let elapsed_secs = last_time.elapsed().as_secs_f64();
-            let delta_samples = current_samples.saturating_sub(last_samples);
-            let current_rate = if elapsed_secs > 0.0 { delta_samples as f64 / elapsed_secs } else { 0.0 };
-
-            last_samples = current_samples;
-            last_time = Instant::now();
-
-            let current_active = active_workers_cloned.load(Ordering::Relaxed);
-            let qos_enabled = std::env::var("ENABLE_QOS_GOVERNOR").ok().map(|v| v == "1" || v == "true").unwrap_or(true);
-            let is_locked = !qos_enabled
-                || std::env::var("LOCK_WORKERS").ok().map(|v| v == "1" || v == "true").unwrap_or(false)
-                || std::env::var("DISABLE_QOS").ok().map(|v| v == "1" || v == "true").unwrap_or(false);
-
-            // 🌟 GIỚI HẠN NÂNG/HẠ LUỒNG ĐỘNG THEO CẤU HÌNH THỜI GIAN THỰC (0% HARDCODING)
-            let max_target_workers = initial_threads_count;
-            let min_target_workers = (initial_threads_count / 2).max(1);
-
-            if is_locked {
-                if current_active != initial_threads_count {
-                    active_workers_cloned.store(initial_threads_count, Ordering::Relaxed);
-                }
-                continue; // 🌟 TẮT HOÀN TOÀN QoS GOVERNOR KHI enable_qos_governor = False
-            } else if current_rate > 350.0 && current_active < max_target_workers {
-                let next_active = std::cmp::min(current_active * 2, max_target_workers);
-                if next_active > current_active {
-                    active_workers_cloned.store(next_active, Ordering::Relaxed);
-                    let msg = format!(
-                        "🔄 [DYNAMIC QoS GOVERNOR] Tải CPU Rảnh Rỗi ({:.1} FEN/s) | Tự Động Nâng Luồng: {} ➔ {} Workers (Tối Ưu Thông Lượng)",
-                        current_rate, current_active, next_active
-                    );
-                    io_service_gov.push(None, Some(msg));
-                }
-            } else if current_rate < 150.0 && current_active > min_target_workers {
-                let next_active = std::cmp::max(current_active / 2, min_target_workers);
-                if next_active < current_active {
-                    active_workers_cloned.store(next_active, Ordering::Relaxed);
-                    let msg = format!(
-                        "⚠️ [DYNAMIC QoS GOVERNOR] Phát Hiện Nghẽn CPU/Build Task ({:.1} FEN/s) | Tự Động Hạ Luồng: {} ➔ {} Workers (Tránh CPU Context Switch)",
-                        current_rate, current_active, next_active
-                    );
-                    io_service_gov.push(None, Some(msg));
-                }
-            }
-        }
-    });
-
     let global_shared_tt = Arc::new(Table::new(tt_mb));
-    let mut handles = Vec::with_capacity(max_possible_workers);
+    let mut handles = Vec::with_capacity(initial_threads_count);
 
-    for thread_idx in 0..max_possible_workers {
+    for thread_idx in 0..initial_threads_count {
         let io_service_cloned = Arc::clone(&io_service);
         let cqrs_bus_cloned = Arc::clone(&cqrs_bus);
         let total_samples_cloned = Arc::clone(&total_samples);
         let completed_games_cloned = Arc::clone(&completed_games);
         let current_game_counter_cloned = Arc::clone(&current_game_counter);
-        let active_workers_target_cloned = Arc::clone(&active_workers_target);
         let global_tt_cloned = Arc::clone(&global_shared_tt);
 
         let handle = thread::spawn(move || {
             let mut search_engine = Search::new_shared(global_tt_cloned);
 
             loop {
-                // Kiểm tra xem luồng hiện tại có vượt quá giới hạn Dynamic QoS Active target hay không
-                if thread_idx >= active_workers_target_cloned.load(Ordering::Relaxed) {
-                    let current_done = completed_games_cloned.load(Ordering::Relaxed);
-                    if current_done >= total_games {
-                        break;
-                    }
-                    thread::sleep(Duration::from_millis(100));
-                    continue;
-                }
-
                 let game_idx = current_game_counter_cloned.fetch_add(1, Ordering::Relaxed);
                 if game_idx > total_games {
                     break;
@@ -611,10 +532,9 @@ fn main() {
                     let elapsed = start_all.elapsed().as_secs_f64();
                     let total_fens = total_samples_cloned.load(Ordering::Relaxed);
                     let fens_per_sec = if elapsed > 0.0 { (total_fens as f64) / elapsed } else { 0.0 };
-                    let current_active_w = active_workers_target_cloned.load(Ordering::Relaxed);
                     let telemetry_str = format!(
                         "⚡ [PROGRESS TELEMETRY] Đã xong {:<4}/{} Ván | Active: {} Workers | Total FENs: {:<7} | Rate: {:.1} FEN/s ({:.0} FEN/phút)",
-                        done, total_games, current_active_w, total_fens, fens_per_sec, fens_per_sec * 60.0
+                        done, total_games, initial_threads_count, total_fens, fens_per_sec, fens_per_sec * 60.0
                     );
                     io_service_cloned.push(None, Some(telemetry_str));
                 }
