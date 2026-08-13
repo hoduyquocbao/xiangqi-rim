@@ -39,3 +39,4 @@
 - [`session_active_20260813_v51_fixed_qos_worker_lock.md`](file://.agents/logs/session_active_20260813_v51_fixed_qos_worker_lock.md) — Engine v23.0.0: Fixed Worker Lock (`LOCK_WORKERS=1`) & Manual GPU Batch Size Override (`B* = 512/1024`).
 - [`session_active_20260813_v52_fixed_thread_architecture.md`](file://.agents/logs/session_active_20260813_v52_fixed_thread_architecture.md) — Engine v25.0.0: Fixed Thread Architecture (Purged 100% Dynamic QoS Governor auto-scaler logic).
 - [`session_active_20260813_v53_pure_colab_fixed_workers.md`](file://.agents/logs/session_active_20260813_v53_pure_colab_fixed_workers.md) — Engine v26.0.0: Verified 100% Pure Fixed Worker execution on Colab (Fixed `git -C reset --hard` Colab sync bug).
+- [`session_active_20260813_v54_cumulative_telemetry.md`](file://.agents/logs/session_active_20260813_v54_cumulative_telemetry.md) — Engine v27.0.0: Cumulative Average Telemetry & ETA Protocol (Elapsed time, sec/game, global FEN/s rate, ETA).
