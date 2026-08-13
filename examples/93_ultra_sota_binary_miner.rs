@@ -30,7 +30,7 @@ use xiangrust::movegen::{legal, List};
 use xiangrust::search::{Limits, Search};
 use xiangrust::uci::Format;
 
-const APP_VERSION: &str = "v19.0.0-hardware-backend-probe-autotuner";
+const APP_VERSION: &str = "v20.0.0-multi-stream-gpu-saturator";
 
 /// Cấu trúc kết quả tự động dò tìm cấu hình phần cứng tối ưu
 pub struct AutoTuningResult {
@@ -363,7 +363,9 @@ fn main() {
 
     let (initial_threads_count, effective_batch_size, mode_name) = if should_auto_tune {
         let tune_res = run_hardware_autotuner(depth, tt_mb);
-        (tune_res.best_threads, tune_res.best_batch_size, tune_res.mode_name)
+        let threads_env = std::env::var("THREADS").ok().and_then(|v| v.parse::<usize>().ok());
+        let final_threads = threads_env.unwrap_or(tune_res.best_threads);
+        (final_threads, tune_res.best_batch_size, tune_res.mode_name)
     } else {
         let threads = std::env::var("THREADS").ok().and_then(|v| v.parse().ok()).unwrap_or(4);
         (threads, env_batch_size, format!("CPU SIMD Engine ({} Threads)", threads))
@@ -395,7 +397,7 @@ fn main() {
     let current_game_counter = Arc::new(AtomicUsize::new(1));
 
     // 🌟 QUẢN LÝ THÍCH ỨNG TẢI THỜI GIAN THỰC (DYNAMIC QoS GOVERNOR CONTROL)
-    let max_possible_workers = 8usize;
+    let max_possible_workers = std::cmp::max(initial_threads_count, 64usize);
     let active_workers_target = Arc::new(AtomicUsize::new(initial_threads_count));
 
     // KÍCH HOẠT LUỒNG GIÁM SÁT DYNAMIC QoS GOVERNOR NGẦM
@@ -426,7 +428,11 @@ fn main() {
             let current_active = active_workers_cloned.load(Ordering::Relaxed);
 
             // 🌟 LOGIC TÁI ĐÁNH GIÁ THÔNG LƯỢNG THỜI GIAN THỰC (DYNAMIC LOAD BALANCE PROBE)
-            if current_rate > 350.0 && current_active < 4 {
+            if initial_threads_count >= 16 {
+                if current_active != initial_threads_count {
+                    active_workers_cloned.store(initial_threads_count, Ordering::Relaxed);
+                }
+            } else if current_rate > 350.0 && current_active < 4 {
                 active_workers_cloned.store(4, Ordering::Relaxed);
                 let msg = format!(
                     "🔄 [DYNAMIC QoS GOVERNOR] Tải CPU Rảnh Rỗi ({:.1} FEN/s) | Tự Động Nâng Luồng: {} ➔ 4 Workers (Tối Ưu Thông Lượng)",
