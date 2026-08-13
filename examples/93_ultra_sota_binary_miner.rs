@@ -31,7 +31,7 @@ use xiangrust::search::{Limits, Search};
 use xiangrust::tt::Table;
 use xiangrust::uci::Format;
 
-const APP_VERSION: &str = "v28.0.0-max-fens-autotuner-engine";
+const APP_VERSION: &str = "v29.0.0-unrestricted-matrix-autotuner-engine";
 
 /// Cấu trúc kết quả tự động dò tìm cấu hình phần cứng tối ưu
 pub struct AutoTuningResult {
@@ -70,11 +70,11 @@ pub fn run_hardware_autotuner(depth: u8, tt_mb: usize) -> AutoTuningResult {
     }
     println!("===============================================================================");
 
-    let test_threads_candidates = vec![2, 4, 8, 16, 32];
+    let test_threads_candidates = vec![2, 4, 8, 16, 32, 64];
     let mut best_threads = 4;
     let mut best_cpu_fens_per_sec = 0.0f64;
 
-    // 1. KHẢO SÁT CHÍNH XÁC NANO-GIÂY CPU SIMD (2, 4, 8, 16, 32 THREADS)
+    // 1. KHẢO SÁT CHÍNH XÁC NANO-GIÂY CPU SIMD (2, 4, 8, 16, 32, 64 THREADS)
     println!("\n   --- 🖥️ PHẦN 1: KHẢO SÁT CHÍNH XÁC NANO-GIÂY ĐA LUỒNG CPU SIMD ---");
     for &num_threads in &test_threads_candidates {
         let probe_start = Instant::now();
@@ -86,7 +86,7 @@ pub fn run_hardware_autotuner(depth: u8, tt_mb: usize) -> AutoTuningResult {
         for _w_idx in 0..num_threads {
             let sc = Arc::clone(&sample_counter);
             let handle = thread::spawn(move || {
-                let mut search = Search::new(tt_mb / num_threads);
+                let mut search = Search::new((tt_mb / num_threads).max(1));
                 for _g_idx in 0..games_per_worker {
                     let mut pos = Parser::parse(Parser::DEFAULT);
                     for _ply in 0..20 {
@@ -132,7 +132,7 @@ pub fn run_hardware_autotuner(depth: u8, tt_mb: usize) -> AutoTuningResult {
     let mut best_batch_size = 512;
     let mut use_gpu = false;
 
-    let batch_candidates = vec![64, 128, 256, 512, 1024, 2048, 4096];
+    let batch_candidates = vec![16, 32, 64, 128, 256, 512, 1024, 2048, 4096];
 
     if !is_emulated {
         if let Ok(mut evaluator) = Evaluator::new(Device::init()) {
