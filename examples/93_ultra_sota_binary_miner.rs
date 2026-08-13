@@ -31,7 +31,7 @@ use xiangrust::search::{Limits, Search};
 use xiangrust::tt::Table;
 use xiangrust::uci::Format;
 
-const APP_VERSION: &str = "v23.0.0-fixed-qos-worker-lock";
+const APP_VERSION: &str = "v24.0.0-qos-toggle-lock-engine";
 
 /// Cấu trúc kết quả tự động dò tìm cấu hình phần cứng tối ưu
 pub struct AutoTuningResult {
@@ -436,14 +436,17 @@ fn main() {
             last_time = Instant::now();
 
             let current_active = active_workers_cloned.load(Ordering::Relaxed);
+            let qos_enabled = std::env::var("ENABLE_QOS_GOVERNOR").ok().map(|v| v == "1" || v == "true").unwrap_or(true);
             let is_locked = std::env::var("LOCK_WORKERS").ok().map(|v| v == "1" || v == "true").unwrap_or(false)
-                || std::env::var("DISABLE_QOS").ok().map(|v| v == "1" || v == "true").unwrap_or(false);
+                || std::env::var("DISABLE_QOS").ok().map(|v| v == "1" || v == "true").unwrap_or(false)
+                || !qos_enabled;
 
             // 🌟 LOGIC TÁI ĐÁNH GIÁ THÔNG LƯỢNG THỜI GIAN THỰC (DYNAMIC LOAD BALANCE PROBE)
             if is_locked {
                 if current_active != initial_threads_count {
                     active_workers_cloned.store(initial_threads_count, Ordering::Relaxed);
                 }
+                continue; // 🌟 TẮT HOÀN TOÀN TẤT CẢ THÔNG BÁO NÂNG/HẠ LUỒNG KHI ĐÃ KHÓA
             } else if initial_threads_count >= 16 {
                 if current_active != initial_threads_count {
                     active_workers_cloned.store(initial_threads_count, Ordering::Relaxed);
