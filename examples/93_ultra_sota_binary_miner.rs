@@ -28,9 +28,10 @@ use xiangrust::cqrs::{Bus, Event as CqrsEvent};
 use xiangrust::gpu::{Batch, Device, Evaluable, Evaluator, Sample};
 use xiangrust::movegen::{legal, List};
 use xiangrust::search::{Limits, Search};
+use xiangrust::tt::Table;
 use xiangrust::uci::Format;
 
-const APP_VERSION: &str = "v20.0.0-multi-stream-gpu-saturator";
+const APP_VERSION: &str = "v21.0.0-shared-lockfree-tt-saturator";
 
 /// Cấu trúc kết quả tự động dò tìm cấu hình phần cứng tối ưu
 pub struct AutoTuningResult {
@@ -450,6 +451,7 @@ fn main() {
         }
     });
 
+    let global_shared_tt = Arc::new(Table::new(tt_mb));
     let mut handles = Vec::with_capacity(max_possible_workers);
 
     for thread_idx in 0..max_possible_workers {
@@ -459,9 +461,10 @@ fn main() {
         let completed_games_cloned = Arc::clone(&completed_games);
         let current_game_counter_cloned = Arc::clone(&current_game_counter);
         let active_workers_target_cloned = Arc::clone(&active_workers_target);
+        let global_tt_cloned = Arc::clone(&global_shared_tt);
 
         let handle = thread::spawn(move || {
-            let mut search_engine = Search::new(tt_mb / max_possible_workers);
+            let mut search_engine = Search::new_shared(global_tt_cloned);
 
             loop {
                 // Kiểm tra xem luồng hiện tại có vượt quá giới hạn Dynamic QoS Active target hay không

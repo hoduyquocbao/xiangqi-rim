@@ -50,6 +50,7 @@ pub use stack::Stack;
 
 
 use std::sync::atomic::Ordering;
+use std::sync::Arc;
 use crate::board::Position;
 use crate::eval::Eval;
 use crate::tt::Table;
@@ -61,8 +62,8 @@ pub struct Search {
     pub pos: Position,
     /// Bộ đánh giá thế cờ NNUE + HCE
     pub eval: Eval,
-    /// Bảng băm Transposition Table toàn cục
-    pub tt: Table,
+    /// Bảng băm Transposition Table toàn cục (Arc dùng chung không khóa giữa các luồng)
+    pub tt: Arc<Table>,
     /// Bảng lịch sử History Heuristics
     pub history: History,
     /// Bộ lưu trữ Killer Moves
@@ -81,7 +82,21 @@ impl Search {
         Self {
             pos: Position::empty(),
             eval: Eval::new(),
-            tt: Table::new(mb),
+            tt: Arc::new(Table::new(mb)),
+            history: History::new(),
+            killer: Killer::new(),
+            timer: Timer::new(),
+            result: Result::new(),
+            past_hashes: Vec::with_capacity(256),
+        }
+    }
+
+    /// Khởi tạo một Engine Tìm kiếm mới chia sẻ chung Transposition Table `tt` giữa các luồng.
+    pub fn new_shared(tt: Arc<Table>) -> Self {
+        Self {
+            pos: Position::empty(),
+            eval: Eval::new(),
+            tt,
             history: History::new(),
             killer: Killer::new(),
             timer: Timer::new(),
@@ -97,7 +112,7 @@ impl Search {
             let ptr = std::alloc::alloc_zeroed(layout) as *mut Self;
             std::ptr::write(&mut (*ptr).pos, Position::empty());
             std::ptr::write(&mut (*ptr).eval, Eval::new());
-            std::ptr::write(&mut (*ptr).tt, Table::new(mb));
+            std::ptr::write(&mut (*ptr).tt, Arc::new(Table::new(mb)));
             std::ptr::write(&mut (*ptr).history, History::new());
             std::ptr::write(&mut (*ptr).killer, Killer::new());
             std::ptr::write(&mut (*ptr).timer, Timer::new());
