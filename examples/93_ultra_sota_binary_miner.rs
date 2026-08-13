@@ -31,7 +31,7 @@ use xiangrust::search::{Limits, Search};
 use xiangrust::tt::Table;
 use xiangrust::uci::Format;
 
-const APP_VERSION: &str = "v25.0.0-user-thread-lock-engine";
+const APP_VERSION: &str = "v26.0.0-clean-qos-governor-toggle";
 
 /// Cấu trúc kết quả tự động dò tìm cấu hình phần cứng tối ưu
 pub struct AutoTuningResult {
@@ -437,23 +437,21 @@ fn main() {
 
             let current_active = active_workers_cloned.load(Ordering::Relaxed);
             let qos_enabled = std::env::var("ENABLE_QOS_GOVERNOR").ok().map(|v| v == "1" || v == "true").unwrap_or(true);
-            let has_explicit_threads = std::env::var("THREADS").is_ok();
-            let is_locked = std::env::var("LOCK_WORKERS").ok().map(|v| v == "1" || v == "true").unwrap_or(false)
-                || std::env::var("DISABLE_QOS").ok().map(|v| v == "1" || v == "true").unwrap_or(false)
-                || !qos_enabled
-                || has_explicit_threads;
+            let is_locked = !qos_enabled
+                || std::env::var("LOCK_WORKERS").ok().map(|v| v == "1" || v == "true").unwrap_or(false)
+                || std::env::var("DISABLE_QOS").ok().map(|v| v == "1" || v == "true").unwrap_or(false);
 
             // 🌟 LOGIC TÁI ĐÁNH GIÁ THÔNG LƯỢNG THỜI GIAN THỰC (DYNAMIC LOAD BALANCE PROBE)
             if is_locked {
                 if current_active != initial_threads_count {
                     active_workers_cloned.store(initial_threads_count, Ordering::Relaxed);
                 }
-                continue; // 🌟 KHÓA CHẾT SỐ LUỒNG WORKER VÀ TẮT 100% THÔNG BÁO NÂNG/HẠ LUỒNG QOS
-            } else if current_rate > 350.0 && current_active < initial_threads_count {
-                active_workers_cloned.store(initial_threads_count, Ordering::Relaxed);
+                continue; // 🌟 TẮT HOÀN TOÀN QoS GOVERNOR KHI enable_qos_governor = False
+            } else if current_rate > 350.0 && current_active < 4 {
+                active_workers_cloned.store(4, Ordering::Relaxed);
                 let msg = format!(
-                    "🔄 [DYNAMIC QoS GOVERNOR] Tải CPU Rảnh Rỗi ({:.1} FEN/s) | Tự Động Nâng Luồng: {} ➔ {} Workers (Tối Ưu Thông Lượng)",
-                    current_rate, current_active, initial_threads_count
+                    "🔄 [DYNAMIC QoS GOVERNOR] Tải CPU Rảnh Rỗi ({:.1} FEN/s) | Tự Động Nâng Luồng: {} ➔ 4 Workers (Tối Ưu Thông Lượng)",
+                    current_rate, current_active
                 );
                 io_service_gov.push(None, Some(msg));
             } else if current_rate < 150.0 && current_active > 2 {
