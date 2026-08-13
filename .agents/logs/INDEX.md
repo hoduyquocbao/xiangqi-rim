@@ -39,3 +39,4 @@
 - [`session_active_20260813_v51_fixed_qos_worker_lock.md`](file://.agents/logs/session_active_20260813_v51_fixed_qos_worker_lock.md) — Engine v23.0.0: Fixed Worker Lock (`LOCK_WORKERS=1`) & Manual GPU Batch Size Override (`B* = 512/1024`).
 - [`session_active_20260813_v52_qos_silenced_cargo_run.md`](file://.agents/logs/session_active_20260813_v52_qos_silenced_cargo_run.md) — Engine v24.0.0: Cargo Run & Complete QoS Log Silencing Verification on Colab Tesla T4.
 - [`session_active_20260813_v53_explicit_thread_lock_verified.md`](file://.agents/logs/session_active_20260813_v53_explicit_thread_lock_verified.md) — Engine v25.0.0: Strict User Thread Lock (`has_explicit_threads`) & Stale Binary Purge Verification.
+- [`session_active_20260813_v54_dynamic_nproc_qos_verified.md`](file://.agents/logs/session_active_20260813_v54_dynamic_nproc_qos_verified.md) — Engine v27.0.0: 0% Hardcoded CPU Worker Bounds & Dynamic Hardware Scale Verification.
