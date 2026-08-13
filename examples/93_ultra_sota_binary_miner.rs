@@ -296,8 +296,8 @@ impl AsyncIoService {
                         let avg_write = total_write_delay_us / 5000;
                         println!(
                             "📊 [LATENCY PROFILING] Mẫu #{:<6} | Trễ Hàng Đợi (Queue Delay): {:<4} μs | Trễ Ghi Đĩa (Disk Write): {:<4} μs | Trạng Thái: {}",
-                            sample_counter, avg_queue, avg_write,
-                            if avg_queue < 500 && avg_write < 1000 { "🟢 CỰC NHANH (0% Nghẽn)" } else { "🟡 CÓ DẤU HIỆU NGHẼN" }
+                            "📊 [LATENCY PROFILING] Mẫu #{:<6} | Trễ Hàng Đợi (Queue Delay): {:<4} μs | Trễ Ghi Đĩa (Disk Write): {:<4} μs",
+                            sample_counter, avg_queue, avg_write
                         );
                         let _ = stdout.flush();
                         total_queue_delay_us = 0;
@@ -349,7 +349,7 @@ fn rand_next(seed: &mut u64) -> u64 {
 fn main() {
     println!("===============================================================================");
     println!("💎 XIANGQI-RIM: ULTRA SOTA BINARY DECOUPLED PARALLEL MINER ({})", APP_VERSION);
-    println!("   🔥 CÔNG NGHỆ NHỊ PHÂN CĂN LỀ 64-BYTE + TỰ ĐỘNG THÍCH ỨNG TẢI DYNAMIC QoS");
+    println!("   🔥 CÔNG NGHỆ NHỊ PHÂN CĂN LỀ 64-BYTE + FIXED THREAD ARCHITECTURE (100% FIXED WORKERS)");
     println!("===============================================================================");
 
     let total_games: usize = std::env::var("GAMES").ok().and_then(|v| v.parse().ok()).unwrap_or(1024);
@@ -367,7 +367,6 @@ fn main() {
         let tune_res = run_hardware_autotuner(depth, tt_mb);
         let threads_env = std::env::var("THREADS").ok().and_then(|v| v.parse::<usize>().ok());
         let final_threads = threads_env.unwrap_or(tune_res.best_threads);
-        // 🌟 NẾU BATCH_SIZE HOẶC FORCE_BATCH_SIZE ĐƯỢC CHỈ ĐỊNH THỦ CÔNG -> ÉP DÙNG LÔ THỦ CÔNG
         let final_batch = force_batch.or(env_batch_size).unwrap_or(tune_res.best_batch_size);
         let mode = if env_batch_size.is_some() || force_batch.is_some() {
             format!("{} (Manual Batch B* = {})", tune_res.mode_name, final_batch)
