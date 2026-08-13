@@ -31,7 +31,7 @@ use xiangrust::search::{Limits, Search};
 use xiangrust::tt::Table;
 use xiangrust::uci::Format;
 
-const APP_VERSION: &str = "v25.0.0-fixed-thread-architecture";
+const APP_VERSION: &str = "v27.0.0-cumulative-avg-telemetry-engine";
 
 /// Cấu trúc kết quả tự động dò tìm cấu hình phần cứng tối ưu
 pub struct AutoTuningResult {
@@ -531,9 +531,24 @@ fn main() {
                     let elapsed = start_all.elapsed().as_secs_f64();
                     let total_fens = total_samples_cloned.load(Ordering::Relaxed);
                     let fens_per_sec = if elapsed > 0.0 { (total_fens as f64) / elapsed } else { 0.0 };
+                    let avg_sec_per_game = if done > 0 { elapsed / (done as f64) } else { 0.0 };
+                    let remaining_games = total_games.saturating_sub(done);
+                    let eta_secs = (remaining_games as f64) * avg_sec_per_game;
+
+                    let elapsed_mins = (elapsed / 60.0) as u64;
+                    let elapsed_rem_secs = (elapsed % 60.0) as u64;
+                    let eta_mins = (eta_secs / 60.0) as u64;
+                    let eta_rem_secs = (eta_secs % 60.0) as u64;
+                    let pct = (done as f64 / total_games as f64) * 100.0;
+
                     let telemetry_str = format!(
-                        "⚡ [PROGRESS TELEMETRY] Đã xong {:<4}/{} Ván | Active: {} Workers | Total FENs: {:<7} | Rate: {:.1} FEN/s ({:.0} FEN/phút)",
-                        done, total_games, initial_threads_count, total_fens, fens_per_sec, fens_per_sec * 60.0
+                        "⚡ [PROGRESS TELEMETRY] Đã xong {:<4}/{} Ván ({:5.1}%) | Đã Chạy: {:02}m{:02}s | TB Ván: {:.2}s/ván | Rate TB: {:.1} FEN/s ({:.0} FEN/phút) | Total FENs: {:<7} | ETA: {:02}m{:02}s",
+                        done, total_games, pct,
+                        elapsed_mins, elapsed_rem_secs,
+                        avg_sec_per_game,
+                        fens_per_sec, fens_per_sec * 60.0,
+                        total_fens,
+                        eta_mins, eta_rem_secs
                     );
                     io_service_cloned.push(None, Some(telemetry_str));
                 }
