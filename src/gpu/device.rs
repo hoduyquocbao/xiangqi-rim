@@ -134,7 +134,8 @@ impl Device { // Khối triển khai các phương thức cho Device
                 }; // Kết thúc match backend
             }
 
-            if let Ok((device, queue)) = pollster::block_on(adapter.request_device( // Khởi tạo Device và Queue từ GPU Adapter
+            if backend != Backend::Cpu {
+                if let Ok((device, queue)) = pollster::block_on(adapter.request_device( // Khởi tạo Device và Queue từ GPU Adapter
                 &wgpu::DeviceDescriptor { // Cấu hình tham số mô tả Device
                     label: Some("Xiangqi-RIM GPU Device"), // Nhãn tên thiết bị GPU
                     required_features: wgpu::Features::empty(), // Không yêu cầu feature đặc biệt
@@ -296,6 +297,7 @@ impl Device { // Khối triển khai các phương thức cho Device
                     name: adapter_name, // Gán tên hiển thị name
                 })); // Kết thúc khởi tạo GpuContext
             } // Kết thúc khối if Ok device
+            } // Kết thúc khối if backend != Backend::Cpu
         } // Kết thúc khối if Some adapter
 
         let status = if context.is_some() { Status::Ready } else { Status::Active }; // Đặt trạng thái Ready nếu có GPU
