@@ -31,7 +31,7 @@ use xiangrust::search::{Limits, Search};
 use xiangrust::tt::Table;
 use xiangrust::uci::Format;
 
-const APP_VERSION: &str = "v21.0.0-shared-lockfree-tt-saturator";
+const APP_VERSION: &str = "v22.0.0-manual-batch-override-engine";
 
 /// Cấu trúc kết quả tự động dò tìm cấu hình phần cứng tối ưu
 pub struct AutoTuningResult {
@@ -360,16 +360,25 @@ fn main() {
     let output: String = std::env::var("OUTPUT").unwrap_or_else(|_| "data/selfplay_samples_gen6_ultra.jsonl".to_string());
 
     let should_auto_tune = std::env::var("AUTO_TUNE").ok().map(|v| v == "1" || v == "true").unwrap_or(true);
-    let env_batch_size: usize = std::env::var("BATCH_SIZE").ok().and_then(|v| v.parse().ok()).unwrap_or(256);
+    let env_batch_size: Option<usize> = std::env::var("BATCH_SIZE").ok().and_then(|v| v.parse().ok());
+    let force_batch: Option<usize> = std::env::var("FORCE_BATCH_SIZE").ok().and_then(|v| v.parse().ok());
 
     let (initial_threads_count, effective_batch_size, mode_name) = if should_auto_tune {
         let tune_res = run_hardware_autotuner(depth, tt_mb);
         let threads_env = std::env::var("THREADS").ok().and_then(|v| v.parse::<usize>().ok());
         let final_threads = threads_env.unwrap_or(tune_res.best_threads);
-        (final_threads, tune_res.best_batch_size, tune_res.mode_name)
+        // 🌟 NẾU BATCH_SIZE HOẶC FORCE_BATCH_SIZE ĐƯỢC CHỈ ĐỊNH THỦ CÔNG -> ÉP DÙNG LÔ THỦ CÔNG
+        let final_batch = force_batch.or(env_batch_size).unwrap_or(tune_res.best_batch_size);
+        let mode = if env_batch_size.is_some() || force_batch.is_some() {
+            format!("{} (Manual Batch B* = {})", tune_res.mode_name, final_batch)
+        } else {
+            tune_res.mode_name
+        };
+        (final_threads, final_batch, mode)
     } else {
         let threads = std::env::var("THREADS").ok().and_then(|v| v.parse().ok()).unwrap_or(4);
-        (threads, env_batch_size, format!("CPU SIMD Engine ({} Threads)", threads))
+        let batch = force_batch.or(env_batch_size).unwrap_or(512);
+        (threads, batch, format!("CPU SIMD Engine ({} Threads, Manual B* = {})", threads, batch))
     };
 
     let device = Device::init();
