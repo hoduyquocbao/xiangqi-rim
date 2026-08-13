@@ -38,24 +38,32 @@ const GUID: &str = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
 /// Đường dẫn tệp nhị phân lưu giữ bộ nhớ kinh nghiệm tự đấu (.agents/memory/experience_store.bin)
 pub const DATASET: &str = ".agents/memory/experience_store.bin";
 
-/// Ghi nhận tự động toàn bộ mẫu kinh nghiệm từ Transposition Table vào đĩa nhị phân và đồng bộ Grandmaster Book
+/// Ghi nhận tự động toàn bộ mẫu kinh nghiệm từ Transposition Table vào đĩa nhị phân vĩnh cửu và đồng bộ Shard Index
 fn auto_record(table: &crate::tt::Table, hash: u64, mv: u16, score: i32) {
-    let mut replay = Replay::new();
-    let _ = LearnStore::load(&mut replay, DATASET);
-
-    // 1. Thu hoạch toàn bộ cờ giá trị (depth >= 2) mà GPU/CPU vừa duyệt được
+    let mut replay = Replay::capacity(1000);
     let harvested = table.export_to_replay(&mut replay);
 
-    // 2. Ghi nhận nước đi tốt nhất cuối cùng
+    // 1. Ghi nảy vĩnh cửu (Append-Only) mẫu vừa thu hoạch được xuống đĩa
     let reward = (score as f32 / 1000.0).clamp(-1.0, 1.0);
     let sample = Sample::new(hash, mv, reward, 0, 0);
-    replay.push(sample);
+    let total = LearnStore::append_sample(&sample, DATASET).unwrap_or(0);
 
-    let _ = LearnStore::save(&replay, DATASET);
+    // 2. Ghi nảy bản ghi 16-byte vào Shard Index 1,024 Shards trên đĩa
+    let shard = crate::learn::Shard::default();
+    let _ = shard.save(hash, mv, score as i16);
+
+    // 3. Đồng bộ Grandmaster Book và Endgame Knowledge
     let synced = LearnStore::sync(&replay);
+
+    let size = if let Ok(meta) = std::fs::metadata(DATASET) {
+        meta.len() as f64 / (1024.0 * 1024.0)
+    } else {
+        0.0
+    };
+
     println!(
-        "[SERVER] [TELEMETRY] Persistent Experience Sync: Harvested {} nodes, Memory Total: {} samples, Synced GM Moves: {}",
-        harvested, replay.count, synced
+        "[SERVER] [TELEMETRY] Eternal Persistent Sync: Harvested {} nodes, Memory Total: {} samples ({:.3} MB), Synced GM Moves: {}",
+        harvested, total, size, synced
     );
 }
 
@@ -403,7 +411,7 @@ impl Server {
                 let res = search.go_with_history(&pos, &limit, &past_hashes);
                 let span = start.elapsed().as_millis() as u64;
                 let nps = if span > 0 { (res.nodes * 1000) / span } else { res.nodes * 1000 };
-                let best = Format::encode(res.best);
+                let _best = Format::encode(res.best);
 
                 // Tự động ghi vết toàn bộ mẫu kinh nghiệm đã thu hoạch từ TT vào đĩa nhị phân persistence
                 auto_record(&search.tt, pos.hash, res.best.raw(), res.score);
@@ -709,7 +717,7 @@ impl Server {
                 let res = search.go_with_history(&pos, &limit, &past_hashes);
                 let span = start.elapsed().as_millis() as u64;
                 let nps = if span > 0 { (res.nodes * 1000) / span } else { res.nodes * 1000 };
-                let best = Format::encode(res.best);
+                let _best = Format::encode(res.best);
 
                 // Tự động ghi vết toàn bộ mẫu kinh nghiệm đã thu hoạch từ TT vào đĩa nhị phân persistence
                 auto_record(&search.tt, pos.hash, res.best.raw(), res.score);

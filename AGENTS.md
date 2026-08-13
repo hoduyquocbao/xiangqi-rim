@@ -275,23 +275,42 @@ python3 scripts/test_quantization.py data/nnue_weights_gen5.bin
 - **Ràng Buộc Sắt Bằng Mọi Giá**: BẤT KỲ LẦN NÀO thực thi mã Rust Engine (mining, batch evaluation, NNUE search), Agent BẮT BUỘC phải ưu tiên phần cứng GPU (NVIDIA CUDA / Vulkan / WGPU / Metal Native) bằng mọi giá.
 - **NGHIÊM CẤM** ngã về CPU fallback khi đang trong môi trường có GPU phần cứng. Luôn đảm bảo nạp đúng driver Vulkan ICD JSON (`/etc/vulkan/icd.d/nvidia_icd.json`) hoặc CUDA backend để vRAM và Compute Units của GPU được kích hoạt 100%!
 
-### 8.10 QUY TẮC BẮT BUỘC YIELD KẾT QUẢ TỨC THÌ & MONITOR TELEMETRY (MANDATORY IMMEDIATE YIELD & REALTIME TELEMETRY PROTOCOL)
-- **Ràng Buộc Sắt Cho Mã Example / Test / Script**: BẤT KỲ LẦN NÀO viết hoặc chỉnh sửa các tệp mã nguồn trong `examples/`, `src/`, `tests/`, hoặc `scripts/`, Agent BẮT BUỘC phải thực hiện 2 yêu cầu:
-  1. **Yield Kết Quả Trực Tiếp Tức Thì (Immediate Live Yield)**: Trong các vòng lặp xử lý, mã nguồn BẮT BUỘC phải in trực tiếp thông số tiến độ và kết quả trung gian ra màn hình ngay lập tức (dùng `println!`, `stdout().flush()`, hoặc JSON stream) theo chu kỳ từng 1,000 mẫu hoặc mỗi 300ms. NGHIÊM CẤM im lặng chờ đến khi chạy xong toàn bộ mới in kết quả!
-  2. **Monitor Thông Số Hạ Tầng Thực Tế (Mandatory Realtime Telemetry Monitoring)**: BẮT BUỘC phải in và đo đạc đầy đủ 3 chỉ số phần cứng đi kèm:
-     - **RAM RSS Memory Usage**: Dung lượng RAM đang chiếm dụng (tính bằng MB).
-     - **CPU Utilization / Worker Threads**: Số luồng CPU / tỷ lệ tải CPU (tính bằng %).
-     - **GPU Hardware Compute Load / VRAM**: Tải GPU % và dung lượng VRAM allocated.
-- **Mục Đích**: Triệt tiêu 100% hiện tượng "chạy ngầm mù thông tin" và ngăn chặn hành vi báo cáo khống chưa qua đo đạc thực tế!
+### 8.10 QUY TẮC BẮT BUỘC YIELD KẾT QUẢ REALTIME VỚI CỜ CẤU HÌNH TẦN SUẤT CHỐNG CHÁY TERMINAL (MANDATORY CONFIGURABLE REALTIME YIELD PROTOCOL)
+- **Ràng Buộc Sắt Cho Mọi Mã Nguồn (Engine / Miner / Benchmark / Training / Script / Example / Rust / Python / C++)**:
+  - **NGUYÊN LÝ VẬT LÝ NGHẼN BỘ ĐỆM STDOUT (BLOCK BUFFERING TRAP)**: Khi đầu ra `stdout` bị điều hướng vào tệp đĩa, ống dẫn (pipe), hoặc tiến trình chạy ngầm `task-*.log` (không phải màn hình TTY), hệ điều hành và thư viện chuẩn Rust/Python mặc định áp dụng bộ đệm khối **Block Buffering (8 KB)**. Nếu mã nguồn không ép xả đệm, tiến trình sẽ im lặng trong nhiều phút liền rồi bất ngờ xả ra một đống dòng cùng lúc (gây ra hiện tượng "mù thông tin", nghẽn thông số real-time).
+  - **NGUYÊN LÝ CHỐNG CHÁY TERMINAL KHI ĐÀO QUY MÔ LỚN (500K - 1M MẪU FEN)**: Đối với các tác vụ đào dữ liệu lớn (500,000 - 1,000,000 mẫu FEN / 10,000+ ván cờ), việc in log per ply (từng nước đi) sẽ xả ra 25 - 50 triệu dòng văn bản, gây ra hiện tượng **"Cháy Terminal" (Terminal Flooding & Disk I/O Bottleneck)** và ép CPU render văn bản thừa vô ích.
+  - **CỜ CẤU HÌNH ĐỘNG TẦN SUẤT YIELD (`YIELD_INTERVAL` / `YIELD_MODE` / FEATURE FLAG)**:
+    1. **Tự Động Đọc Biến Môi Trường**: Mọi kịch bản Miner / Benchmark BẮT BUỘC phải đọc biến môi trường `LOG_INTERVAL` / `YIELD_INTERVAL` (mặc định = 1 cho smoke test/benchmark; = 10 hoặc 100 ván cờ / per batch cho 500K-1M massive mining) hoặc cờ `YIELD_MODE` (`"ply"`, `"game"`, `"batch"`).
+    2. **Xả Đệm Tức Thì Khi In (Unbuffered Flush)**: Mọi dòng log được xuất ra (dù per ply hay per batch 100 ván) BẮT BUỘC phải theo sau bởi `std::io::stdout().flush().unwrap()` (Rust) hoặc `flush=True` (Python) để đảm bảo OS xả đĩa tức thì.
+    3. **Tần Suất Điểm Vàng**:
+       - *Benchmark / Live UI Streaming*: Yield từng nước đi (per ply) hoặc từng ván cờ.
+       - *Massive Mining 500K - 1M Samples*: Yield summary dòng tiến độ per game hoặc per 5,000 samples FEN. Tuyệt đối không im lặng hoàn toàn và không in tràn lan per ply gây cháy terminal!
+
 
 ### 8.11 RÀNG BUỘC SẮT CẤU HÌNH ĐỘNG & BẢO TOÀN QUYỀN CHỈNH SỬA TỪ BÊN NGOÀI (MANDATORY DYNAMIC CONFIGURATION & EXTERNAL EXPOSURE MANDATE)
-- **NGHIÊM CẤM HARDCODE CỨNG BẤT KỲ THÔNG SỐ CẤU HÌNH NÀO IN-CODE**:
-  - Mọi thông số vận hành (như độ sâu tìm kiếm `depth`, giới hạn thời gian `time_limit_ms`, dung lượng RAM băm `hash_mb`, số luồng CPU `threads`, số nước tối đa `max_plies`, kích thước lô `batch_size`, đường dẫn tệp `output_path`, cờ GPU `gpu_enabled`, v.v.) **BẮT BUỘC phải được thiết lập ĐỘNG (Dynamic Configuration)** thông qua:
-    1. **Biến môi trường OS (Environment Variables)**: Đọc qua `std::env::var("KEY")` (Rust) hoặc `os.environ.get("KEY")` (Python) với giá trị mặc định hợp lý (fallback default).
-    2. **Tham số dòng lệnh (CLI Arguments / Flags)**: Hỗ trợ truyền tham số `--depth`, `--time`, `--threads`, `--hash`, `--max-plies`, `--batch-size` khi chạy file binary/script/example.
-    3. **Tệp cấu hình công khai (Public Configuration Files)**: Nạp cấu hình từ `.env`, `config.json`, hoặc `deployment.yaml`.
-- **RÀNG BUỘC TRUYỀN THÔNG TIN MINH BẠCH BÊN NGOÀI**:
-  - Tuyệt đối KHÔNG ĐƯỢC PHÉP ẩn giấu, giấu giếm hay hardcode ngầm thông số trong mã nguồn để đánh lừa người dùng hoặc các thế hệ Agent khác. Mọi thông số cấu hình BẮT BUỘC phải được in minh bạch ra log khởi động (Banner Startup) và cho phép người dùng/Agent khác dễ dàng thay đổi từ bên ngoài mà không cần sửa mã nguồn!
+### 8.12 QUY TẮC CẤM SPAM LỆNH BIÊN DỊCH SONG SONG & BẮT BUỘC DỪNG LẠI 1 NHỊP CHỜ KHẢO SÁT BIÊN DỊCH (MANDATORY BUILD CHOKE PREVENTION & SINGLE-BUILD LOCK PROTOCOL)
+- **BỐI CẢNH THỰC TẾ HẠ TẦNG LAPTOP**:
+  - Tác vụ biên dịch Rust Engine (`cargo build` / `cargo run` / `cargo check`) có quy mô lớn tốn rất nhiều tài nguyên CPU/RAM. Trên máy laptop (như Intel i5-8259U với 4 physical cores):
+    - **Debug Build (`cargo build`)**: Cần khoảng **3 PHÚT** để hoàn thành.
+    - **Release Build (`cargo build --release`)**: Cần khoảng **5 PHÚT** để hoàn thành.
+- **RÀNG BUỘC SẮT BẮT BUỘC TUÂN THỦ 100%**:
+  1. **TUYỆT ĐỐI CẤM SPAM LỆNH BIÊN DỊCH SONG SONG**: NGHIÊM CẤM kích hoạt từ 2 tiến trình `cargo build`, `cargo check`, hoặc `cargo run` trở lên cùng một lúc. Spam nhiều lệnh build song song sẽ làm nghẽn `file lock on artifact directory`, ép CPU 100% liên tục và gây treo/sập máy laptop!
+  2. **RÀNG BUỘC KIỂM TRA MẮT XÍCH TRƯỚC KHI BUILD**: Trước khi gọi bất kỳ lệnh biên dịch `cargo` mới nào, Agent BẮT BUỘC phải kiểm tra danh sách task background bằng `manage_task` (Action: `list`). Nếu phát hiện có tiến trình `cargo` cũ đang chạy, BẮT BUỘC phải chờ tiến trình cũ kết thúc hoặc diệt dọn dẹp xong rồi mới phát lệnh mới.
+  3. **KỶ LUẬT DỪNG LẠI 1 NHỊP KIÊN NHẪN CHỜ ĐỦ THỜI GIAN**: Khi đã phát lệnh biên dịch:
+     - Dành khoảng **3 phút cho Debug build** và **5 phút cho Release build**.
+     - Agent tuyệt đối KHÔNG vội vã, KHÔNG dồn ép task mới, KHÔNG gọi tool liên tục làm treo tiến trình biên dịch ngầm!
+
+### 8.14 QUY TẮC KỶ LUẬT CUỐN CHIẾU DỮ LIỆU ĐĨA CỤC BỘ & TỰ ĐỘNG ĐỒNG BỘ CLOUD HUGGINGFACE (MANDATORY ROLLING CHUNK & HF AUTO-PURGE PROTOCOL)
+- **Ràng Buộc Sắt Cho Mọi Tác Vụ Khai Thác Đêm Quy Mô Lớn (MacBook / Laptop / Cloud)**:
+  - **NGUYÊN LÝ TIẾT KIỆM Ổ ĐĨA SSD CỤC BỘ**: Khi tự đấu đào dữ liệu quy mô lớn (hàng triệu FEN) chạy liên tục đêm ngày trên MacBook, BẮT BUỘC phải áp dụng cơ chế **Rolling Chunks (Chia lô nhỏ 100K - 200K mẫu FEN / chunk)**.
+  - **QUY TRÌNH 3 BƯỚC BẮT BUỘC (MINE -> SYNC HF -> PURGE LOCAL)**:
+    1. **Mine Chunk**: Động cơ sinh dữ liệu theo các tập tin chunk có kích thước giới hạn (ví dụ `chunk_0001.jsonl` ~25 MB).
+    2. **Cloud Sync**: Ngay khi hoàn tất 1 chunk hoặc 1 epoch huấn luyện, kịch bản Python/Rust BẮT BUỘC tự động upload tệp chunk lên Hugging Face Hub Dataset Repository (`huggingface_hub` / `hf-cli`).
+    3. **Local Purge**: Ngay sau khi Hugging Face xác nhận upload thành công (Checksum SHA-256 OK), BẮT BUỘC phải xóa ngay tệp chunk cục bộ (`os.remove()`) trên đĩa MacBook.
+  - **Mục Đích**: Đảm bảo dung lượng SSD MacBook chiếm dụng luôn duy trì cực nhẹ **< 100 MB**, triệt tiêu 100% rủi ro tràn ổ đĩa hay treo sập máy laptop khi đào dữ liệu xuyên đêm!
+
+
+
 
 
 

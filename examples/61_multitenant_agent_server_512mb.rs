@@ -12,13 +12,11 @@
 
 use std::fs::OpenOptions;
 use std::io::{BufWriter, Write, stdout};
-use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::thread;
-use std::time::{Duration, Instant};
-
-use xiangrust::board::{Parser, Position, Serializer};
-use xiangrust::movegen::{legal, List};
+use std::time::Instant;
+use xiangrust::board::{Parser, Serializer};
 use xiangrust::search::{Limits, Search};
 use xiangrust::tt::Table;
 

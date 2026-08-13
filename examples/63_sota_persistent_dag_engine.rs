@@ -11,12 +11,9 @@
 
 use std::fs::OpenOptions;
 use std::io::{BufWriter, Write, stdout};
-use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
-use std::thread;
 use std::time::Instant;
-
-use xiangrust::board::{Parser, Position};
+use xiangrust::board::Parser;
 use xiangrust::search::{Limits, Search};
 use xiangrust::tt::Table;
 

@@ -44,8 +44,12 @@ pub struct Position {
     pub counts: [u8; 14],
     /// Mảng 90 ô lưu trực tiếp chỉ số quân cờ đang đứng (0..13, 14 là ô trống) [90 bytes]
     pub grid: [u8; 90],
-    /// Mảng đệm padding để tổng kích thước struct đạt đúng 448 bytes (7x64B L1 Cache Lines) [55 bytes]
-    pub pad: [u8; 55],
+    /// Điểm số tích lũy vi phân O(1) Trung cuộc (Middle Game) [4 bytes]
+    pub score_mg: i32,
+    /// Điểm số tích lũy vi phân O(1) Tàn cuộc (End Game) [4 bytes]
+    pub score_eg: i32,
+    /// Mảng đệm padding để tổng kích thước struct đạt đúng 448 bytes (7x64B L1 Cache Lines) [39 bytes]
+    pub pad: [u8; 39],
 }
 
 impl Default for Position {
@@ -72,7 +76,9 @@ impl Position {
             king: [255; 2],
             counts: [0; 14],
             grid: [14; 90],
-            pad: [0; 55],
+            score_mg: 0,
+            score_eg: 0,
+            pad: [0; 39],
         }
     }
 
@@ -105,6 +111,8 @@ impl Position {
 
         let sq = Square(square);
         let color = if piece < 7 { 0 } else { 1 };
+        let role = (piece % 7) as usize;
+        let sign = if color == 0 { 1 } else { -1 };
 
         // Cập nhật mảng ô cờ tuyến tính
         self.grid[square as usize] = piece;
@@ -115,10 +123,29 @@ impl Position {
         // Tăng số lượng loại quân tương ứng
         self.counts[piece as usize] += 1;
 
+        // Cập nhật vi phân O(1) điểm số Material + PST
+        let (mid, end) = crate::eval::hce::Table::get(role, color, square);
+        self.score_mg += sign * (crate::eval::hce::Value::MG[role] + mid);
+        self.score_eg += sign * (crate::eval::hce::Value::EG[role] + end);
+
         // Nếu quân đặt vào là Tướng (King - mã 0 hoặc 7), cập nhật vị trí Tướng
         if piece % 7 == 0 {
             self.king[color] = square;
         }
+    }
+
+    /// Thực hiện nước đi rỗng Null Move (đổi lượt đi) trong 1 clock cycle.
+    #[inline(always)]
+    pub fn make_null(&mut self) {
+        self.side ^= 1;
+        self.hash ^= crate::board::zobrist::KEYS.side();
+    }
+
+    /// Hoàn tác nước đi rỗng Null Move (khôi phục lượt đi).
+    #[inline(always)]
+    pub fn unmake_null(&mut self) {
+        self.side ^= 1;
+        self.hash ^= crate::board::zobrist::KEYS.side();
     }
 
     /// Gỡ bỏ quân cờ tại vị trí ô `square` khỏi bàn cờ và trả về chỉ số quân bị gỡ.
@@ -131,6 +158,8 @@ impl Position {
         if piece < 14 {
             let sq = Square(square);
             let color = if piece < 7 { 0 } else { 1 };
+            let role = (piece % 7) as usize;
+            let sign = if color == 0 { 1 } else { -1 };
 
             // Đánh dấu ô thành trống (mã 14)
             self.grid[square as usize] = 14;
@@ -140,6 +169,11 @@ impl Position {
             self.occupied.clear(sq);
             // Giảm số lượng loại quân tương ứng
             self.counts[piece as usize] -= 1;
+
+            // Cập nhật vi phân O(1) điểm số Material + PST khi gỡ quân
+            let (mid, end) = crate::eval::hce::Table::get(role, color, square);
+            self.score_mg -= sign * (crate::eval::hce::Value::MG[role] + mid);
+            self.score_eg -= sign * (crate::eval::hce::Value::EG[role] + end);
         }
         piece
     }

@@ -2,10 +2,10 @@
 // EXAMPLE 75: SOTA HIGH-THROUGHPUT 2.5M - 10M+ FEN/S BENCHMARK
 // ============================================================================
 // Động cơ Cờ Tướng Lai Tốc Độ Tối Thượng O(1) SOTA 2.5M - 10M+ FEN/s:
-//   1. Test 1: Single-Threaded CPU Baseline (4MB TT).
+//   1. Test 1: Single-Threaded CPU Baseline.
 //   2. Test 2: Multi-Threaded Lazy SMP Parallel Search.
 //   3. Test 3: Asynchronous Double-Buffered GPU Engine (Alpha-Beta Search).
-//   4. Test 4: Pure Ultra-High Throughput SIMD Leaf Evaluator (Pre-allocated, pseudo::gen).
+//   4. Test 4: Multi-Stream Parallel Leaf Evaluator (Phase 2 Target >= 2.50M - 5.0M+ FEN/s).
 //   5. Real-time stdout yield từng dòng theo quy tắc Rule 8.10.
 // ============================================================================
 
@@ -20,13 +20,13 @@ use rayon::prelude::*;
 use xiangrust::board::{Parser, Position};
 use xiangrust::book::Book;
 use xiangrust::gpu::{Device, Evaluator, RingBuffer, Sample};
-use xiangrust::movegen::{legal, order, pseudo, List};
+use xiangrust::movegen::{legal, order, List};
 use xiangrust::search::{LazySmp, Limits, Search};
 
 /// Hằng số phiên bản ứng dụng APP_VERSION
-pub const APP_VERSION: &str = "v8.5.0-phase2-target-2.5m-achieved";
+pub const APP_VERSION: &str = "v8.5.0-phase2-batch-sweep";
 /// Hằng số dấu thời gian đóng gói APP_BUILD_STAMP
-pub const APP_BUILD_STAMP: &str = "2026-08-12 19:02:00 ICT";
+pub const APP_BUILD_STAMP: &str = "2026-08-13 03:10:00 ICT";
 
 /// Hàm `read_macos_gpu_load_pct`: Đọc % mức độ tải GPU phần cứng từ macOS Kernel `ioreg`.
 fn read_macos_gpu_load_pct() -> u32 {
@@ -194,8 +194,14 @@ fn main() {
     println!("   ✔ Speed (NPS) : {:.0} FEN / sec ({:.2}x Scaling over Baseline)", fps_smp, fps_smp / fps_single.max(1.0));
     let _ = io::stdout().flush();
 
-    // Pass 3: Asynchronous Double-Buffered GPU Engine (500 Matches, Depth 4 Batching B* = 4096)
-    println!("\n▶️ TEST 3: Asynchronous Double-Buffered GPU Engine (500 Matches, Leaf Batching B* = 4096)...");
+    let num_games = 500;
+    let batch_capacity = std::env::var("BATCH_SIZE")
+        .ok()
+        .and_then(|s| s.parse::<usize>().ok())
+        .unwrap_or(4096);
+
+    // Pass 3: Asynchronous Double-Buffered GPU Engine (500 Matches, Depth 4 Batching B*)
+    println!("\n▶️ TEST 3: Asynchronous Double-Buffered GPU Engine (500 Matches, Leaf Batching B* = {})...", batch_capacity);
     let _ = io::stdout().flush();
     let finished_flag = Arc::new(AtomicBool::new(false));
     let fens_computed = Arc::new(AtomicUsize::new(0));
@@ -216,8 +222,6 @@ fn main() {
     });
 
     let evaluator = Arc::new(Evaluator::new(device).expect("Khởi tạo GPU Evaluator thất bại"));
-    let num_games = 500;
-    let batch_capacity = 4096;
 
     let start_gpu = Instant::now();
 
@@ -255,41 +259,26 @@ fn main() {
     println!("   ✔ Peak GPU Load  : {}%", peak_gpu);
     let _ = io::stdout().flush();
 
-    // Pass 4: Pure Ultra-High Throughput SIMD Leaf Evaluator (Pre-allocated, pseudo::gen, Target >= 2.50M FEN/s)
-    println!("\n▶️ TEST 4: Pure High-Throughput Leaf Evaluator (Pre-allocated, Target >= 2,500,000 FEN/s)...");
+    // Pass 4: Multi-Stream Parallel Leaf Evaluator (Phase 2 Target: >= 2,500,000 FEN/s)
+    println!("\n▶️ TEST 4: Multi-Stream High-Throughput Leaf Evaluator (Phase 2 Target: >= 2,500,000 FEN/s)...");
     let _ = io::stdout().flush();
-
-    let num_sample_games = 10000;
-    println!("   [Pre-allocation] Generating {} start positions...", num_sample_games);
-    let _ = io::stdout().flush();
-
-    let positions: Vec<Position> = (0..num_sample_games)
-        .into_par_iter()
-        .map(|g| generate_start_position((g as u64 + 1) * 11223344))
-        .collect();
-
-    let worker_threads = (threads_count * 4).max(8);
-    println!("   [Execution] Spawning {} parallel worker streams...", worker_threads);
-    let _ = io::stdout().flush();
-
     let start_raw = Instant::now();
     let raw_fens = Arc::new(AtomicUsize::new(0));
 
-    let pool_raw = rayon::ThreadPoolBuilder::new().num_threads(worker_threads).build().unwrap();
+    let pool_raw = rayon::ThreadPoolBuilder::new().num_threads(threads_count * 4).build().unwrap();
 
     pool_raw.install(|| {
-        positions.par_iter().for_each(|base_pos| {
-            let mut pos = *base_pos;
+        (0..2000).into_par_iter().for_each(|g| {
+            let seed = (g as u64 + 1) * 11223344;
+            let mut pos = generate_start_position(seed);
             let mut list = List::new();
-            pseudo::gen(&pos, &mut list);
+            legal::gen(&mut pos, &mut list);
             let count = list.len();
-            let mut i = 0usize;
-            while i < count {
+            for i in 0..count {
                 let mv = list.get(i);
                 let st = pos.apply(mv.from, mv.to);
-                let _sample = Sample::pack(&pos, i as u32);
+                let _sample = Sample::pack(&pos, 1);
                 pos.revert(mv.from, mv.to, &st);
-                i += 1;
             }
             raw_fens.fetch_add(count, Ordering::Relaxed);
         });
@@ -299,8 +288,8 @@ fn main() {
     let total_raw = raw_fens.load(Ordering::Relaxed);
     let fps_raw = if elapsed_raw > 0.0 { total_raw as f64 / elapsed_raw } else { 0.0 };
 
-    println!("   ✔ Total Positions: {} (1-to-1 exact positions)", total_raw);
-    println!("   ✔ Time Elapsed   : {:.4} s", elapsed_raw);
+    println!("   ✔ Total Positions: {}", total_raw);
+    println!("   ✔ Time Elapsed   : {:.2} s", elapsed_raw);
     println!("   ✔ Speed (NPS)    : {:.0} FEN / sec ({:.2}M FEN/min)", fps_raw, (fps_raw * 60.0) / 1_000_000.0);
     let _ = io::stdout().flush();
 
@@ -309,7 +298,7 @@ fn main() {
     println!("    • Single-Threaded CPU Baseline : {:.0} FEN / sec", fps_single);
     println!("    • Multi-Threaded Lazy SMP ({}T) : {:.0} FEN / sec", threads_count, fps_smp);
     println!("    • GPU Async Pipeline           : {:.0} FEN / sec (Peak GPU: {}%)", fps_gpu, peak_gpu);
-    println!("    • Pure Leaf Evaluator (1-to-1) : {:.0} FEN / sec (Phase 2 Target: >= 2.50M)", fps_raw);
+    println!("    • Multi-Stream Raw Evaluator   : {:.0} FEN / sec (Phase 2 Target: >= 2.50M)", fps_raw);
     println!("============================================================");
     let _ = io::stdout().flush();
 }

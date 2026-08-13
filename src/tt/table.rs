@@ -77,7 +77,7 @@ impl Table {
     #[inline(always)]
     pub fn probe_with(&self, key: u64, index: usize) -> Option<Item> {
         let p_idx = self.route(key, index);
-        self.partitions[p_idx].probe(key)
+        unsafe { self.partitions.get_unchecked(p_idx) }.probe(key)
     }
 
     /// Tra cứu nguyên tử thế cờ `key: u64` mặc định (với luồng 0).
@@ -90,7 +90,7 @@ impl Table {
     #[inline(always)]
     pub fn save_with(&self, key: u64, depth: u8, bound: u8, step: Move, score: i16, index: usize) {
         let p_idx = self.route(key, index);
-        self.partitions[p_idx].save(key, depth, bound, step, score, self.age);
+        unsafe { self.partitions.get_unchecked(p_idx) }.save(key, depth, bound, step, score, self.age);
     }
 
     /// Ghi nhận nguyên tử kết quả tìm kiếm mặc định (với luồng 0).

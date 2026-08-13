@@ -17,7 +17,7 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 use rayon::prelude::*;
-use xiangrust::board::{Parser, Serializer};
+use xiangrust::board::Parser;
 use xiangrust::book::Book;
 use xiangrust::eval::feature::Feature;
 use xiangrust::gpu::{Batch, Device, Evaluable, Evaluator, Sample};
@@ -54,6 +54,7 @@ impl CacheAlignedState {
 }
 
 /// Ghi FEN & JSON sample trực tiếp vào byte buffer mà KHÔNG allocate String mới
+#[allow(dead_code)]
 #[inline(always)]
 fn write_sample_json_bytes(buf: &mut Vec<u8>, fen: &str, move_uci: &str, score: i32, depth: u8) {
     buf.extend_from_slice(b"{\"fen\":\"");
@@ -131,7 +132,7 @@ fn main() {
 
     let (tx_bin, rx_bin) = channel::<Vec<u8>>();
 
-    let writer_bin_handle = thread::spawn(move || {
+    let _writer_bin_handle = thread::spawn(move || {
         while let Ok(buf) = rx_bin.recv() {
             let _ = bin_writer.write_all(&buf);
         }

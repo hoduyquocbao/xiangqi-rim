@@ -84,7 +84,7 @@ impl Audit {
                     let mut opp_bb = pos.piece[opp_piece_idx];
                     while let Some(opp_sq) = opp_bb.pop() {
                         let king_bb = lookup::KING[opp][opp_sq.0 as usize];
-                        if (king_bb.0 & (1u128 << sq.0)) != 0 {
+                        if king_bb.test(sq) {
                             attacks += 1;
                         }
                     }
@@ -99,7 +99,7 @@ impl Audit {
                     while let Some(friend_sq) = friend_bb.pop() {
                         if friend_sq.0 != sq.0 {
                             let king_bb = lookup::KING[turn][friend_sq.0 as usize];
-                            if (king_bb.0 & (1u128 << sq.0)) != 0 {
+                            if king_bb.test(sq) {
                                 defenders += 1;
                             }
                         }

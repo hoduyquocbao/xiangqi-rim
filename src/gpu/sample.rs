@@ -59,19 +59,25 @@ impl Sample { // Khối triển khai các phương thức cho Sample
         } // Kết thúc struct Sample
     } // Kết thúc hàm new
 
-    #[inline(always)]
-    pub fn pack(pos: &Position, index: u32) -> Self {
-        Self {
-            grid: pos.grid,
-            king: pos.king,
-            side: pos.side,
-            state: 1,
-            score: 0,
-            index,
-            hash: pos.hash,
-            pad: [0u8; 16],
-        }
-    }
+    /// Đóng gói dữ liệu thế cờ từ Position vào struct Sample.
+    pub fn pack(pos: &Position, index: u32) -> Self { // Hàm pack đóng gói dữ liệu
+        let mut grid = [0u8; 90]; // Tạo mảng ô cờ tạm 90 bytes
+        let mut i = 0usize; // Chỉ số vòng lặp
+        while i < 90 { // Duyệt qua 90 ô cờ
+            grid[i] = pos.at(i as u8); // Đọc loại quân cờ tại vị trí ô i
+            i += 1; // Tăng chỉ số ô cờ
+        } // Kết thúc vòng lặp copy
+        Self { // Trả về struct Sample
+            grid, // Gán mảng ô cờ grid
+            king: pos.king, // Gán vị trí 2 tướng king
+            side: pos.side, // Gán phe lượt đi side
+            state: 1, // Gán trạng thái 1 (sẵn sàng)
+            score: 0, // Khởi tạo điểm số 0
+            index, // Gán chỉ số mẫu index
+            hash: pos.hash, // Gán khóa băm Zobrist hash
+            pad: [0u8; 16], // Mảng đệm pad zero
+        } // Kết thúc struct Sample
+    } // Kết thúc hàm pack
 
     /// Trả về điểm số centipawn của mẫu thế cờ.
     #[inline(always)] // Inline phương thức đọc điểm số

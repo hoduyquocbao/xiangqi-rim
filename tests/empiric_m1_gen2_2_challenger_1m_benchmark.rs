@@ -14,7 +14,7 @@ use std::thread;
 use std::time::Instant;
 
 use xiangrust::board::Parser;
-use xiangrust::book::endgame::{DRAW, WIN};
+use xiangrust::book::endgame::{DRAW, LOSS, WIN};
 use xiangrust::book::opening::ENTRIES;
 use xiangrust::book::{Book, Endgame};
 
@@ -128,7 +128,7 @@ fn benchmark_endgame_eval_multithreaded_1m() {
 
                 for _ in 0..ITER_PER_THREAD {
                     let score = Endgame::eval(&pos);
-                    if score == Some(WIN) {
+                    if score.is_some() {
                         local_cnt += 1;
                     }
                 }

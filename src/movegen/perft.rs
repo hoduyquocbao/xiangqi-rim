@@ -13,16 +13,15 @@ use super::types::List;
 use crate::board::Position;
 
 /// Hàm `perft` đếm tổng số nút cây nước đi hợp lệ đệ quy từ vị trí `pos` ở độ sâu `depth`.
-/// Ép buộc inlining `#[inline(always)]` triệt tiêu chi phí gọi đệ quy trên Perft hot loop.
-#[inline(always)]
+#[inline]
 pub fn perft(pos: &mut Position, depth: usize) -> u64 {
     // 1. Trường hợp cơ sở: Độ sâu 0 tương ứng với 1 thế cờ hiện tại
     if depth == 0 {
         return 1;
     }
 
-    // 2. Tạo danh sách tĩnh `List` trên Stack (căn lề 64-byte) để chứa nước đi hợp lệ
-    let mut list = List::new();
+    // 2. Cấp phát Box<List> trên Heap để giải phóng 100% Stack frame trong đệ quy
+    let mut list = Box::new(List::new());
     legal::gen(pos, &mut list);
 
     // 3. Tối ưu hóa điều kiện dừng: Độ sâu 1 trả về trực tiếp số nước đi vừa sinh
@@ -49,13 +48,13 @@ pub fn perft(pos: &mut Position, depth: usize) -> u64 {
 
 /// Hàm `divide` phân rã đếm nút chi tiết cho từng nước đi hợp lệ tại vị trí hiện tại.
 /// Thường dùng cho UCI debug để so sánh từng nhánh nước đi với engine chuẩn như Pikafish.
-#[inline(always)]
+#[inline]
 pub fn divide(pos: &mut Position, depth: usize) -> u64 {
     if depth == 0 {
         return 1;
     }
 
-    let mut list = List::new();
+    let mut list = Box::new(List::new());
     legal::gen(pos, &mut list);
 
     let mut total = 0u64;

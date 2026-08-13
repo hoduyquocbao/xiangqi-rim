@@ -225,16 +225,36 @@ GAMES=10000 DEPTH=4 THREADS=4 cargo run --release --example 20_parallel_mine
 - **Ràng Buộc Sắt Bằng Mọi Giá Cho Gemini**: BẤT KỲ LẦN NÀO thực thi mã Rust Engine (mining, batch evaluation, NNUE search), Gemini BẮT BUỘC phải ưu tiên phần cứng GPU (NVIDIA CUDA / Vulkan / WGPU / Metal Native) bằng mọi giá.
 - **NGHIÊM CẤM** ngã về CPU fallback khi đang trong môi trường có GPU phần cứng. Luôn đảm bảo nạp đúng driver Vulkan ICD JSON (`/etc/vulkan/icd.d/nvidia_icd.json`) hoặc CUDA backend để vRAM và Compute Units của GPU được kích hoạt 100%!
 
-### 7.10 QUY TẮC BẮT BUỘC YIELD KẾT QUẢ TỨC THÌ & MONITOR TELEMETRY (MANDATORY IMMEDIATE YIELD & REALTIME TELEMETRY PROTOCOL)
-- **Ràng Buộc Sắt Cho Gemini**: BẤT KỲ LẦN NÀO viết hoặc chỉnh sửa mã `examples/`, `tests/`, hoặc `scripts/`, Gemini BẮT BUỘC phải:
-  1. **Yield Live Output Tức Thì**: In kết quả trung gian dòng theo dòng ra `stdout` (`println!`, `stdout().flush()`) lập tức trong vòng lặp thay vì im lặng chờ hết batch.
-  2. **Monitor Hạ Tầng Thực Tế**: In chi tiết 3 chỉ số RAM RSS (MB), CPU Threads %, và GPU Compute Load % / VRAM.
-- **NGHIÊM CẤM** im lặng im ỉm chạy ngầm mù thông tin hoặc báo cáo số liệu khống chưa đo đạc!
+### 7.10 QUY TẮC BẮT BUỘC YIELD KẾT QUẢ REALTIME VỚI CỜ CẤU HÌNH TẦN SUẤT CHỐNG CHÁY TERMINAL (MANDATORY CONFIGURABLE REALTIME YIELD PROTOCOL)
+- **Ràng Buộc Sắt Cho Gemini (Engine / Miner / Benchmark / Training / Script / Example / Rust / Python / C++)**:
+  - **NGUYÊN LÝ VẬT LÝ NGHẼN BỘ ĐỆM STDOUT (BLOCK BUFFERING TRAP)**: Khi đầu ra `stdout` bị điều hướng vào tệp đĩa, ống dẫn (pipe), hoặc tiến trình chạy ngầm `task-*.log` (không phải màn hình TTY), hệ điều hành và thư viện chuẩn Rust/Python mặc định áp dụng bộ đệm khối **Block Buffering (8 KB)**. Nếu mã nguồn không ép xả đệm, tiến trình sẽ im lặng trong nhiều phút liền rồi bất ngờ xả ra một đống dòng cùng lúc (gây ra hiện tượng "mù thông tin", nghẽn thông số real-time).
+  - **NGUYÊN LÝ CHỐNG CHÁY TERMINAL KHI ĐÀO QUY MÔ LỚN (500K - 1M MẪU FEN)**: Đối với các tác vụ đào dữ liệu lớn (500,000 - 1,000,000 mẫu FEN / 10,000+ ván cờ), việc in log per ply (từng nước đi) sẽ xả ra 25 - 50 triệu dòng văn bản, gây ra hiện tượng **"Cháy Terminal" (Terminal Flooding & Disk I/O Bottleneck)** và ép CPU render văn bản thừa vô ích.
+  - **CỜ CẤU HÌNH ĐỘNG TẦN SUẤT YIELD (`YIELD_INTERVAL` / `YIELD_MODE` / FEATURE FLAG)**:
+    1. **Tự Động Đọc Biến Môi Trường**: Mọi kịch bản Miner / Benchmark BẮT BUỘC phải đọc biến môi trường `LOG_INTERVAL` / `YIELD_INTERVAL` (mặc định = 1 cho smoke test/benchmark; = 10 hoặc 100 ván cờ / per batch cho 500K-1M massive mining) hoặc cờ `YIELD_MODE` (`"ply"`, `"game"`, `"batch"`).
+    2. **Xả Đệm Tức Thì Khi In (Unbuffered Flush)**: Mọi dòng log được xuất ra (dù per ply hay per batch 100 ván) BẮT BUỘC phải theo sau bởi `std::io::stdout().flush().unwrap()` (Rust) hoặc `flush=True` (Python) để đảm bảo OS xả đĩa tức thì.
+    3. **Tần Suất Điểm Vàng**:
+       - *Benchmark / Live UI Streaming*: Yield từng nước đi (per ply) hoặc từng ván cờ.
+       - *Massive Mining 500K - 1M Samples*: Yield summary dòng tiến độ per game hoặc per 5,000 samples FEN. Tuyệt đối không im lặng hoàn toàn và không in tràn lan per ply gây cháy terminal!
 
-### 7.11 RÀNG BUỘC SẮT CẤU HÌNH ĐỘNG & BẢO TOÀN QUYỀN CHỈNH SỬA TỪ BÊN NGOÀI (MANDATORY DYNAMIC CONFIGURATION & EXTERNAL EXPOSURE MANDATE)
-- **NGHIÊM CẤM HARDCODE CỨNG BẤT KỲ THÔNG SỐ CẤU HÌNH NÀO IN-CODE**:
-  - Gemini BẮT BUỘC phải thiết lập **Cấu hình Động (Dynamic Configuration)** cho mọi thông số (`depth`, `exact_time_ms`, `hash_mb`, `threads`, `max_plies`, `batch_size`, v.v.) bằng cách ưu tiên đọc từ **Biến môi trường OS (`std::env::var`)** và **Tham số CLI / `.env` config file**.
-- **TRUYỀN THÔNG TIN MINH BẠCH**:
-  - In công khai toàn bộ cấu hình đang chạy ra màn hình (Startup Banner) và báo cáo minh bạch cho người dùng cũng như các Agent tiếp theo, tuyệt đối KHÔNG ngầm giấu giếm hay hardcode các giá trị giới hạn trong mã nguồn!
+
+### 7.12 QUY TẮC CẤM SPAM LỆNH BIÊN DỊCH SONG SONG & BẮT BUỘC DỪNG LẠI 1 NHỊP CHỜ KHẢO SÁT BIÊN DỊCH (MANDATORY BUILD CHOKE PREVENTION & SINGLE-BUILD LOCK PROTOCOL)
+- **HẠ TẦNG THỰC TẾ TRÊN LAPTOP (Intel i5-8259U / 4 Cores)**:
+  - Tác vụ biên dịch Rust Engine (`cargo build` / `cargo run` / `cargo check`) rất nặng CPU/RAM.
+  - Dự trù thời gian thực tế:
+    - **Debug Build (`cargo build`)**: Cần khoảng **3 PHÚT**.
+    - **Release Build (`cargo build --release`)**: Cần khoảng **5 PHÚT**.
+- **KỶ LUẬT CHO GEMINI (ANTIGRAVITY)**:
+  1. **CẤM SPAM LỆNH SONG SONG**: Tuyệt đối KHÔNG ĐƯỢC PHÉP kích hoạt từ 2 tiến trình biên dịch `cargo` trở lên cùng một lúc. Spam lệnh build sẽ gây nghẽn `file lock on artifact directory`, ép CPU 100% gây đồn ép treo máy laptop của người dùng!
+  2. **RÀNG BUỘC KIỂM TRA MẮT XÍCH TRƯỚC KHI BUILD**: Trước khi chạy bất kỳ lệnh `cargo` mới nào, Gemini BẮT BUỘC gọi `manage_task(Action: 'list')` kiểm tra xem có task build nào đang chạy hay không. Nếu có, PHẢI kiên nhẫn chờ xong hoặc dọn dẹp sạch task cũ rồi mới phát lệnh mới.
+  3. **KỶ LUẬT DỪNG LẠI 1 NHỊP KIÊN NHẪN CHỜ ĐỦ THỜI GIAN**: Dự trù đủ **3 phút (Debug)** hoặc **5 phút (Release)** cho tiến trình hoàn thành. KHÔNG ĐƯỢC vội vã, KHÔNG dồn ép cancel/re-trigger liên tục!
+
+### 7.14 QUY TẮC KỶ LUẬT CUỐN CHIẾU DỮ LIỆU ĐĨA CỤC BỘ & TỰ ĐỘNG ĐỒNG BỘ CLOUD HUGGINGFACE (MANDATORY ROLLING CHUNK & HF AUTO-PURGE PROTOCOL)
+- **Ràng Buộc Sắt Cho Gemini (MacBook / Laptop / Cloud)**:
+  - **Dọn Đĩa Cục Bộ**: Khi đào dữ liệu lớn xuyên đêm, Gemini BẮT BUỘC áp dụng kịch bản chia chunk (`rolling_chunk_pipeline.py`).
+  - **Quy Trình 3 Bước**: Mine Chunk $\rightarrow$ Upload HuggingFace Hub Dataset Repo $\rightarrow$ Xóa tệp đĩa cục bộ (`os.remove()`).
+  - **Cam Kết**: Giữ dung lượng ổ đĩa SSD MacBook chiếm dụng luôn **< 100 MB**.
+
+
+
 
 

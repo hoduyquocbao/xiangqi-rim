@@ -22,6 +22,8 @@ pub mod limit;
 pub mod order;
 /// Module con `prune` tỉa nhánh thuật toán
 pub mod prune;
+/// Module con `pruning` cắt tỉa LMR, RFP và Q-Search với Stand-Pat
+pub mod pruning;
 /// Module con `pv` lưu vết tuyến nước đi tốt nhất Principal Variation
 pub mod pv;
 /// Module con `quiesce` tìm kiếm ăn quân Quiescence Search
@@ -38,6 +40,7 @@ pub use diversity::{Diversity, PRIMES};
 pub use hybrid::HybridEngine;
 pub use limit::{Limits, Result, Timer};
 pub use order::{History, Killer, Order, Picker, Stage, VALUES};
+pub use pruning::Pruner;
 pub use prune::Prune;
 pub use pv::Pv;
 pub use quiesce::Quiesce;

@@ -29,6 +29,20 @@ impl Format {
         )
     }
 
+    /// Mã hóa nước đi 16-bit `Move` trực tiếp vào mảng byte [u8; 4] không cấp phát bộ nhớ Heap (Zero Allocation).
+    #[inline(always)]
+    pub fn encode_bytes(item: Move) -> [u8; 4] {
+        if !item.valid() {
+            return *b"0000";
+        }
+        let sf = (item.from % 9) as u8 + b'a';
+        let sr = (item.from / 9) as u8 + b'0';
+        let df = (item.to % 9) as u8 + b'a';
+        let dr = (item.to / 9) as u8 + b'0';
+
+        [sf, sr, df, dr]
+    }
+
     /// Chuyển đổi chuỗi đại số UCI (ví dụ: `"h2e2"`) sang nước đi 16-bit `Move`.
     pub fn decode(text: &str) -> Move {
         let bytes = text.as_bytes();

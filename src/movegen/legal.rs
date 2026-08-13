@@ -22,34 +22,13 @@ pub fn fly(pos: &Position) -> bool {
     if red >= 90 || black >= 90 {
         return false;
     }
-    let first = Square(red);
-    let second = Square(black);
     // Nếu không cùng Cột (File) -> Không vi phạm
-    if first.file() != second.file() {
+    if (red % 9) != (black % 9) {
         return false;
     }
-    let floor = if first.rank() < second.rank() {
-        first.rank()
-    } else {
-        second.rank()
-    };
-    let roof = if first.rank() > second.rank() {
-        first.rank()
-    } else {
-        second.rank()
-    };
-    let file = first.file();
-
-    // Duyệt khoảng giữa 2 Tướng xem có quân cản hay không
-    let mut r = floor + 1;
-    while r < roof {
-        let sq = r * 9 + file;
-        if pos.occupied.test(Square(sq)) {
-            return false;
-        }
-        r += 1;
-    }
-    true
+    // Kiểm tra các ô nằm giữa 2 Tướng xem có quân cản hay không bằng Bitboard BETWEEN O(1)
+    let between = lookup::between(red as usize, black as usize);
+    !(between & pos.occupied).active()
 }
 
 /// Kiểm tra xem Tướng của phe `side` có đang bị phe đối phương (`side ^ 1`) chiếu hay không.
@@ -87,7 +66,7 @@ pub fn check(pos: &Position, side: usize) -> bool {
             mask |= 1u128 << (k + 1);
         }
     }
-    if (crate::board::Bitboard(mask) & pawns).active() {
+    if (crate::board::Bitboard::from_u128(mask) & pawns).active() {
         return true;
     }
 
@@ -109,29 +88,31 @@ pub fn check(pos: &Position, side: usize) -> bool {
 
     // 4. Kiểm tra Pháo đối phương chiếu Tướng qua ngòi
     let cannons = pos.piece[enemy * 7 + 5];
-    let mut d = 0;
-    while d < 4 {
-        let r = lookup::ray(d, k);
-        let block = r & pos.occupied;
-        if block.active() {
-            let mount = if d == 0 || d == 2 {
-                block.lsb().unwrap().index()
-            } else {
-                block.msb().unwrap().index()
-            };
-            let behind = lookup::ray(d, mount) & pos.occupied;
-            if behind.active() {
-                let victim = if d == 0 || d == 2 {
-                    behind.lsb().unwrap().index()
+    if cannons.active() {
+        let mut d = 0;
+        while d < 4 {
+            let r = lookup::ray(d, k);
+            let block = r & pos.occupied;
+            if block.active() {
+                let mount = if d == 0 || d == 2 {
+                    block.lsb_idx()
                 } else {
-                    behind.msb().unwrap().index()
+                    block.msb_idx()
                 };
-                if cannons.test(Square(victim as u8)) {
-                    return true;
+                let behind = lookup::ray(d, mount) & pos.occupied;
+                if behind.active() {
+                    let victim = if d == 0 || d == 2 {
+                        behind.lsb_idx()
+                    } else {
+                        behind.msb_idx()
+                    };
+                    if cannons.test(Square(victim as u8)) {
+                        return true;
+                    }
                 }
             }
+            d += 1;
         }
-        d += 1;
     }
 
     false
@@ -197,32 +178,83 @@ pub fn valid(pos: &mut Position, mv: crate::movegen::types::Move) -> bool {
 }
 
 /// Sinh và lọc tất cả nước đi hợp lệ tuyệt đối (Legal Moves) cho vị trí bàn cờ hiện tại.
+/// Lọc tại chỗ in-place 0-overhead, triệt tiêu 100% việc tạo List tạm thời trên Stack frame.
 #[inline(always)]
 pub fn gen(pos: &mut Position, moves: &mut List) {
     moves.clear();
-    let mut raw = List::new();
-    pseudo::gen(pos, &mut raw);
+    pseudo::gen(pos, moves);
 
     let side = pos.side as usize;
-    let mut i = 0;
-    while i < raw.count {
-        let mv = raw.items[i];
-        // Thử thực thi nước đi
+    let mut write = 0;
+    let mut read = 0;
+    let count = moves.count;
+    while read < count {
+        let mv = moves.items[read];
         let state = pos.apply(mv.from, mv.to);
-        // Thẩm định: Tướng không bị chiếu VÀ không bị lộ mặt Tướng
         if !check(pos, side) && !fly(pos) {
-            moves.push(mv);
+            moves.items[write] = mv;
+            write += 1;
         }
-        // Hoàn tác nước đi
         pos.revert(mv.from, mv.to, &state);
-        i += 1;
+        read += 1;
     }
+    moves.count = write;
 }
 
 /// Bí danh (Alias) gọi hàm sinh nước đi hợp lệ tuyệt đối `gen`.
 #[inline(always)]
 pub fn legal(pos: &mut Position, moves: &mut List) {
     gen(pos, moves);
+}
+
+/// Sinh và lọc tất cả nước đi ăn quân (Captures Only) hợp lệ tuyệt đối.
+#[inline(always)]
+pub fn captures(pos: &mut Position, moves: &mut List) {
+    moves.clear();
+    pseudo::gen(pos, moves);
+
+    let side = pos.side as usize;
+    let mut write = 0;
+    let mut read = 0;
+    let count = moves.count;
+    while read < count {
+        let mv = moves.items[read];
+        if pos.grid[mv.to as usize] < 14 {
+            let state = pos.apply(mv.from, mv.to);
+            if !check(pos, side) && !fly(pos) {
+                moves.items[write] = mv;
+                write += 1;
+            }
+            pos.revert(mv.from, mv.to, &state);
+        }
+        read += 1;
+    }
+    moves.count = write;
+}
+
+/// Sinh và lọc tất cả nước đi không ăn quân (Quiet Moves Only) hợp lệ tuyệt đối.
+#[inline(always)]
+pub fn quiets(pos: &mut Position, moves: &mut List) {
+    moves.clear();
+    pseudo::gen(pos, moves);
+
+    let side = pos.side as usize;
+    let mut write = 0;
+    let mut read = 0;
+    let count = moves.count;
+    while read < count {
+        let mv = moves.items[read];
+        if pos.grid[mv.to as usize] >= 14 {
+            let state = pos.apply(mv.from, mv.to);
+            if !check(pos, side) && !fly(pos) {
+                moves.items[write] = mv;
+                write += 1;
+            }
+            pos.revert(mv.from, mv.to, &state);
+        }
+        read += 1;
+    }
+    moves.count = write;
 }
 
 

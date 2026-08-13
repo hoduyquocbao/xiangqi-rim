@@ -16,7 +16,7 @@ use std::sync::Arc;
 use std::thread;
 use std::time::{Duration, Instant};
 
-use xiangrust::board::{Parser, Position};
+use xiangrust::board::Parser;
 use xiangrust::movegen::{legal, List};
 
 /// Hằng số phiên bản ứng dụng APP_VERSION

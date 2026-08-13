@@ -12,13 +12,9 @@
 
 use std::fs::OpenOptions;
 use std::io::{BufWriter, Write, stdout};
-use std::path::Path;
-use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
-use std::thread;
 use std::time::Instant;
-
-use xiangrust::board::{Parser, Position};
+use xiangrust::board::Parser;
 use xiangrust::search::{Limits, Search};
 use xiangrust::tt::Table;
 
@@ -75,7 +71,7 @@ impl PersistentTreeEngine {
         let _ = writer.flush();
 
         let elapsed = start_t.elapsed().as_secs_f64();
-        let file_size_mb = std::fs::metadata(disk_path).map(|m| m.len()).unwrap_or(0) as f64 / (1024.0 * 1024.0);
+        let _file_size_mb = std::fs::metadata(disk_path).map(|m| m.len()).unwrap_or(0) as f64 / (1024.0 * 1024.0);
         (entries, elapsed)
     }
 }

@@ -12,12 +12,9 @@
 
 use std::fs::OpenOptions;
 use std::io::{BufWriter, Write, stdout};
-use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::Arc;
-use std::thread;
-use std::time::{Duration, Instant};
-
-use xiangrust::board::{Parser, Position, Serializer};
+use std::time::Instant;
+use xiangrust::board::Parser;
 use xiangrust::movegen::{legal, List};
 use xiangrust::search::{Limits, Search};
 use xiangrust::tt::Table;
@@ -140,10 +137,10 @@ fn main() {
     search_engine.auto_load();
 
     let mut ply = 0usize;
-    let mut game_over = false;
+    let mut _game_over = false;
     let mut outcome_str = "DRAW";
 
-    while ply < 50 && !game_over {
+    while ply < 50 && !_game_over {
         ply += 1;
         let is_red = pos.side == 0;
         let side_str = if is_red { "RED" } else { "BLACK" };
@@ -152,7 +149,7 @@ fn main() {
         legal(&mut pos, &mut moves);
 
         if moves.len() == 0 {
-            game_over = true;
+            _game_over = true;
             outcome_str = if is_red { "BLACK_WINS_CHECKMATE" } else { "RED_WINS_CHECKMATE" };
             break;
         }
@@ -164,7 +161,7 @@ fn main() {
         let best_mv = search_res.best;
 
         if best_mv.from == 0 && best_mv.to == 0 {
-            game_over = true;
+            _game_over = true;
             break;
         }
 
@@ -183,7 +180,7 @@ fn main() {
     let match_elapsed = start_match.elapsed().as_secs_f64();
 
     println!("\n💾 PHÂN ĐOẠN 2: Niêm phong toàn bộ Cây Cờ Depth {} xuống đĩa Mmap...", target_depth);
-    let (entries_persisted, sync_time) = match_store.persist_match_tree(mmap_out);
+    let (_entries_persisted, sync_time) = match_store.persist_match_tree(mmap_out);
     let file_size_mb = std::fs::metadata(mmap_out).map(|m| m.len()).unwrap_or(0) as f64 / (1024.0 * 1024.0);
 
     println!("============================================================");

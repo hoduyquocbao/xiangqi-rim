@@ -48,10 +48,10 @@ pub fn get_realtime_ram_rss_mb() -> f64 {
 fn main() {
     // Nạp toàn bộ thông số cấu hình động từ Biến Môi Trường OS (Rule 8.11 / 7.11)
     let red_depth: u8 = std::env::var("RED_DEPTH").ok().and_then(|v| v.parse().ok()).unwrap_or(30);
-    let red_time_ms: u64 = std::env::var("RED_TIME_MS").ok().and_then(|v| v.parse().ok()).unwrap_or(1500);
+    let red_time_ms: u64 = std::env::var("RED_TIME_MS").ok().and_then(|v| v.parse().ok()).unwrap_or(150000);
 
     let black_depth: u8 = std::env::var("BLACK_DEPTH").ok().and_then(|v| v.parse().ok()).unwrap_or(60);
-    let black_time_ms: u64 = std::env::var("BLACK_TIME_MS").ok().and_then(|v| v.parse().ok()).unwrap_or(2000);
+    let black_time_ms: u64 = std::env::var("BLACK_TIME_MS").ok().and_then(|v| v.parse().ok()).unwrap_or(200000);
 
     let max_plies: usize = std::env::var("MAX_PLIES").ok().and_then(|v| v.parse().ok()).unwrap_or(300);
     let hash_mb: usize = std::env::var("HASH_MB").ok().and_then(|v| v.parse().ok()).unwrap_or(256);
@@ -92,12 +92,12 @@ fn main() {
 
     let match_start = Instant::now();
     let mut ply = 0usize;
-    let mut game_over = false;
+    let mut _game_over = false;
     let mut outcome_str = "DRAW";
 
     let piece_symbols = ['K','A','B','N','R','C','P','k','a','b','n','r','c','p','.'];
 
-    while !game_over && ply < max_plies {
+    while !_game_over && ply < max_plies {
         ply += 1;
         let is_red = pos.side == 0;
         let side_name = if is_red {
@@ -116,7 +116,7 @@ fn main() {
         // 2. Kiểm tra Luật Lặp Cờ 3 Lần & Luật Trường Chiếu (Perpetual Check)
         let rep_count = match_history.iter().filter(|&&h| h == pos.hash).count();
         if rep_count >= 3 {
-            game_over = true;
+            _game_over = true;
             let is_in_check = legal::check(&pos, pos.side as usize);
             if is_in_check {
                 outcome_str = if is_red {
@@ -138,7 +138,7 @@ fn main() {
         let mut moves = List::new();
         legal(&mut pos, &mut moves);
         if moves.len() == 0 {
-            game_over = true;
+            _game_over = true;
             outcome_str = if is_red { "BLACK_WINS_CHECKMATE" } else { "RED_WINS_CHECKMATE" };
             break;
         }
@@ -160,7 +160,7 @@ fn main() {
 
         let best_mv = search_res.best;
         if best_mv.from == 0 && best_mv.to == 0 {
-            game_over = true;
+            _game_over = true;
             outcome_str = if is_red { "BLACK_WINS_RESIGN" } else { "RED_WINS_RESIGN" };
             break;
         }

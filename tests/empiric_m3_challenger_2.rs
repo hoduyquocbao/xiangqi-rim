@@ -194,7 +194,7 @@ fn test_challenger_m3_king_move_accum_reset_invariant() {
     }
 
     // In initial position, King has no legal moves. Let's create a custom FEN where King can move.
-    let fen_king_can_move = "3ak4/9/9/9/9/9/9/9/9/4K4 w - - 0 1";
+    let fen_king_can_move = "3k5/9/9/9/9/9/9/9/9/4K4 w - - 0 1";
     let mut pos = Parser::parse(fen_king_can_move);
     eval.reset(&pos);
 

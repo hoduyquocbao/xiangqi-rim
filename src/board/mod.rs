@@ -13,6 +13,8 @@
 
 /// Module con `bitboard` quản lý các thao tác bitwise 128-bit
 pub mod bitboard;
+/// Module con `magic` quản lý Magic Bitboards PEXT Lookup O(1)
+pub mod magic;
 /// Module con `fen` quản lý đọc/ghi định dạng FEN Cờ Tướng
 pub mod fen;
 /// Module con `piece` quản lý mã hóa quân cờ, phe chơi và loại quân

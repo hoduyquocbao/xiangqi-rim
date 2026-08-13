@@ -56,11 +56,19 @@ impl Partition {
     #[inline(always)]
     pub fn probe(&self, key: u64) -> Option<Item> {
         let idx = (key as usize) & self.mask;
-        let cluster = &self.items[idx];
-        for slot in &cluster.slots {
-            if let Some(item) = slot.probe(key) {
-                return Some(item);
-            }
+        let cluster = unsafe { self.items.get_unchecked(idx) };
+
+        if let Some(item) = cluster.slots[0].probe(key) {
+            return Some(item);
+        }
+        if let Some(item) = cluster.slots[1].probe(key) {
+            return Some(item);
+        }
+        if let Some(item) = cluster.slots[2].probe(key) {
+            return Some(item);
+        }
+        if let Some(item) = cluster.slots[3].probe(key) {
+            return Some(item);
         }
         None
     }
@@ -69,7 +77,7 @@ impl Partition {
     #[inline(always)]
     pub fn save(&self, key: u64, depth: u8, bound: u8, step: Move, score: i16, age: u8) {
         let idx = (key as usize) & self.mask;
-        let cluster = &self.items[idx];
+        let cluster = unsafe { self.items.get_unchecked(idx) };
 
         let mut empty = None;
         let mut victim = 0;

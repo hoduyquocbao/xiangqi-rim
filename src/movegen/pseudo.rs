@@ -129,16 +129,10 @@ pub fn pawn(pos: &Position, list: &mut List) {
     }
 }
 
-/// Hàm tổng quát sinh toàn bộ danh sách nước đi giả định (Pseudo-Legal Moves) cho 7 loại quân cờ.
+/// Hàm tổng quát sinh toàn bộ danh sách nước đi giả định (Pseudo-Legal Moves) bằng Pure Bitboard PEXT.
 #[inline(always)]
 pub fn gen(pos: &Position, list: &mut List) {
-    king(pos, list);
-    advisor(pos, list);
-    elephant(pos, list);
-    knight(pos, list);
-    rook(pos, list);
-    cannon(pos, list);
-    pawn(pos, list);
+    crate::movegen::bitboard_movegen::BitboardMoveGen::generate(pos, list);
 }
 
 /// Bí danh (Alias) gọi hàm sinh nước đi giả định `gen`.

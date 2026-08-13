@@ -187,7 +187,7 @@ impl Store {
             if file.read_exact(raw).is_err() {
                 break;
             }
-            replay.push(rec.sample());
+            replay.push_unbounded(rec.sample());
             loaded += 1;
         }
 
@@ -230,6 +230,67 @@ impl Store {
     #[inline(always)]
     pub fn sync_book(replay: &Replay) -> usize {
         Self::sync(replay)
+    }
+
+    /// Ghi nối tiếp nguyên tử (Atomic Append-Only) một mẫu kinh nghiệm vĩnh cửu xuống đĩa.
+    /// Không bao giờ xóa đè hay giới hạn dung lượng tệp, cho phép tăng trưởng vĩnh cửu.
+    pub fn append_sample(sample: &Sample, path: &str) -> Result<u64, std::io::Error> {
+        let record = Record::from(sample);
+        Self::append_record(&record, path)
+    }
+
+    /// Ghi nối tiếp nguyên tử một bản ghi `Record` nhị phân (32 bytes) xuống tệp đĩa.
+    pub fn append_record(record: &Record, path: &str) -> Result<u64, std::io::Error> {
+        use std::fs::OpenOptions;
+
+        let mut file = OpenOptions::new()
+            .read(true)
+            .write(true)
+            .create(true)
+            .open(path)?;
+
+        let metadata = file.metadata()?;
+        let len = metadata.len();
+
+        let mut header = if len < 64 {
+            Header::new(0)
+        } else {
+            let mut buf = [0u8; 64];
+            file.read_exact(&mut buf)?;
+            let mut h = Header::empty();
+            unsafe {
+                std::ptr::copy_nonoverlapping(
+                    buf.as_ptr(),
+                    &mut h as *mut Header as *mut u8,
+                    64,
+                );
+            }
+            if h.magic != MAGIC {
+                Header::new(0)
+            } else {
+                h
+            }
+        };
+
+        header.count += 1;
+
+        // Cập nhật Header 64 bytes tại vị trí 0
+        use std::io::Seek;
+        file.seek(std::io::SeekFrom::Start(0))?;
+        let header_slice = unsafe {
+            std::slice::from_raw_parts(&header as *const Header as *const u8, 64)
+        };
+        file.write_all(header_slice)?;
+
+        // Ghi bản ghi Record 32 bytes tại vị trí cuối tệp
+        file.seek(std::io::SeekFrom::End(0))?;
+        let record_slice = unsafe {
+            std::slice::from_raw_parts(record as *const Record as *const u8, 32)
+        };
+        file.write_all(record_slice)?;
+        file.flush()?;
+
+        Ok(header.count)
     }
 }
 

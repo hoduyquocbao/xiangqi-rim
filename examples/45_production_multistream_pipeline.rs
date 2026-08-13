@@ -41,10 +41,13 @@ pub struct Pipeline {
     /// Động cơ tìm kiếm sản xuất Search Engine
     search: xiangrust::search::Search,
     /// Bộ đánh giá ma trận GPU Evaluator
+    #[allow(dead_code)]
     evaluator: Evaluator,
     /// Tổng số nút đã duyệt AtomicUsize
+    #[allow(dead_code)]
     nodes: AtomicUsize,
     /// Số lần cắt tỉa TT AtomicUsize
+    #[allow(dead_code)]
     tt_cutoffs: AtomicUsize,
 }
 

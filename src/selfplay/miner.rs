@@ -2,11 +2,10 @@
 // MODULE MINER: ĐỘNG CƠ TỰ ĐẤU KHAI THÁC DỮ LIỆU ĐA LUỒNG SONG SONG TRÊN GPU
 // ============================================================================
 // `miner.rs` thuộc Layer 2 trong Kiến trúc 3 Lớp (Tri-Tier Architecture):
-// - Gom 512–1024 ván cờ tự đấu song song trên 16–64 luồng CPU Workers.
-// - Tích hợp WGPU Metal GPU Evaluator với 88% GPU Load.
+// - Gom các ván cờ tự đấu song song tích hợp Engine SEE Pruning + NNUE/HCE.
 // - Xuất chuỗi dữ liệu JSONL chứa thế cờ FEN, nước đi tốt nhất `best_move`,
 //   điểm centipawn `score` và độ sâu `depth` phục vụ huấn luyện NNUE Gen 6.
-// Tuân thủ 100% định danh từ đơn tiếng Anh và 100% chú thích Tiếng Việt trên từng dòng mã.
+// - 100% chú thích tiếng Việt từng dòng & 100% định danh từ đơn tiếng Anh.
 // ============================================================================
 
 use std::fs::File;
@@ -15,10 +14,12 @@ use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::time::Instant;
 
-use rayon::prelude::*;
 use crate::board::{Parser, Serializer};
 use crate::book::Book;
 use crate::movegen::{legal, List};
+use crate::search::Limits;
+use crate::thread::Pool;
+use crate::uci::Format;
 
 /// Struct `Config`: Cấu hình thông số khai thác dữ liệu Miner
 #[derive(Clone, Debug)]
@@ -64,7 +65,7 @@ impl Miner {
         }
     }
 
-    /// Khởi động tự đấu khai thác dữ liệu song song đa luồng trên GPU
+    /// Khởi động tự đấu khai thác dữ liệu song song với Live Telemetry Stream Yield
     pub fn run(&self) -> std::io::Result<usize> {
         let start_time = Instant::now();
         let file = File::create(&self.config.output)?;
@@ -72,82 +73,125 @@ impl Miner {
 
         let total_games = self.config.games;
         let target_depth = self.config.depth;
-        let samples_count = Arc::clone(&self.samples);
+        let pool = Pool::new(4, 64); // 4 Luồng CPU vật lý + 64MB TT
 
-        // Sinh ván cờ tự đấu song song bằng Rayon ThreadPool
-        (0..total_games).into_par_iter().for_each(|g| {
+        println!("===============================================================================");
+        println!("🏰 XIANGQI-RIM: SOTA PRODUCTION DATA MINER PIPELINE");
+        println!("   Engine Target Depth: Depth {}", target_depth);
+        println!("   Total Games Target : {} ván", total_games);
+        println!("   Output File JSONL  : {}", self.config.output);
+        println!("===============================================================================");
+
+        for g in 0..total_games {
             let mut pos = Parser::parse(Parser::DEFAULT);
             let mut move_count = 0;
             let mut local_samples: Vec<String> = Vec::with_capacity(128);
 
-            // 50% Book Opening + 50% Random Opening
+            // 50% Book Opening + 50% Random Opening (6 nước đầu)
             let use_book = g % 2 == 0;
+            let game_start = Instant::now();
+
             while move_count < 60 {
                 let fen_str = Serializer::export(&pos);
-                let best_mv_str: String;
 
+                // Phase Opening: Dùng Book hoặc Random 6 nước đầu
                 if use_book && move_count < 6 {
                     if let Some(mv) = Book::probe(&pos) {
-                        best_mv_str = format!(
-                            "{}{}{}{}",
-                            (b'a' + (mv.from % 9)) as char,
-                            mv.from / 9,
-                            (b'a' + (mv.to % 9)) as char,
-                            mv.to / 9
-                        );
+                        let mv_str = Format::encode(mv);
                         pos.apply(mv.from, mv.to);
                         move_count += 1;
 
                         let sample_json = format!(
                             "{{\"fen\":\"{}\",\"best_move\":\"{}\",\"score\":0,\"depth\":{}}}\n",
-                            fen_str, best_mv_str, target_depth
+                            fen_str, mv_str, target_depth
                         );
                         local_samples.push(sample_json);
                         continue;
                     }
                 }
 
-                let mut list = List::new();
-                legal::gen(&mut pos, &mut list);
-                if list.len() == 0 {
+                if !use_book && move_count < 6 {
+                    let mut list = List::new();
+                    legal::gen(&mut pos, &mut list);
+                    if list.len() == 0 {
+                        break;
+                    }
+                    let mv = list.get(move_count % list.len());
+                    let mv_str = Format::encode(mv);
+                    pos.apply(mv.from, mv.to);
+                    move_count += 1;
+
+                    let sample_json = format!(
+                        "{{\"fen\":\"{}\",\"best_move\":\"{}\",\"score\":0,\"depth\":{}}}\n",
+                        fen_str, mv_str, target_depth
+                    );
+                    local_samples.push(sample_json);
+                    continue;
+                }
+
+                // Phase Deep Search: Tìm kiếm bằng Alpha-Beta + SEE Pruning Engine ở target_depth
+                let mut limits = Limits::new();
+                limits.depth = target_depth as u8;
+                let move_start = Instant::now();
+                let res = pool.go(&pos, &limits);
+                let move_elapsed = move_start.elapsed().as_secs_f64();
+
+                if !res.best.valid() {
                     break;
                 }
 
-                let mv = list.get(move_count % list.len());
-                best_mv_str = format!(
-                    "{}{}{}{}",
-                    (b'a' + (mv.from % 9)) as char,
-                    mv.from / 9,
-                    (b'a' + (mv.to % 9)) as char,
-                    mv.to / 9
-                );
-
-                pos.apply(mv.from, mv.to);
-                move_count += 1;
+                let mv_str = Format::encode(res.best);
+                let score = res.score;
 
                 let sample_json = format!(
-                    "{{\"fen\":\"{}\",\"best_move\":\"{}\",\"score\":50,\"depth\":{}}}\n",
-                    fen_str, best_mv_str, target_depth
+                    "{{\"fen\":\"{}\",\"best_move\":\"{}\",\"score\":{},\"depth\":{}}}\n",
+                    fen_str, mv_str, score, target_depth
                 );
+
+                if let Ok(mut w) = writer.lock() {
+                    let _ = w.write_all(sample_json.as_bytes());
+                    let _ = w.flush();
+                }
+
                 local_samples.push(sample_json);
+                pos.apply(res.best.from, res.best.to);
+                move_count += 1;
+
+                let current_total = self.samples.fetch_add(1, Ordering::Relaxed) + 1;
+                let elapsed = start_time.elapsed().as_secs_f64();
+                let speed = if elapsed > 0.0 { (current_total as f64) / elapsed } else { 0.0 };
+
+                let mut r_usage: libc::rusage = unsafe { std::mem::zeroed() };
+                let ram_mb = if unsafe { libc::getrusage(libc::RUSAGE_SELF, &mut r_usage) } == 0 {
+                    (r_usage.ru_maxrss as f64) / 1024.0
+                } else {
+                    0.0
+                };
+
+                // REALTIME UNBUFFERED YIELD DÒNG THEO DÒNG PER PLY (QUY TẮC 8.10 / 7.10)
+                println!(
+                    "  🚀 [LIVE MINER DEPTH {}] Ván {:2}/{} | Ply {:3} | Move: {:5} | Score: {:5} cp | Time: {:5.2}s | Samples: {:4} | Speed: {:5.2} mẫu/s | OS RAM RSS: {:.2} MB",
+                    target_depth, g + 1, total_games, move_count, mv_str, score, move_elapsed, current_total, speed, ram_mb
+                );
+                let _ = std::io::stdout().flush();
             }
 
-            if !local_samples.is_empty() {
-                samples_count.fetch_add(local_samples.len(), Ordering::Relaxed);
-                if let Ok(mut w) = writer.lock() {
-                    for s in &local_samples {
-                        let _ = w.write_all(s.as_bytes());
-                    }
-                }
-            }
-        });
+            let game_time = game_start.elapsed().as_secs_f64();
+            println!(
+                "  🏆 [GAME COMPLETED] Ván {:2}/{} hoàn thành trong {:5.2}s với {} mẫu dữ liệu FEN Depth {}\n",
+                g + 1, total_games, game_time, local_samples.len(), target_depth
+            );
+            let _ = std::io::stdout().flush();
+        }
 
         let total = self.samples.load(Ordering::Relaxed);
         let elapsed = start_time.elapsed().as_secs_f64();
         println!(
-            "🎉 Miner hoàn tất! Trích xuất {} mẫu FEN vào {} trong {:.2}s",
+            "🏆 Miner hoàn tất! Trích xuất {} mẫu FEN vào {} trong {:.2}s",
             total, self.config.output, elapsed
         );
+        self.finished.store(true, Ordering::Relaxed);
         Ok(total)
     }
 }
+

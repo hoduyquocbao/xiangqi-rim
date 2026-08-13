@@ -126,8 +126,8 @@ fn test_configuration(threads: usize, batch_size: usize, test_duration_secs: u64
                     let mut seed = (slot_idx as u64 + 1) * 987654321;
                     seed ^= seed << 13;
                     seed ^= seed >> 7;
-                    seed ^= seed << 17;
-                    let mut new_pos = Parser::parse(Parser::DEFAULT);
+                    let _ = seed ^ (seed << 17);
+                    let new_pos = Parser::parse(Parser::DEFAULT);
                     slot.pos = new_pos;
                     slot.steps = 0;
                     slot.done = false;

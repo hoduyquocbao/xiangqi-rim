@@ -239,7 +239,7 @@ fn build_32d_thought(
     side: u8,
     fen: &str,
     best_uci: &str,
-    best_trans: &str,
+    _best_trans: &str,
     score: i32,
     candidates: &[(String, i32, String, String)],
     legal_count: usize

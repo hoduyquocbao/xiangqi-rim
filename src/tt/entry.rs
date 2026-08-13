@@ -75,7 +75,7 @@ impl Entry {
     /// Xác minh bằng Hyatt XOR Signature: `(key ^ data) == target`.
     #[inline(always)]
     pub fn probe(&self, target: u64) -> Option<Item> {
-        let data = self.data.load(Ordering::Acquire);
+        let data = self.data.load(Ordering::Relaxed);
         if data == 0 {
             return None;
         }

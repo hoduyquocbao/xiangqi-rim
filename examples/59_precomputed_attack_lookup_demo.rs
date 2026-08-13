@@ -12,7 +12,7 @@ use std::io::stdout;
 use std::io::Write;
 use std::time::Instant;
 
-use xiangrust::board::{Parser, Square};
+use xiangrust::board::Parser;
 use xiangrust::movegen::{legal, List};
 
 /// Hằng số phiên bản ứng dụng APP_VERSION

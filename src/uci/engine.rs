@@ -234,9 +234,12 @@ impl Engine {
                 let pos = self.pos;
                 let bus = self.bus.clone();
 
-                // Tạo luồng background chạy phiên tìm kiếm không gây treo STDIN
-                let task = std::thread::spawn(move || {
-                    let result = pool.go(&pos, &limits);
+                // Tạo luồng background chạy phiên tìm kiếm không gây treo STDIN (dùng 4MB stack size an toàn)
+                let task = std::thread::Builder::new()
+                    .name("uci-search".to_string())
+                    .stack_size(4 * 1024 * 1024)
+                    .spawn(move || {
+                        let result = pool.go(&pos, &limits);
                     let best = Format::encode(result.best);
 
                     let nps = if result.time > 0 {
@@ -266,9 +269,9 @@ impl Engine {
                     );
                     println!("bestmove {}", best);
                     io::stdout().flush().ok();
-                });
+                }).ok();
 
-                self.handle = Some(task);
+                self.handle = task;
             }
             Command::Stop => {
                 self.stop();

@@ -16,7 +16,7 @@ use crate::board::Position;
 use crate::movegen::types::{List, Move};
 use crate::search::diversity::PRIMES;
 use crate::search::limit::{Limits, Result};
-use crate::search::Search;
+use crate::tt::Table;
 
 /// Struct `LazySmp` quản lý bộ luồng tìm kiếm song song đa nhân, căn lề 64-byte.
 #[repr(C, align(64))]
@@ -25,15 +25,19 @@ pub struct LazySmp {
     pub threads: usize,
     /// Dung lượng RAM băm Transposition Table tính bằng MB per thread
     pub hash_mb: usize,
+    /// Instance Transposition Table dùng chung giữa các luồng
+    pub tt: Table,
 }
 
 impl LazySmp {
     /// Khởi tạo đối tượng LazySmp mới với số luồng `threads` và dung lượng RAM băm `hash_mb`.
     pub fn new(threads: usize, hash_mb: usize) -> Self {
         let n = if threads == 0 { 4 } else { threads };
+        let mb = hash_mb.min(16).max(1);
         Self {
             threads: n,
-            hash_mb: hash_mb.min(16).max(1), // Giới hạn 1..16MB để fit L3 Cache
+            hash_mb: mb,
+            tt: Table::new(mb),
         }
     }
 
@@ -47,7 +51,7 @@ impl LazySmp {
         let best_score_raw = Arc::new(AtomicUsize::new(0));
 
         let workers = self.threads;
-        let per_thread_hash = self.hash_mb;
+        let shared_tt = &self.tt;
 
         // Sử dụng Rayon ThreadPool để chạy $N$ luồng song song
         let pool = rayon::ThreadPoolBuilder::new()
@@ -66,7 +70,7 @@ impl LazySmp {
                     let move_from_store = Arc::clone(&best_move_from);
                     let move_to_store = Arc::clone(&best_move_to);
                     let score_store = Arc::clone(&best_score_raw);
-                    let local_pos = target_pos.clone();
+                    let mut local_pos = target_pos.clone();
                     let mut local_limits = target_limits;
 
                     // Áp dụng hệ số lệch độ sâu Diversity Offset cho các luồng phụ
@@ -78,15 +82,32 @@ impl LazySmp {
                     }
 
                     s.spawn(move |_| {
-                        let mut engine = Search::new(per_thread_hash);
-                        let res = engine.go(&local_pos, &local_limits);
+                        let mut history = crate::search::History::new();
+                        let mut killer = crate::search::Killer::new();
+                        let mut timer = crate::search::Timer::new();
+                        timer.init(&local_limits, local_pos.side);
+                        let mut eval = crate::eval::Eval::new();
+                        eval.reset(&local_pos);
 
-                        nodes_counter.fetch_add(res.nodes, Ordering::Relaxed);
+                        let diversity = crate::search::Diversity::new(thread_id);
+
+                        let (best, score, nodes, _) = crate::search::Core::iterate(
+                            &mut local_pos,
+                            &mut eval,
+                            Some(shared_tt),
+                            &mut history,
+                            &mut killer,
+                            &timer,
+                            Some(&diversity),
+                            None,
+                        );
+
+                        nodes_counter.fetch_add(nodes, Ordering::Relaxed);
 
                         if thread_id == 0 {
-                            move_from_store.store(res.best.from as usize, Ordering::Relaxed);
-                            move_to_store.store(res.best.to as usize, Ordering::Relaxed);
-                            score_store.store(res.score as usize, Ordering::Relaxed);
+                            move_from_store.store(best.from as usize, Ordering::Relaxed);
+                            move_to_store.store(best.to as usize, Ordering::Relaxed);
+                            score_store.store(score as usize, Ordering::Relaxed);
                             abort_flag.store(true, Ordering::Relaxed);
                         }
                     });
@@ -101,14 +122,8 @@ impl LazySmp {
         let to_sq = best_move_to.load(Ordering::Relaxed) as u8;
         let score = best_score_raw.load(Ordering::Relaxed) as i32;
 
-        let best_move = if from_sq == 0 && to_sq == 0 {
-            Move::none()
-        } else {
-            Move::new(from_sq, to_sq)
-        };
-
         Result {
-            best: best_move,
+            best: Move::new(from_sq, to_sq),
             ponder: Move::none(),
             score,
             depth: limits.depth,

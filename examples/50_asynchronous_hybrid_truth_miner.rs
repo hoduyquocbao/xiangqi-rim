@@ -79,7 +79,7 @@ pub fn async_hybrid_mine(target_samples: usize, out_path: &str, threads: usize) 
             let _ = writer.write_all(&buf);
             total_written += 1;
             if total_written % 500 == 0 || total_written == target_samples {
-                let mut guard = report_ref.lock().unwrap();
+                let guard = report_ref.lock().unwrap();
                 let elapsed = guard.elapsed().as_secs_f64();
                 let speed = if elapsed > 0.0 { total_written as f64 / elapsed } else { 0.0 };
                 let pct = (total_written as f64 / target_samples as f64) * 100.0;

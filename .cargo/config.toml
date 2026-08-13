@@ -1,0 +1,17 @@
+# ============================================================================
+# CẤU HÌNH GIA TỐC BIÊN DỊCH BỨT PHÁ TỐC ĐỘ CARGO & RUSTC (MAX PERFORMANCE)
+# ============================================================================
+# Tối đa hóa số luồng CPU, kích hoạt target-cpu=native và bộ đệm Incremental.
+# ============================================================================
+
+[build]
+# Tận dụng tối đa 8 luồng CPU Hyper-Threading trên phần cứng hệ thống
+jobs = 8
+# Ép rustc tối ưu trực tiếp cho tập lệnh CPU phần cứng native (AVX2 / FMA / SIMD)
+rustflags = ["-C", "target-cpu=native"]
+
+[env]
+# Bật cờ Cargo Incremental Compilation siêu tốc
+CARGO_INCREMENTAL = "1"
+# Thiết lập độ sâu bản ghi log Cargo
+RUST_BACKTRACE = "1"

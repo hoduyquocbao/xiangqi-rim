@@ -14,7 +14,7 @@ use std::thread;
 use std::time::Instant;
 use std::io::{stdout, Write};
 
-use rayon::prelude::*;
+
 use xiangrust::board::Parser;
 use xiangrust::gpu::{Batch, Device, Evaluator, Sample};
 

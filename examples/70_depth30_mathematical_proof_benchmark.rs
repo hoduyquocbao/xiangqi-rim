@@ -12,7 +12,7 @@
 use std::io::{stdout, Write};
 use std::time::Instant;
 
-use xiangrust::board::{Parser, Position};
+use xiangrust::board::Parser;
 use xiangrust::search::{Limits, Search};
 
 /// Hằng số phiên bản ứng dụng APP_VERSION
@@ -58,7 +58,7 @@ fn main() {
     println!("\n🔥 ĐANG ĐO ĐẠC THỜI GIAN THỰC TẾ TỪ DEPTH 1 ĐẾN DEPTH 10:");
     let _ = stdout().flush();
 
-    let mut pos = Parser::parse(Parser::DEFAULT);
+    let pos = Parser::parse(Parser::DEFAULT);
     let mut search_engine = Search::new(256);
     search_engine.auto_load();
 

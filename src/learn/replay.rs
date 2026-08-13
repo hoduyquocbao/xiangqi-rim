@@ -114,6 +114,21 @@ impl Replay {
         }
     }
 
+    /// Đẩy 1 mẫu kinh nghiệm `sample` theo cơ chế mở rộng không giới hạn (Unbounded Growth Mode).
+    /// Tự động mở rộng dung lượng mảng chứa khi vượt quá capacity cũ, bảo tồn 100% dữ liệu vĩnh cửu.
+    pub fn push_unbounded(&mut self, sample: Sample) {
+        if self.count >= self.capacity {
+            let new_cap = self.capacity * 2;
+            let mut vec = self.samples.to_vec();
+            vec.resize(new_cap, Sample::empty());
+            self.samples = vec.into_boxed_slice();
+            self.capacity = new_cap;
+        }
+        self.samples[self.count] = sample;
+        self.count += 1;
+        self.head = self.count % self.capacity;
+    }
+
     /// Trích xuất ngẫu nhiên `batch.len()` mẫu từ bộ đệm vào mảng `batch`.
     /// Trả về số lượng mẫu thực tế được trích xuất thành công.
     pub fn sample(&mut self, batch: &mut [Sample]) -> usize {
