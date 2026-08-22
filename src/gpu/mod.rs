@@ -35,6 +35,16 @@ pub mod sample; // Khai báo submodule sample cấu trúc dữ liệu thế cờ
 /// Submodule `status`: Mã trạng thái kết quả của các thao tác GPU và bộ nhớ VRAM
 pub mod status; // Khai báo submodule status định nghĩa mã kết quả hoạt động
 
+/// Submodule `aggregator`: Bộ gom mẫu vị trí cờ lá không khóa lock-free căn lề 64-byte
+pub mod aggregator; // Khai báo submodule aggregator quản lý gom mẫu cờ lá
+
+/// Submodule `cuda`: Tích hợp GPU CUDA Native C++ FFI cho NVIDIA Colab
+pub mod cuda;
+
+/// Submodule `queue`: Hàng đợi đệm kép bất đồng bộ RingBuffer 0-copy căn lề 64-byte
+pub mod queue; // Khai báo submodule queue quản lý hàng đợi đệm kép
+
+pub use aggregator::{Aggregatable, Aggregator}; // Re-export struct Aggregator và trait Aggregatable
 pub use backend::Backend; // Re-export kiểu enum Backend
 pub use batch::{Batch, Batchable}; // Re-export struct Batch và trait Batchable
 pub use buffer::{Buffer, Storable}; // Re-export kiểu struct Buffer và trait Storable
@@ -43,5 +53,6 @@ pub use evaluator::{Evaluable, Evaluator}; // Re-export struct Evaluator và tra
 pub use guard::{Guard, Validatable}; // Re-export struct Guard và trait Validatable
 pub use gym::{Accelerable, Gym}; // Re-export struct Gym và trait Accelerable
 pub use kernel::{Dispatchable, Kernel}; // Re-export struct Kernel và trait Dispatchable
+pub use queue::RingBuffer; // Re-export kiểu struct RingBuffer từ submodule queue
 pub use sample::{Sample, Sampleable}; // Re-export struct Sample và trait Sampleable
 pub use status::Status; // Re-export kiểu enum Status chính thức

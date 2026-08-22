@@ -12,6 +12,7 @@ import History from './components/History.jsx';
 import Gym from './components/Gym.jsx';
 import Audit from './components/Audit.jsx';
 import Studio from './components/Studio.jsx';
+import Tournament from './components/Tournament.jsx';
 import { R1Studio } from './components/R1Studio.jsx';
 import { Debugger } from './components/Debugger.jsx';
 import { parse, fen, check, moves as getMoves, uciToMove, hasLegalMoves } from './rules/rules.js';
@@ -35,6 +36,7 @@ export default function App() {
     index: 0,
     depth: 6,
     hash: 256,
+    timeLimit: 2000,
     score: 0,
     line: [],
     show: false,
@@ -44,6 +46,7 @@ export default function App() {
     auditShow: false,
     studioShow: false,
     r1Show: false,
+    tournamentShow: false,
     active: null,
     hint: null,
     over: false,
@@ -73,8 +76,8 @@ export default function App() {
             const parsedBoard = parse(prev.fen).board;
             const validExist = hasLegalMoves(parsedBoard, currentTurn);
 
-            // Kiểm tra bị chiếu bí (Checkmate) hoặc hết nước đi (Stalemate)
-            if (!validExist || !best || Math.abs(score) >= 20000) {
+            // Kiểm tra bị chiếu bí (Checkmate) hoặc hết nước đi (Stalemate) thực tế trên bàn cờ
+            if (!validExist || (!best && !validExist)) {
               const isMated = check(parsedBoard, currentTurn);
               const winner = isMated ? (currentTurn === 'w' ? 'b' : 'w') : 'draw';
               const reason = isMated ? 'CHECKMATE' : 'STALEMATE';
@@ -113,67 +116,69 @@ export default function App() {
               thought: data.thought || prev.thought
             };
 
-            // Nếu đang trong chế độ AI Bot và AI vừa tính toán nước đi tốt nhất cho lượt Đen
-            if (prev.bot && prev.view === 'play' && best && !prev.over) {
-              if (currentTurn === 'b') {
-                const targetMove = uciToMove(best);
-                if (targetMove) {
-                  const piece = parsedBoard[targetMove.from];
+            // Nếu đang trong chế độ AI Bot hoặc Auto-Play và AI vừa tính toán nước đi tốt nhất
+            const isAiTurn = prev.autoplay || (prev.bot && currentTurn === 'b');
+            if (isAiTurn && prev.view === 'play' && best && !prev.over) {
+              const targetMove = uciToMove(best);
+              if (targetMove) {
+                const piece = parsedBoard[targetMove.from];
+                const isCorrectColor = (currentTurn === 'w' && piece === piece.toUpperCase()) ||
+                                      (currentTurn === 'b' && piece === piece.toLowerCase());
 
-                  if (piece !== '.' && piece === piece.toLowerCase()) {
-                    const targetPiece = parsedBoard[targetMove.to];
-                    const taking = targetPiece !== '.';
+                if (piece !== '.' && isCorrectColor) {
+                  const targetPiece = parsedBoard[targetMove.to];
+                  const taking = targetPiece !== '.';
 
-                    const cloned = [...parsedBoard];
-                    cloned[targetMove.to] = piece;
-                    cloned[targetMove.from] = '.';
+                  const cloned = [...parsedBoard];
+                  cloned[targetMove.to] = piece;
+                  cloned[targetMove.from] = '.';
 
-                    const builtFen = fen(cloned, 'w');
-                    const newHistory = prev.history.slice(0, prev.index + 1);
-                    newHistory.push(builtFen);
+                  const nextTurn = currentTurn === 'w' ? 'b' : 'w';
+                  const builtFen = fen(cloned, nextTurn);
+                  const newHistory = prev.history.slice(0, prev.index + 1);
+                  newHistory.push(builtFen);
 
-                    engine.position(builtFen);
+                  engine.position(builtFen);
 
-                    const nextLegal = hasLegalMoves(cloned, 'w');
-                    let gameOver = false;
-                    let winner = null;
-                    let reason = null;
+                  const nextLegal = hasLegalMoves(cloned, nextTurn);
+                  let gameOver = false;
+                  let winner = null;
+                  let reason = null;
 
-                    if (!nextLegal) {
-                      gameOver = true;
-                      const isMated = check(cloned, 'w');
-                      winner = isMated ? 'b' : 'draw';
-                      reason = isMated ? 'CHECKMATE' : 'STALEMATE';
-                      sound.win();
-                    } else {
-                      if (taking) sound.capture();
-                      else sound.place();
+                  if (!nextLegal) {
+                    gameOver = true;
+                    const isMated = check(cloned, nextTurn);
+                    winner = isMated ? currentTurn : 'draw';
+                    reason = isMated ? 'CHECKMATE' : 'STALEMATE';
+                    sound.win();
+                  } else {
+                    if (taking) sound.capture();
+                    else sound.place();
 
-                      if (check(cloned, 'w')) sound.check();
-                    }
-
-                    const recordState = {
-                      ...nextState,
-                      fen: builtFen,
-                      history: newHistory,
-                      index: newHistory.length - 1,
-                      over: gameOver,
-                      winner,
-                      reason
-                    };
-
-                    store.save({
-                      mode: prev.mode,
-                      depth: prev.depth,
-                      fen: builtFen,
-                      history: newHistory,
-                      over: gameOver,
-                      winner,
-                      reason
-                    });
-
-                    return recordState;
+                    if (check(cloned, nextTurn)) sound.check();
                   }
+
+                  const recordState = {
+                    ...nextState,
+                    fen: builtFen,
+                    history: newHistory,
+                    index: newHistory.length - 1,
+                    over: gameOver,
+                    winner,
+                    reason
+                  };
+
+                  store.save({
+                    mode: prev.mode,
+                    depth: prev.depth,
+                    fen: builtFen,
+                    history: newHistory,
+                    over: gameOver,
+                    winner,
+                    reason
+                  });
+
+                  return recordState;
                 }
               }
             }
@@ -192,17 +197,22 @@ export default function App() {
     return () => off();
   }, [game.mode]);
 
-  // Tự động kích hoạt AI tìm kiếm khi tới lượt Đen trong chế độ Bot (chỉ khi ván chưa kết thúc)
+  // Tự động kích hoạt AI tìm kiếm khi tới lượt đi trong chế độ Bot/Auto-Play (chỉ khi ván chưa kết thúc)
   useEffect(() => {
-    if (game.bot && turn === 'b' && game.status === 'ready' && !game.over && game.view === 'play') {
+    const shouldAutoSearch = (game.autoplay || (game.bot && turn === 'b')) &&
+                             game.status === 'ready' &&
+                             !game.over &&
+                             game.view === 'play';
+
+    if (shouldAutoSearch) {
       const currentBoard = parse(game.fen).board;
-      if (!hasLegalMoves(currentBoard, 'b')) {
-        const isMated = check(currentBoard, 'b');
+      if (!hasLegalMoves(currentBoard, turn)) {
+        const isMated = check(currentBoard, turn);
         sound.win();
         update((prev) => ({
           ...prev,
           over: true,
-          winner: isMated ? 'w' : 'draw',
+          winner: isMated ? (turn === 'w' ? 'b' : 'w') : 'draw',
           reason: isMated ? 'CHECKMATE' : 'STALEMATE',
           status: 'ready'
         }));
@@ -210,9 +220,9 @@ export default function App() {
       }
       update((prev) => ({ ...prev, status: 'searching' }));
       engine.position(game.fen);
-      engine.search(game.depth, 2000, game.history);
+      engine.search(game.depth, game.timeLimit || 2000, game.history);
     }
-  }, [game.fen, game.bot, turn, game.status, game.view, game.depth, game.over]);
+  }, [game.fen, game.bot, game.autoplay, turn, game.status, game.view, game.depth, game.timeLimit, game.over]);
 
   // Kích hoạt phát hiệu ứng âm thanh
   const play = (type) => {
@@ -409,7 +419,7 @@ export default function App() {
     if (game.over) return;
     update((prev) => ({ ...prev, status: 'searching' }));
     engine.position(game.fen);
-    engine.search(game.depth, 3000, game.history);
+    engine.search(game.depth, game.timeLimit || 2000, game.history);
   };
 
   // Dừng tính toán AI (Stop)
@@ -434,14 +444,16 @@ export default function App() {
     engine.hash(val);
   };
 
-  // Chuyển đổi giữa 3 chế độ: Huấn Luyện AI | Chơi 2 Người | Sắp Cờ
+  // Chuyển đổi giữa các chế độ: AI Trainer | 2 Người | Sắp Cờ | ⚡ AI Tự Đấu (Auto-Play)
   const setPlayMode = (mode) => {
     if (mode === 'ai') {
-      update((prev) => ({ ...prev, playMode: 'ai', bot: true }));
+      update((prev) => ({ ...prev, playMode: 'ai', bot: true, autoplay: false }));
     } else if (mode === 'pvp') {
-      update((prev) => ({ ...prev, playMode: 'pvp', bot: false }));
+      update((prev) => ({ ...prev, playMode: 'pvp', bot: false, autoplay: false }));
+    } else if (mode === 'auto') {
+      update((prev) => ({ ...prev, playMode: 'auto', bot: true, autoplay: true }));
     } else if (mode === 'editor') {
-      update((prev) => ({ ...prev, playMode: 'editor', bot: false, studioShow: true }));
+      update((prev) => ({ ...prev, playMode: 'editor', bot: false, autoplay: false, studioShow: true }));
     }
   };
 
@@ -510,6 +522,14 @@ export default function App() {
 
         {/* Dual-Engine Mode Switcher, Telemetry Debugger, R1 Studio & History Button */}
         <div className="flex items-center gap-2 flex-wrap justify-end">
+          <button
+            onClick={() => update((prev) => ({ ...prev, tournamentShow: true }))}
+            className="px-3 py-2 rounded bg-gradient-to-r from-red-600/30 via-amber-500/30 to-blue-600/30 text-gold border border-gold/60 hover:border-gold text-xs font-bold transition flex items-center gap-1.5 shadow-glow animate-pulse"
+          >
+            <span>⚔️</span>
+            GIẢI ĐẤU (D30 vs D60)
+          </button>
+
           <button
             onClick={() => update((prev) => ({ ...prev, r1Show: true }))}
             className="px-3 py-2 rounded bg-gradient-to-r from-gold/20 via-amber-500/20 to-gold/20 text-gold border border-gold/50 hover:border-gold text-xs font-bold transition flex items-center gap-1.5 shadow-glow"
@@ -642,6 +662,8 @@ export default function App() {
               level={level}
               hash={game.hash}
               alloc={alloc}
+              timeLimit={game.timeLimit || 2000}
+              setTimeLimit={(val) => update((prev) => ({ ...prev, timeLimit: val }))}
               playMode={game.playMode || (game.bot ? 'ai' : 'pvp')}
               setPlayMode={setPlayMode}
               hint={search}
@@ -807,6 +829,11 @@ export default function App() {
         apply={(newFen) => apply('fen', newFen)}
         initialFen={game.fen}
       />
+
+      {/* Grand Tournament Visualizer Modal (Depth 30 vs Depth 60) */}
+      {game.tournamentShow && (
+        <Tournament onClose={() => update((prev) => ({ ...prev, tournamentShow: false }))} />
+      )}
 
       {/* Footer */}
       <footer className="border-t border-gold/20 bg-obsidian-card/90 px-6 py-3 text-center text-xs text-gold/50 font-body">

@@ -20,11 +20,17 @@ pub mod nnue;
 pub mod weight;
 /// Module con `trap` đánh giá bẫy cờ Mã nghẽn chân, Xe kẹt góc, Pháo mất ngòi
 pub mod trap;
+/// Module con `sieve` bộ lọc Bloom Filter O(1) chống trùng FEN thế cờ
+pub mod sieve;
+/// Module con `nnue_avx2` cập nhật vi phân Accumulator bằng SIMD AVX2 intrinsics
+pub mod nnue_avx2;
 
 pub use accum::Accum;
+pub use nnue_avx2::Accumulator as AccumulatorAvx2;
 pub use feature::Feature;
 pub use hce::Hce;
 pub use nnue::Nnue;
+pub use sieve::Sieve;
 pub use trap::Trap;
 pub use weight::Weight;
 

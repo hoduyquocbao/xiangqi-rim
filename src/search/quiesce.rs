@@ -9,7 +9,7 @@
 
 use crate::board::Position;
 use crate::eval::Eval;
-use crate::movegen::{legal, pseudo, List};
+use crate::movegen::{legal, List};
 use crate::search::limit::Timer;
 use crate::search::order::VALUES;
 
@@ -54,23 +54,12 @@ impl Quiesce {
             }
         }
 
-        // 2. Sinh danh sách các nước đi ăn quân (Captures) hoặc giải chiếu
+        // 2. Sinh danh sách các nước đi ăn quân (Captures Only) hoặc toàn bộ nước đi giải chiếu
         let mut list = List::new();
         if check {
             legal::gen(pos, &mut list);
         } else {
-            let mut raw = List::new();
-            pseudo::pseudo(pos, &mut raw);
-            let mut i = 0;
-            while i < raw.count {
-                let mv = raw.items[i];
-                let captured = pos.grid[mv.to as usize];
-                // Chỉ lấy các nước ăn quân (captured < 14) ở 0-cost mà KHÔNG apply/revert sớm
-                if captured < 14 {
-                    list.push(mv);
-                }
-                i += 1;
-            }
+            crate::movegen::captures::gen(pos, &mut list);
         }
 
         // 3. Nếu không còn nước đi hợp lệ
@@ -83,14 +72,14 @@ impl Quiesce {
 
         let active = eval.enabled();
 
-        // 4. Duyệt đệ quy danh sách các nước ăn quân theo thứ tự MVV-LVA giảm dần
+        // 4. Duyệt đệ quy danh sách các nước ăn quân theo thứ tự MVV-LVA giảm dần (0-closure Selection Sort)
         let mut i = 0;
         while i < list.count {
             if timer.check(*nodes) {
                 return 0;
             }
 
-            // Selection Sort bước đơn: Tìm nước ăn quân có điểm MVV-LVA cao nhất trực tiếp
+            // Selection Sort bước đơn: Tìm nước ăn quân có điểm MVV-LVA cao nhất trực tiếp 0-closure
             if !check {
                 let mut best = i;
                 let mut best_score = {

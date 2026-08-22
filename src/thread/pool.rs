@@ -35,6 +35,7 @@ impl Pool {
 
     /// Thực thi quá trình tìm kiếm song song Lazy SMP trên tất cả các luồng worker
     pub fn go(&self, pos: &Position, limits: &Limits) -> Result {
+        self.signal.reset();
         let start = std::time::Instant::now();
 
         let mut handles = Vec::with_capacity(self.size.saturating_sub(1));
@@ -46,16 +47,40 @@ impl Pool {
                 let table = Arc::clone(&self.tt);
                 let sig = Arc::clone(&self.signal);
 
-                let handle = thread::spawn(move || {
-                    let mut worker = Worker::new(index);
-                    worker.search(&board, &bound, &table, &sig);
-                });
-                handles.push(handle);
+                if let Ok(handle) = thread::Builder::new()
+                    .name(format!("worker-{}", index))
+                    .stack_size(4 * 1024 * 1024)
+                    .spawn(move || {
+                        let mut worker = Worker::new_boxed(index);
+                        worker.search(&board, &bound, &table, &sig);
+                    })
+                {
+                    handles.push(handle);
+                }
             }
         }
 
-        let mut master = Worker::new(0);
-        master.search(pos, limits, &self.tt, &self.signal);
+        let board = *pos;
+        let bound = *limits;
+        let table = Arc::clone(&self.tt);
+        let sig = Arc::clone(&self.signal);
+
+        let master_handle = thread::Builder::new()
+            .name("master-worker".to_string())
+            .stack_size(4 * 1024 * 1024)
+            .spawn(move || {
+                let mut master = Worker::new_boxed(0);
+                master.search(&board, &bound, &table, &sig);
+                master
+            });
+
+        let master = if let Ok(handle) = master_handle {
+            handle.join().unwrap_or_else(|_| Worker::new_boxed(0))
+        } else {
+            let mut m = Worker::new_boxed(0);
+            m.search(pos, limits, &self.tt, &self.signal);
+            m
+        };
 
         self.signal.halt();
 
@@ -71,7 +96,7 @@ impl Pool {
             .nodes
             .load(std::sync::atomic::Ordering::Relaxed)
             .max(master.nodes);
-        result.depth = limits.depth;
+        result.depth = if master.depth > 0 { master.depth } else { limits.depth };
         result.time = start.elapsed().as_millis() as u64;
 
         result

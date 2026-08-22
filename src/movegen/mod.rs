@@ -9,10 +9,16 @@
 // - `perft`: Đếm số lượng nút cây cờ (Performance Test) xác minh tính chính xác tuyệt đối.
 // ============================================================================
 
+/// Module con `bitboard_movegen` sinh nước đi 100% Pure Bitboard PEXT
+pub mod bitboard_movegen;
+/// Module con `captures` sinh CHỈ các nước đi ăn quân cho Quiescence Search
+pub mod captures;
 /// Module con `legal` lọc và kiểm tra chiếu tướng đối phương
 pub mod legal;
 /// Module con `lookup` chứa các bảng tra cứu vị trí di chuyển và cản chân tĩnh
 pub mod lookup;
+/// Module con `order` sắp xếp nước đi MVV-LVA (align 64)
+pub mod order;
 /// Module con `perft` chạy kiểm thử cây nước đi Perft
 pub mod perft;
 /// Module con `pseudo` sinh nước đi giả lập sơ bộ
@@ -21,7 +27,9 @@ pub mod pseudo;
 pub mod types;
 
 // Xuất bản các hàm và kiểu dữ liệu cốt lõi
+pub use captures::gen as captures_gen;
 pub use legal::{check, fly, gen, legal};
+pub use order::{score, sort};
 pub use perft::{divide, perft};
 pub use pseudo::pseudo;
 pub use types::{List, Move};

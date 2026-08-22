@@ -295,6 +295,93 @@ impl Serializer {
 
         out
     }
+
+    /// Chuyển đổi đối tượng `Position` trực tiếp vào mảng byte đệm `buf` không cấp phát bộ nhớ Heap (Zero Heap Allocation).
+    #[inline(always)]
+    pub fn export_bytes(pos: &Position, buf: &mut [u8; 96]) -> usize {
+        let mut idx = 0usize;
+
+        let mut r = 9i32;
+        while r >= 0 {
+            let rank = r as u8;
+            let mut count = 0u8;
+            let mut f = 0u8;
+            while f < 9 {
+                let square = rank * 9 + f;
+                let piece = Piece::make(pos.grid[square as usize]);
+                if piece.empty() {
+                    count += 1;
+                } else {
+                    if count > 0 {
+                        buf[idx] = b'0' + count;
+                        idx += 1;
+                        count = 0;
+                    }
+                    buf[idx] = piece.char() as u8;
+                    idx += 1;
+                }
+                f += 1;
+            }
+            if count > 0 {
+                buf[idx] = b'0' + count;
+                idx += 1;
+            }
+            if r > 0 {
+                buf[idx] = b'/';
+                idx += 1;
+            }
+            r -= 1;
+        }
+
+        buf[idx] = b' ';
+        idx += 1;
+        buf[idx] = if pos.side == 0 { b'w' } else { b'b' };
+        idx += 1;
+
+        buf[idx..idx + 5].copy_from_slice(b" - - ");
+        idx += 5;
+
+        // rule50
+        if pos.rule >= 100 {
+            buf[idx] = b'0' + (pos.rule / 100) as u8;
+            idx += 1;
+            buf[idx] = b'0' + ((pos.rule / 10) % 10) as u8;
+            idx += 1;
+            buf[idx] = b'0' + (pos.rule % 10) as u8;
+            idx += 1;
+        } else if pos.rule >= 10 {
+            buf[idx] = b'0' + (pos.rule / 10) as u8;
+            idx += 1;
+            buf[idx] = b'0' + (pos.rule % 10) as u8;
+            idx += 1;
+        } else {
+            buf[idx] = b'0' + pos.rule as u8;
+            idx += 1;
+        }
+
+        buf[idx] = b' ';
+        idx += 1;
+
+        // ply
+        if pos.ply >= 100 {
+            buf[idx] = b'0' + (pos.ply / 100) as u8;
+            idx += 1;
+            buf[idx] = b'0' + ((pos.ply / 10) % 10) as u8;
+            idx += 1;
+            buf[idx] = b'0' + (pos.ply % 10) as u8;
+            idx += 1;
+        } else if pos.ply >= 10 {
+            buf[idx] = b'0' + (pos.ply / 10) as u8;
+            idx += 1;
+            buf[idx] = b'0' + (pos.ply % 10) as u8;
+            idx += 1;
+        } else {
+            buf[idx] = b'0' + pos.ply as u8;
+            idx += 1;
+        }
+
+        idx
+    }
 }
 
 #[cfg(test)]

@@ -41,6 +41,8 @@ pub struct Worker {
     pub best: Move,
     /// Điểm số thế cờ thu được
     pub score: i32,
+    /// Độ sâu thực tế hoàn tất
+    pub depth: u8,
     /// Định tuyến luồng ưu tiên P-Core (macOS QoS)
     pub affinity: Affinity,
     /// Bộ đa dạng hóa độ sâu nguyên tố và History scaling
@@ -50,23 +52,32 @@ pub struct Worker {
 }
 
 impl Worker {
-    /// Khởi tạo Worker mới theo chỉ số luồng `index`.
+    /// Khởi tạo Worker mới theo chỉ số luồng `index` trực tiếp trên Heap
     #[inline(always)]
-    pub fn new(index: usize) -> Self {
-        Self {
-            index,
-            pos: Position::empty(),
-            eval: Eval::new(),
-            history: History::new(),
-            killer: Killer::new(),
-            timer: Timer::new(),
-            nodes: 0,
-            best: Move::none(),
-            score: 0,
-            affinity: Affinity::new(index),
-            diversity: Diversity::new(index),
-            pad: [0u8; 16],
-        }
+    pub fn new(index: usize) -> Box<Self> {
+        Self::new_boxed(index)
+    }
+
+    /// Khởi tạo Worker rỗng trực tiếp trên Heap để triệt tiêu 100% Stack Overflow
+    pub fn new_boxed(index: usize) -> Box<Self> {
+        let mut worker = unsafe {
+            let layout = std::alloc::Layout::new::<Worker>();
+            let ptr = std::alloc::alloc_zeroed(layout) as *mut Worker;
+            Box::from_raw(ptr)
+        };
+        worker.index = index;
+        worker.pos = Position::empty();
+        worker.eval = Eval::new();
+        worker.history = History::new();
+        worker.killer = Killer::new();
+        worker.timer = Timer::new();
+        worker.nodes = 0;
+        worker.best = Move::none();
+        worker.score = 0;
+        worker.depth = 0;
+        worker.affinity = Affinity::new(index);
+        worker.diversity = Diversity::new(index);
+        worker
     }
 
     /// Thực hiện tìm kiếm PVS trên bàn cờ với các giới hạn quy định.
@@ -102,7 +113,7 @@ impl Worker {
         self.killer.clear();
         self.nodes = 0;
 
-        let (best, score, nodes, _depth) = Core::iterate(
+        let (best, score, nodes, completed_depth) = Core::iterate(
             &mut self.pos,
             &mut self.eval,
             Some(tt),
@@ -116,6 +127,7 @@ impl Worker {
         self.best = best;
         self.score = score;
         self.nodes = nodes;
+        self.depth = completed_depth;
         signal.nodes.fetch_add(nodes, std::sync::atomic::Ordering::Relaxed);
     }
 }

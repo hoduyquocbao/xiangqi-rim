@@ -27,18 +27,12 @@ impl Value {
     /// Tính toán chỉ số giai đoạn ván đấu `phase` ($0 \le phase \le 32$) từ số lượng quân hiện có trên bàn.
     #[inline(always)]
     pub fn phase(pos: &Position) -> i32 {
-        let mut total = 0i32;
-        let mut role = 0usize;
-        while role < 7 {
-            let count = (pos.counts[role] + pos.counts[role + 7]) as i32;
-            total += count * Self::WEIGHT[role];
-            role += 1;
-        }
-        if total > 32 {
-            32
-        } else {
-            total
-        }
+        let advisor = (pos.counts[1] + pos.counts[8]) as i32 * 2;
+        let bishop = (pos.counts[2] + pos.counts[9]) as i32 * 2;
+        let knight = (pos.counts[3] + pos.counts[10]) as i32 * 3;
+        let rook = (pos.counts[4] + pos.counts[11]) as i32 * 6;
+        let cannon = (pos.counts[5] + pos.counts[12]) as i32 * 3;
+        (advisor + bishop + knight + rook + cannon).min(32)
     }
 
     /// Nội suy điểm Tapered Evaluation giữa Trung cuộc (mg) và Tàn cuộc (eg) theo `phase`.
@@ -316,25 +310,9 @@ impl Hce {
     /// Ép buộc inlining `#[inline(always)]` triệt tiêu overhead gọi hàm trên hot path tìm kiếm.
     #[inline(always)]
     pub fn evaluate(&self, pos: &Position) -> i32 {
-        let mut mg = 0i32;
-        let mut eg = 0i32;
-
-        let mut role = 0usize;
-        while role < 14 {
-            let color = role / 7;
-            let piece = role % 7;
-            let sign = if color == 0 { 1 } else { -1 };
-
-            let mut bb = pos.piece[role];
-            while let Some(sq) = bb.pop() {
-                let (mid, end) = Table::get(piece, color, sq.0);
-
-                mg += sign * (Value::MG[piece] + mid);
-                eg += sign * (Value::EG[piece] + end);
-            }
-
-            role += 1;
-        }
+        // Tận dụng trực tiếp điểm Material + PST được tích lũy vi phân O(1) trong Position
+        let mut mg = pos.score_mg;
+        let mut eg = pos.score_eg;
 
         let (mid, end) = Mobility::evaluate(pos);
         mg += mid;

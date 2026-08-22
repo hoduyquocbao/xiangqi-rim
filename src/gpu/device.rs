@@ -77,8 +77,19 @@ pub struct Device { // Định nghĩa struct Device
 impl Device { // Khối triển khai các phương thức cho Device
     /// Khởi tạo thiết bị GPU Adapter mới, tự động phát hiện backend và kích hoạt Guard.
     pub fn init() -> Self { // Hàm khởi tạo init
+        if std::env::var("XDG_RUNTIME_DIR").is_err() {
+            std::env::set_var("XDG_RUNTIME_DIR", "/tmp");
+        }
+        // 🌟 TỰ ĐỘNG NẠP NVIDIA VULKAN ICD TRÊN LINUX COLAB NẾU CÓ CARD NVIDA
+        if std::env::var("VK_ICD_FILENAMES").is_err() {
+            if std::path::Path::new("/usr/share/vulkan/icd.d/nvidia_icd.json").exists() {
+                std::env::set_var("VK_ICD_FILENAMES", "/usr/share/vulkan/icd.d/nvidia_icd.json");
+            } else if std::path::Path::new("/etc/vulkan/icd.d/nvidia_icd.json").exists() {
+                std::env::set_var("VK_ICD_FILENAMES", "/etc/vulkan/icd.d/nvidia_icd.json");
+            }
+        }
         let instance = wgpu::Instance::new(&wgpu::InstanceDescriptor { // Khởi tạo wgpu Instance mới
-            backends: wgpu::Backends::all(), // Hỗ trợ tất cả các GPU Backend (Metal/Vulkan/DX12)
+            backends: wgpu::Backends::all(), // Hỗ trợ tất cả GPU Backend (Vulkan/Metal/DX12/GL)
             flags: wgpu::InstanceFlags::ALLOW_UNDERLYING_NONCOMPLIANT_ADAPTER, // Cho phép headless Vulkan GPU trên Linux Colab
             ..Default::default() // Sử dụng mặc định cho các trường còn lại
         }); // Kết thúc khởi tạo Instance
@@ -108,25 +119,13 @@ impl Device { // Khối triển khai các phương thức cho Device
         let mut backend = Backend::Cpu; // Khởi tạo mặc định CPU backend
         let mut context = None; // Khởi tạo mặc định context None
 
-        // 1. Thử nhận diện qua opencl3 Native GPU trên Linux / Colab CUDA Driver Container
-        if let Ok(platforms) = opencl3::platform::get_platforms() {
-            for platform in platforms {
-                if let Ok(devices) = platform.get_devices(opencl3::device::CL_DEVICE_TYPE_GPU) {
-                    if !devices.is_empty() {
-                        if let Ok(dev_name) = opencl3::device::Device::new(devices[0]).name() {
-                            if !dev_name.to_lowercase().contains("llvmpipe") {
-                                backend = Backend::Opencl;
-                                break;
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        if let Some(adapter) = adapter { // Nếu lấy được GPU Adapter phần cứng thành công
+        if let Some(ref adapter) = adapter { // Nếu lấy được GPU Adapter phần cứng thành công
             let info = adapter.get_info(); // Lấy thông tin GPU Adapter
-            if info.device_type != wgpu::DeviceType::Cpu && !info.name.to_lowercase().contains("llvmpipe") {
+            let name_lc = info.name.to_lowercase();
+            if info.device_type != wgpu::DeviceType::Cpu 
+               && !name_lc.contains("llvmpipe") 
+               && !name_lc.contains("softpipe") 
+               && !name_lc.contains("swrast") {
                 backend = match info.backend { // Khớp mẫu loại backend thực tế
                     wgpu::Backend::Metal => Backend::Metal, // macOS Apple Metal Native
                     wgpu::Backend::Vulkan => Backend::Opencl, // Linux / Windows Vulkan
@@ -135,7 +134,8 @@ impl Device { // Khối triển khai các phương thức cho Device
                 }; // Kết thúc match backend
             }
 
-            if let Ok((device, queue)) = pollster::block_on(adapter.request_device( // Khởi tạo Device và Queue từ GPU Adapter
+            if backend != Backend::Cpu {
+                if let Ok((device, queue)) = pollster::block_on(adapter.request_device( // Khởi tạo Device và Queue từ GPU Adapter
                 &wgpu::DeviceDescriptor { // Cấu hình tham số mô tả Device
                     label: Some("Xiangqi-RIM GPU Device"), // Nhãn tên thiết bị GPU
                     required_features: wgpu::Features::empty(), // Không yêu cầu feature đặc biệt
@@ -297,6 +297,7 @@ impl Device { // Khối triển khai các phương thức cho Device
                     name: adapter_name, // Gán tên hiển thị name
                 })); // Kết thúc khởi tạo GpuContext
             } // Kết thúc khối if Ok device
+            } // Kết thúc khối if backend != Backend::Cpu
         } // Kết thúc khối if Some adapter
 
         let status = if context.is_some() { Status::Ready } else { Status::Active }; // Đặt trạng thái Ready nếu có GPU

@@ -76,11 +76,16 @@ web/           — Web UI (HTML/JS/CSS)
 
 **NGHIÊM CẤM** thay đổi scale factors mà không cập nhật cả Rust (`src/learn/nnue.rs::quantize`) VÀ Python notebooks đồng thời.
 
-### 2.3 Quy Tắc Performance — CPU Cache Friendly
+### 2.3 Quy Tắc Performance — CPU Cache Friendly & Hybrid GPU Acceleration
 
-**Trên Intel i5-8259U (4P/8L, L2=256KB, L3=6MB):**
+**Trên Intel i5-8259U (4 Physical Cores / 8 Threads, L2=256KB, L3=6MB):**
+- **Cấu Trúc Nhân CPU Phần Cứng**: Chip Intel i5-8259U sở hữu **4 nhân vật lý (Physical Cores)** và 8 luồng Hyper-Threading (KHÔNG có nhân P-core / E-core - chỉ xuất hiện từ Thế hệ 12 trở về sau).
+- **Khi Nào Dùng 4 Luồng (THREADS = 4)**: Cho các tác vụ tính toán đệ quy thuần tuý (Compute-Bound Search, SIMD NNUE) nhằm đảm bảo mỗi luồng chiếm trọn 100% bộ nhớ đệm L1D (32KB) và L2 (256KB) của nhân vật lý, triệt tiêu 100% xung đột Cache Bouncing.
+- **Khi Nào Dùng > 4 Luồng (THREADS = 8..64)**: Chỉ áp dụng khi khai thác dữ liệu tự đấu hàng loạt (Multi-Stream Data Mining 512+ ván cờ) hoặc I/O-bound batch write tệp tin.
+- **Thông Số Cân Bằng GPU Hybrid Điểm Vàng ($B^* = 256$)**: Khi kết hợp 4 luồng CPU vật lý với WGPU Metal GPU Evaluator ở ngưỡng nạp lô $B^* = 256$ thế cờ / Compute Pass, hệ thống đạt thông lượng đỉnh **579,549 FEN / giây** và duy trì **tỉ lệ tải GPU phần cứng 88%**.
+- **Cờ Tính Năng (Feature Flags) & Auto-Rollback**: Mọi module Hybrid Engine BẮT BUỘC dùng struct `Manager` (`src/circuit/flag.rs`) quản lý 5 cờ nguyên tử `Gpu`, `Queue`, `Ordering`, `Pruning`, `Rollback`. Khi xảy ra lỗi GPU, tự động ngắt cờ GPU và hạ cấp an toàn về CPU SIMD HCE.
+- **Sắp Xếp Nước Đi MVV-LVA**: BẮT BUỘC gọi `order::sort()` trước khi duyệt cây Alpha-Beta/PVS để đẩy tỷ lệ cắt tỉa TT lên **> 85%** và giảm 98% số nút lá thừa.
 - **Search TT Hash**: `Search::new(4)` — 4MB fit gần L3 cache. NGHIÊM CẤM dùng ≥ 8MB cho mining workload.
-- **THREADS mặc định**: Số physical cores (4), KHÔNG phải logical cores (8), cho compute-bound workload.
 - **Per-thread buffer**: Mỗi thread worker dùng `Vec<String>` cục bộ, chỉ lock Mutex 1 lần cuối ván để batch write. NGHIÊM CẤM lock Mutex cho mỗi sample.
 - **Atomic batch update**: `fetch_add(batch_size)` cuối ván, KHÔNG `fetch_add(1)` mỗi sample.
 - **NNUE weights**: 32MB FT matrix là read-only shared → KHÔNG gây false sharing. Hidden/Output layers (16KB) fit hoàn toàn trong L1D cache.
@@ -250,10 +255,11 @@ python3 scripts/test_quantization.py data/nnue_weights_gen5.bin
   4. **Kiểm Thử Biên Dịch Mới Cho Phép Commit**: Chạy `python3 -m py_compile app.py` hoặc `cargo check` để đảm bảo bản build mới hoạt động 100% trước khi push.
 - **Lý Do Tối Thượng**: Nếu sửa lỗi mã nguồn mà KHÔNG tăng số phiên bản và dấu thời gian, người dùng khi reload trang web sẽ rơi vào trạng thái "mù thông tin", không thể phân biệt được ứng dụng đang chạy bản cũ hay bản mới đã sửa lỗi!
 
-### 8.6 QUY TẮC CẤM GHI ĐÈ KÝ ỨC CŨ — BẮT BUỘC NỐI THÊM (STRICT IMMUTABLE APPEND-ONLY MEMORY MANDATE)
-- **NGHIÊM CẤM** xóa bỏ, cắt xén, tóm tắt hoặc sử dụng `replace_file_content` làm đè / mất các Mục bài học cũ trong tệp `.agents/memory/pain_points_*.md`.
-- **BẮT BUỘC APPEND-ONLY**: Mọi bài học mới khi bổ sung vào tệp ký ức BẮT BUỘC phải được ghi nối tiếp vào cuối tệp mà không làm ảnh hưởng tới bất kỳ dòng chữ nào của các Mục bài học trước đó.
-- **TẠO TỆP MỚI KHI DUNG LƯỢNG LỚN**: Nếu tệp ký ức hiện tại quá lớn (> 15KB), Agent phải tạo tệp mới mang mốc thời gian (ví dụ `.agents/memory/pain_points_[YYYYMMDD_HHMM].md`) và đăng ký vào bảng mục lục `INDEX.md`.
+### 8.6 QUY TẮC CẤM GHI ĐÈ KÝ ỨC CŨ — BẮT BUỘC CHỨA DẤU THỜI GIAN GIỜ PHÚT `[YYYYMMDD_HHMM]` (STRICT IMMUTABLE TIMESTAMPED MEMORY MANDATE)
+- **NGHIÊM CẤM** xóa bỏ, cắt xén, tóm tắt hoặc ghi đè làm mất các Bài học cũ trong tệp `.agents/memory/pain_points_*.md`.
+- **BẮT BUỘC DẤU THỜI GIAN GIỜ PHÚT (`YYYYMMDD_HHMM`) HOẶC PHIÊN (`_vN_`)**: Mọi tệp ký ức bài học mới khi tạo ra BẮT BUỘC phải đặt tên theo định dạng chứa mốc thời gian chính xác đến phút hoặc số phiên, ví dụ: `.agents/memory/pain_points_[YYYYMMDD_HHMM]_[chủ_đề].md` (ví dụ: `pain_points_20260813_1618_cargo_jobs.md`) hoặc `pain_points_[YYYYMMDD]_v[N]_[chủ_đề].md`.
+- **CẤM TẠO TỆP CHỈ CÓ NGÀY TRUNG CHUNG**: NGHIÊM CẤM tạo tệp dạng `pain_points_[YYYYMMDD].md` không có giờ phút/số phiên, vì tên tệp chung chung này dễ bị các thế hệ Agent tiếp theo trong cùng ngày sử dụng `write_to_file(Overwrite: true)` ghi đè xóa mất tri thức cũ!
+- **BẮT BUỘC ĐĂNG KÝ MỤC LỤC**: Sau khi tạo tệp ký ức mới, BẮT BUỘC phải bổ sung đường dẫn tệp vào [`INDEX.md`](file://.agents/memory/INDEX.md).
 
 ### 8.7 QUY TẮC CUNG CẤP LINK GOOGLE COLAB KÈM MCP PROXY TOKEN (MANDATORY COLAB MCP LINK MANDATE)
 - **Ràng Buộc Sắt**: BẤT KỲ LẦN NÀO cung cấp đường dẫn Google Colab cho người dùng, Agent BẮT BUỘC phải đọc token/port mới nhất từ `.agents/memory/colab_mcp_proxy.json` và gắn trực tiếp chuỗi hash fragment vào cuối URL:
@@ -269,6 +275,43 @@ python3 scripts/test_quantization.py data/nnue_weights_gen5.bin
 ### 8.9 RÀNG BUỘC SẮT ƯU TIÊN GPU PHẦN CỨNG BẰNG MỌI GIÁ (MANDATORY GPU HARDWARE ACCELERATION MANDATE)
 - **Ràng Buộc Sắt Bằng Mọi Giá**: BẤT KỲ LẦN NÀO thực thi mã Rust Engine (mining, batch evaluation, NNUE search), Agent BẮT BUỘC phải ưu tiên phần cứng GPU (NVIDIA CUDA / Vulkan / WGPU / Metal Native) bằng mọi giá.
 - **NGHIÊM CẤM** ngã về CPU fallback khi đang trong môi trường có GPU phần cứng. Luôn đảm bảo nạp đúng driver Vulkan ICD JSON (`/etc/vulkan/icd.d/nvidia_icd.json`) hoặc CUDA backend để vRAM và Compute Units của GPU được kích hoạt 100%!
+
+### 8.10 QUY TẮC BẮT BUỘC YIELD KẾT QUẢ REALTIME VỚI CỜ CẤU HÌNH TẦN SUẤT CHỐNG CHÁY TERMINAL (MANDATORY CONFIGURABLE REALTIME YIELD PROTOCOL)
+- **Ràng Buộc Sắt Cho Mọi Mã Nguồn (Engine / Miner / Benchmark / Training / Script / Example / Rust / Python / C++)**:
+  - **NGUYÊN LÝ VẬT LÝ NGHẼN BỘ ĐỆM STDOUT (BLOCK BUFFERING TRAP)**: Khi đầu ra `stdout` bị điều hướng vào tệp đĩa, ống dẫn (pipe), hoặc tiến trình chạy ngầm `task-*.log` (không phải màn hình TTY), hệ điều hành và thư viện chuẩn Rust/Python mặc định áp dụng bộ đệm khối **Block Buffering (8 KB)**. Nếu mã nguồn không ép xả đệm, tiến trình sẽ im lặng trong nhiều phút liền rồi bất ngờ xả ra một đống dòng cùng lúc (gây ra hiện tượng "mù thông tin", nghẽn thông số real-time).
+  - **NGUYÊN LÝ CHỐNG CHÁY TERMINAL KHI ĐÀO QUY MÔ LỚN (500K - 1M MẪU FEN)**: Đối với các tác vụ đào dữ liệu lớn (500,000 - 1,000,000 mẫu FEN / 10,000+ ván cờ), việc in log per ply (từng nước đi) sẽ xả ra 25 - 50 triệu dòng văn bản, gây ra hiện tượng **"Cháy Terminal" (Terminal Flooding & Disk I/O Bottleneck)** và ép CPU render văn bản thừa vô ích.
+  - **CỜ CẤU HÌNH ĐỘNG TẦN SUẤT YIELD (`YIELD_INTERVAL` / `YIELD_MODE` / FEATURE FLAG)**:
+    1. **Tự Động Đọc Biến Môi Trường**: Mọi kịch bản Miner / Benchmark BẮT BUỘC phải đọc biến môi trường `LOG_INTERVAL` / `YIELD_INTERVAL` (mặc định = 1 cho smoke test/benchmark; = 10 hoặc 100 ván cờ / per batch cho 500K-1M massive mining) hoặc cờ `YIELD_MODE` (`"ply"`, `"game"`, `"batch"`).
+    2. **Xả Đệm Tức Thì Khi In (Unbuffered Flush)**: Mọi dòng log được xuất ra (dù per ply hay per batch 100 ván) BẮT BUỘC phải theo sau bởi `std::io::stdout().flush().unwrap()` (Rust) hoặc `flush=True` (Python) để đảm bảo OS xả đĩa tức thì.
+    3. **Tần Suất Điểm Vàng**:
+       - *Benchmark / Live UI Streaming*: Yield từng nước đi (per ply) hoặc từng ván cờ.
+       - *Massive Mining 500K - 1M Samples*: Yield summary dòng tiến độ per game hoặc per 5,000 samples FEN. Tuyệt đối không im lặng hoàn toàn và không in tràn lan per ply gây cháy terminal!
+
+
+### 8.11 RÀNG BUỘC SẮT CẤU HÌNH ĐỘNG & BẢO TOÀN QUYỀN CHỈNH SỬA TỪ BÊN NGOÀI (MANDATORY DYNAMIC CONFIGURATION & EXTERNAL EXPOSURE MANDATE)
+### 8.12 QUY TẮC CẤM SPAM LỆNH BIÊN DỊCH SONG SONG & BẮT BUỘC DỪNG LẠI 1 NHỊP CHỜ KHẢO SÁT BIÊN DỊCH (MANDATORY BUILD CHOKE PREVENTION & SINGLE-BUILD LOCK PROTOCOL)
+- **BỐI CẢNH THỰC TẾ HẠ TẦNG LAPTOP**:
+  - Tác vụ biên dịch Rust Engine (`cargo build` / `cargo run` / `cargo check`) có quy mô lớn tốn rất nhiều tài nguyên CPU/RAM. Trên máy laptop (như Intel i5-8259U với 4 physical cores):
+    - **Debug Build (`cargo build`)**: Cần khoảng **3 PHÚT** để hoàn thành.
+    - **Release Build (`cargo build --release`)**: Cần khoảng **5 PHÚT** để hoàn thành.
+- **RÀNG BUỘC SẮT BẮT BUỘC TUÂN THỦ 100%**:
+  1. **TUYỆT ĐỐI CẤM SPAM LỆNH BIÊN DỊCH SONG SONG**: NGHIÊM CẤM kích hoạt từ 2 tiến trình `cargo build`, `cargo check`, hoặc `cargo run` trở lên cùng một lúc. Spam nhiều lệnh build song song sẽ làm nghẽn `file lock on artifact directory`, ép CPU 100% liên tục và gây treo/sập máy laptop!
+  2. **RÀNG BUỘC KIỂM TRA MẮT XÍCH TRƯỚC KHI BUILD**: Trước khi gọi bất kỳ lệnh biên dịch `cargo` mới nào, Agent BẮT BUỘC phải kiểm tra danh sách task background bằng `manage_task` (Action: `list`). Nếu phát hiện có tiến trình `cargo` cũ đang chạy, BẮT BUỘC phải chờ tiến trình cũ kết thúc hoặc diệt dọn dẹp xong rồi mới phát lệnh mới.
+  3. **KỶ LUẬT DỪNG LẠI 1 NHỊP KIÊN NHẪN CHỜ ĐỦ THỜI GIAN**: Khi đã phát lệnh biên dịch:
+     - Dành khoảng **3 phút cho Debug build** và **5 phút cho Release build**.
+     - Agent tuyệt đối KHÔNG vội vã, KHÔNG dồn ép task mới, KHÔNG gọi tool liên tục làm treo tiến trình biên dịch ngầm!
+
+### 8.14 QUY TẮC KỶ LUẬT CUỐN CHIẾU DỮ LIỆU ĐĨA CỤC BỘ & TỰ ĐỘNG ĐỒNG BỘ CLOUD HUGGINGFACE (MANDATORY ROLLING CHUNK & HF AUTO-PURGE PROTOCOL)
+- **Ràng Buộc Sắt Cho Mọi Tác Vụ Khai Thác Đêm Quy Mô Lớn (MacBook / Laptop / Cloud)**:
+  - **NGUYÊN LÝ TIẾT KIỆM Ổ ĐĨA SSD CỤC BỘ**: Khi tự đấu đào dữ liệu quy mô lớn (hàng triệu FEN) chạy liên tục đêm ngày trên MacBook, BẮT BUỘC phải áp dụng cơ chế **Rolling Chunks (Chia lô nhỏ 100K - 200K mẫu FEN / chunk)**.
+  - **QUY TRÌNH 3 BƯỚC BẮT BUỘC (MINE -> SYNC HF -> PURGE LOCAL)**:
+    1. **Mine Chunk**: Động cơ sinh dữ liệu theo các tập tin chunk có kích thước giới hạn (ví dụ `chunk_0001.jsonl` ~25 MB).
+    2. **Cloud Sync**: Ngay khi hoàn tất 1 chunk hoặc 1 epoch huấn luyện, kịch bản Python/Rust BẮT BUỘC tự động upload tệp chunk lên Hugging Face Hub Dataset Repository (`huggingface_hub` / `hf-cli`).
+    3. **Local Purge**: Ngay sau khi Hugging Face xác nhận upload thành công (Checksum SHA-256 OK), BẮT BUỘC phải xóa ngay tệp chunk cục bộ (`os.remove()`) trên đĩa MacBook.
+  - **Mục Đích**: Đảm bảo dung lượng SSD MacBook chiếm dụng luôn duy trì cực nhẹ **< 100 MB**, triệt tiêu 100% rủi ro tràn ổ đĩa hay treo sập máy laptop khi đào dữ liệu xuyên đêm!
+
+
+
 
 
 

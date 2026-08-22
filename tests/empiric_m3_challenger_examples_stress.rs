@@ -63,6 +63,7 @@ fn test_example_12_self_play_simulation_correctness() {
 
 #[test]
 fn test_example_13_opening_and_endgame_book_correctness() {
+    Endgame::clear();
     // 1. Opening Book Entry Count
     let book = Book::default();
     assert!(book.count >= 1000, "Opening book phải chứa >= 1,000 bản ghi");
@@ -92,22 +93,22 @@ fn test_example_13_opening_and_endgame_book_correctness() {
     assert_eq!(Endgame::eval(&pos_bare), Some(DRAW));
 
     // Case 2: Single Knight vs Single Advisor (Red Win)
-    let pos_knight = Parser::parse("4k1a2/9/9/9/9/9/9/4N4/9/4K4 w - - 0 1");
+    let pos_knight = Parser::parse("3k1a3/9/9/9/9/9/9/4N4/9/4K4 w - - 0 1");
     assert_eq!(Endgame::eval(&pos_knight), Some(WIN));
 
     // Case 3: Rook + Cannon vs Single Rook (Red Win)
-    let pos_rc = Parser::parse("3k5/4r4/9/9/9/9/9/9/4C4/3K1R3 w - - 0 1");
+    let pos_rc = Parser::parse("3k5/4r4/9/9/9/9/9/9/4C4/4K1R2 w - - 0 1");
     assert_eq!(Endgame::eval(&pos_rc), Some(WIN));
 
     // Case 4: Single Cannon vs Single Advisor (Draw)
-    let pos_cannon = Parser::parse("4k1a2/9/9/9/9/9/9/9/4C4/4K4 w - - 0 1");
+    let pos_cannon = Parser::parse("3k1a3/9/9/9/9/9/9/9/4C4/4K4 w - - 0 1");
     assert_eq!(Endgame::eval(&pos_cannon), Some(DRAW));
 
     // Case 5: Double Cannons vs Incomplete Advisors/Bishops (Red Win)
-    let pos_2c = Parser::parse("4k1a2/9/9/9/9/9/9/9/4C1C2/4K4 w - - 0 1");
+    let pos_2c = Parser::parse("3k1a3/9/9/9/9/9/9/9/4C1C2/4K4 w - - 0 1");
     assert_eq!(Endgame::eval(&pos_2c), Some(WIN));
 
     // Case 6: Single Knight vs Single Advisor - Black Turn (Black Loss)
-    let pos_black_knight = Parser::parse("4k1a2/9/9/9/9/9/9/4N4/9/4K4 b - - 0 1");
+    let pos_black_knight = Parser::parse("3k1a3/9/9/9/9/9/9/4N4/9/4K4 b - - 0 1");
     assert_eq!(Endgame::eval(&pos_black_knight), Some(LOSS));
 }

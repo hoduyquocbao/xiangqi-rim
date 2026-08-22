@@ -20,6 +20,15 @@ pub enum Backend { // Định nghĩa enum Backend với các biến thể phần
 impl Backend { // Khối triển khai các phương thức hỗ trợ cho enum Backend
     /// Phương thức `detect`: Tự động nhận diện phần cứng GPU thực tế (CUDA / Metal / Vulkan / CPU).
     pub fn detect() -> Self { // Định nghĩa hàm khởi tạo tự động phát hiện backend phần cứng GPU
+        // 🌟 TỰ ĐỘNG NẠP NVIDIA VULKAN ICD TRÊN LINUX COLAB NẾU CÓ CARD NVIDIA
+        if std::env::var("VK_ICD_FILENAMES").is_err() {
+            if std::path::Path::new("/usr/share/vulkan/icd.d/nvidia_icd.json").exists() {
+                std::env::set_var("VK_ICD_FILENAMES", "/usr/share/vulkan/icd.d/nvidia_icd.json");
+            } else if std::path::Path::new("/etc/vulkan/icd.d/nvidia_icd.json").exists() {
+                std::env::set_var("VK_ICD_FILENAMES", "/etc/vulkan/icd.d/nvidia_icd.json");
+            }
+        }
+
         // Kiểm tra xem có thiết bị NVIDIA CUDA kernel driver (/dev/nvidia0) trên Linux không
         if std::path::Path::new("/dev/nvidia0").exists() || std::path::Path::new("/dev/nvidiactl").exists() {
             return Self::Cuda; // Trả về CUDA Native Driver API (cuda:0)

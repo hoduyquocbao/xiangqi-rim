@@ -38,6 +38,9 @@ pub mod audit;
 /// Module `nnue`: Huấn luyện mạng nơ-ron NNUE từ dữ liệu tự đấu (NNUE Training Engine)
 pub mod nnue;
 
+/// Module `shard`: Bảng chỉ mục 1,024 phân mảnh vĩnh cửu (1024-Shard NVMe Index)
+pub mod shard;
+
 // Re-export các cấu trúc dữ liệu cốt lõi để các module bên ngoài và ví dụ dễ dàng truy cập
 pub use adapt::Adapt;
 pub use audit::{Audit, Report as AuditReport};
@@ -45,6 +48,7 @@ pub use blunder::{Blunder, Fault};
 pub use gym::{Gym, Match, Status};
 pub use nnue::{Datum, Forward, Network};
 pub use replay::{Replay, Sample};
+pub use shard::{Entry10B, Shard};
 pub use store::{Header, Record, Store};
 pub use trace::{Entry, Trace};
 pub use trainer::{Stats, Trainer};

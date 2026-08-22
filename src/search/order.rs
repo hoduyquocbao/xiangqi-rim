@@ -67,7 +67,7 @@ impl History {
     #[inline(always)]
     pub fn get(&self, mv: Move) -> i32 {
         if mv.valid() {
-            self.table[mv.from as usize][mv.to as usize]
+            unsafe { *self.table.get_unchecked(mv.from as usize).get_unchecked(mv.to as usize) }
         } else {
             0
         }
@@ -80,7 +80,7 @@ impl History {
             return;
         }
         let bonus = (depth * depth).min(400);
-        let entry = &mut self.table[mv.from as usize][mv.to as usize];
+        let entry = unsafe { self.table.get_unchecked_mut(mv.from as usize).get_unchecked_mut(mv.to as usize) };
         *entry += bonus;
         if *entry > Self::CEILING {
             self.decay();
@@ -97,7 +97,7 @@ impl History {
         }
         // Hệ số phạt = -(depth^2), giới hạn tối đa -400 để không phá vỡ cân bằng
         let malus = -(depth * depth).min(400);
-        let entry = &mut self.table[mv.from as usize][mv.to as usize];
+        let entry = unsafe { self.table.get_unchecked_mut(mv.from as usize).get_unchecked_mut(mv.to as usize) };
         *entry += malus;
         // Không cho phép điểm lịch sử xuống dưới -1,000,000 (tránh tràn số)
         if *entry < -Self::CEILING {
@@ -105,17 +105,36 @@ impl History {
         }
     }
 
+    /// Phạt điểm lịch sử hàng loạt cho danh sách các nước đi yên lặng thất bại `quiet` (History Malus Batch).
+    #[inline(always)]
+    pub fn penalize_batch(&mut self, quiet: &[Move], depth: i32) {
+        if quiet.is_empty() {
+            return;
+        }
+        let malus = -(depth * depth).min(400);
+        for &mv in quiet {
+            if mv.valid() {
+                let entry = unsafe { self.table.get_unchecked_mut(mv.from as usize).get_unchecked_mut(mv.to as usize) };
+                *entry += malus;
+                if *entry < -Self::CEILING {
+                    *entry = -Self::CEILING;
+                }
+            }
+        }
+    }
+
     /// Trừ bớt 50% tất cả các giá trị lịch sử để giảm nhiễu khi vượt ngưỡng (Age Decay).
+    /// Sử dụng lặp phẳng 8,100 phần tử mở rộng 4-way cho phép CPU tự động SIMD hóa (AVX2/NEON).
     #[inline(always)]
     pub fn decay(&mut self) {
-        let mut f = 0;
-        while f < 90 {
-            let mut t = 0;
-            while t < 90 {
-                self.table[f][t] >>= 1;
-                t += 1;
-            }
-            f += 1;
+        let flat: &mut [i32; 8100] = unsafe { &mut *(self.table.as_mut_ptr() as *mut [i32; 8100]) };
+        let mut i = 0;
+        while i < 8100 {
+            flat[i] >>= 1;
+            flat[i + 1] >>= 1;
+            flat[i + 2] >>= 1;
+            flat[i + 3] >>= 1;
+            i += 4;
         }
     }
 
@@ -123,7 +142,7 @@ impl History {
     #[inline(always)]
     pub fn get_counter(&self, prev: Move) -> Move {
         if prev.valid() {
-            self.counter[prev.from as usize][prev.to as usize]
+            unsafe { *self.counter.get_unchecked(prev.from as usize).get_unchecked(prev.to as usize) }
         } else {
             Move::none()
         }
@@ -133,15 +152,17 @@ impl History {
     #[inline(always)]
     pub fn update_counter(&mut self, prev: Move, curr: Move) {
         if prev.valid() && curr.valid() {
-            self.counter[prev.from as usize][prev.to as usize] = curr;
+            unsafe { *self.counter.get_unchecked_mut(prev.from as usize).get_unchecked_mut(prev.to as usize) = curr; }
         }
     }
 
     /// Đặt lại toàn bộ bảng lịch sử và phản đòn về 0.
     #[inline(always)]
     pub fn clear(&mut self) {
-        self.table.fill([0; 90]);
-        self.counter.fill([Move::none(); 90]);
+        let flat_t: &mut [i32; 8100] = unsafe { &mut *(self.table.as_mut_ptr() as *mut [i32; 8100]) };
+        flat_t.fill(0);
+        let flat_c: &mut [Move; 8100] = unsafe { &mut *(self.counter.as_mut_ptr() as *mut [Move; 8100]) };
+        flat_c.fill(Move::none());
     }
 }
 
@@ -186,18 +207,20 @@ impl Killer {
     }
 }
 
-/// Enum `Stage` đại diện cho từng giai đoạn của bộ chọn nước đi làm biếng Lazy Picker.
+/// Enum `Stage` đại diện cho từng giai đoạn của bộ chọn nước đi làm biếng Lazy Staged Picker.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Stage {
     /// Giai đoạn 1: Nước đi từ Transposition Table (TT Move)
     Tt,
-    /// Giai đoạn 2: Sinh toàn bộ nước đi hợp lệ
-    Gen,
-    /// Giai đoạn 3: Tính toán điểm số sắp xếp cho danh sách nước đi
-    Sort,
-    /// Giai đoạn 4: Trả về từng nước đi theo thứ tự điểm số giảm dần
-    Yield,
-    /// Giai đoạn 5: Đã hoàn tất danh sách nước đi
+    /// Giai đoạn 2: Sinh danh sách các nước ăn quân (Captures Only)
+    CapturesGen,
+    /// Giai đoạn 3: Duyệt và trả về từng nước ăn quân theo điểm MVV-LVA
+    CapturesYield,
+    /// Giai đoạn 4: Sinh danh sách các nước yên lặng (Quiet Moves Only)
+    QuietGen,
+    /// Giai đoạn 5: Duyệt và trả về từng nước yên lặng (Killers/Counter/History)
+    QuietYield,
+    /// Giai đoạn 6: Đã hoàn tất danh sách nước đi
     Done,
 }
 
@@ -215,6 +238,8 @@ pub struct Picker {
     pub counter: Move,
     /// Danh sách các nước đi đã sinh
     pub moves: List,
+    /// Mảng đệm điểm số tiền tính toán O(N) cho từng nước đi
+    pub scores: [i32; 128],
     /// Con trỏ chỉ số nước đi tiếp theo
     pub index: usize,
 }
@@ -235,6 +260,7 @@ impl Picker {
             killers,
             counter,
             moves: List::new(),
+            scores: [0; 128],
             index: 0,
         }
     }
@@ -250,61 +276,42 @@ impl Picker {
         loop {
             match self.stage {
                 Stage::Tt => {
-                    self.stage = Stage::Gen;
+                    self.stage = Stage::CapturesGen;
                     if self.tt.valid() && crate::movegen::legal::valid(pos, self.tt) {
                         return Some(self.tt);
                     }
                     self.tt = Move::none();
                 }
-                Stage::Gen => {
-                    crate::movegen::legal::gen(pos, &mut self.moves);
+                Stage::CapturesGen => {
+                    crate::movegen::legal::captures(pos, &mut self.moves);
                     self.index = 0;
-                    self.stage = Stage::Yield;
-                }
-                Stage::Sort => {
-                    self.index = 0;
-                    self.stage = Stage::Yield;
-                }
-                Stage::Yield => {
-                    if self.index >= self.moves.count {
-                        self.stage = Stage::Done;
-                        return None;
-                    }
-
-                    // Score function cho nước đi
-                    let score_fn = |mv: Move| -> i32 {
-                        if mv == self.tt {
+                    let mut i = 0;
+                    while i < self.moves.count {
+                        let mv = self.moves.items[i];
+                        self.scores[i] = if mv == self.tt {
                             -2_000_000
                         } else {
                             let captured = pos.grid[mv.to as usize];
-                            if captured < 14 {
-                                let moving = pos.grid[mv.from as usize];
-                                let v = VALUES[captured as usize];
-                                let a = VALUES[moving as usize];
-                                1_000_000 + 10 * v - a
-                            } else if mv == self.killers[0] {
-                                900_000
-                            } else if mv == self.counter {
-                                850_000
-                            } else if mv == self.killers[1] {
-                                800_000
-                            } else {
-                                let base = history.get(mv);
-                                if let Some(div) = diversity {
-                                    div.scale(base)
-                                } else {
-                                    base
-                                }
-                            }
-                        }
-                    };
+                            let moving = pos.grid[mv.from as usize];
+                            let v = VALUES[captured as usize];
+                            let a = VALUES[moving as usize];
+                            1_000_000 + 10 * v - a
+                        };
+                        i += 1;
+                    }
+                    self.stage = Stage::CapturesYield;
+                }
+                Stage::CapturesYield => {
+                    if self.index >= self.moves.count {
+                        self.stage = Stage::QuietGen;
+                        continue;
+                    }
 
-                    // Tìm phần tử có điểm số cao nhất trong các phần tử chưa chọn (Selection Sort step)
                     let mut best = self.index;
-                    let mut best_score = score_fn(self.moves.items[self.index]);
+                    let mut best_score = self.scores[self.index];
                     let mut i = self.index + 1;
                     while i < self.moves.count {
-                        let s = score_fn(self.moves.items[i]);
+                        let s = self.scores[i];
                         if s > best_score {
                             best_score = s;
                             best = i;
@@ -312,7 +319,68 @@ impl Picker {
                         i += 1;
                     }
 
-                    self.moves.items.swap(self.index, best);
+                    if best != self.index {
+                        self.moves.items.swap(self.index, best);
+                        self.scores.swap(self.index, best);
+                    }
+
+                    let mv = self.moves.items[self.index];
+                    self.index += 1;
+
+                    if best_score <= -2_000_000 {
+                        continue;
+                    }
+                    return Some(mv);
+                }
+                Stage::QuietGen => {
+                    crate::movegen::legal::quiets(pos, &mut self.moves);
+                    self.index = 0;
+                    let mut i = 0;
+                    while i < self.moves.count {
+                        let mv = self.moves.items[i];
+                        self.scores[i] = if mv == self.tt {
+                            -2_000_000
+                        } else if mv == self.killers[0] {
+                            900_000
+                        } else if mv == self.counter {
+                            850_000
+                        } else if mv == self.killers[1] {
+                            800_000
+                        } else {
+                            let base = history.get(mv);
+                            if let Some(div) = diversity {
+                                div.scale(base)
+                            } else {
+                                base
+                            }
+                        };
+                        i += 1;
+                    }
+                    self.stage = Stage::QuietYield;
+                }
+                Stage::QuietYield => {
+                    if self.index >= self.moves.count {
+                        self.stage = Stage::Done;
+                        return None;
+                    }
+
+                    let mut best = self.index;
+                    let mut best_score = self.scores[self.index];
+                    let mut i = self.index + 1;
+                    while i < self.moves.count {
+                        let s = self.scores[i];
+                        if s > best_score {
+                            best_score = s;
+                            best = i;
+                        }
+                        i += 1;
+                    }
+
+                    if best != self.index {
+                        self.moves.items.swap(self.index, best);
+                        self.scores.swap(self.index, best);
+                    }
+
                     let mv = self.moves.items[self.index];
                     self.index += 1;
 

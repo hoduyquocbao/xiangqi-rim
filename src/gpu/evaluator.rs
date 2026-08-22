@@ -9,6 +9,7 @@
 // ============================================================================
 
 use std::sync::atomic::Ordering; // Nhập thứ tự bộ nhớ Ordering cho cờ nguyên tử Ping-Pong Double Buffering
+use crate::board::Position; // Nhập kiểu struct Position từ module board
 use super::batch::Batch; // Nhập kiểu struct Batch từ module batch
 use super::buffer::{Buffer, Storable}; // Nhập kiểu struct Buffer và trait Storable từ module buffer
 use super::device::Device; // Nhập kiểu struct Device từ module device
@@ -135,6 +136,13 @@ impl Evaluator { // Khối triển khai các phương thức cho Evaluator
         // Kích thước byte bộ đệm nén Score Buffer (4 bytes x count) (chỉ 64KB thay vì 2MB!)
         let compact_score_bytes = count.saturating_mul(4);
 
+        // Mutex toàn cục bảo vệ GPU Queue Submission & Staging Mapping chống tranh chấp đa luồng
+        static EXEC_MUTEX: std::sync::Mutex<()> = std::sync::Mutex::new(());
+        let _guard = match EXEC_MUTEX.lock() {
+            Ok(g) => g,
+            Err(_) => return self.fallback(batch, count),
+        };
+
         // Truy xuất con trỏ bộ nhớ dữ liệu các mẫu FEN trong lô batch
         let ptr = batch.buffer().pointer(); // Lấy con trỏ thô buffer
         if ptr.is_null() { // Nếu con trỏ thô null
@@ -198,14 +206,17 @@ impl Evaluator { // Khối triển khai các phương thức cho Evaluator
                     score_staging.unmap(); // Bỏ map Compact Score Staging Buffer
                     return Ok(()); // Trả về thành công Ok
                 }
+                score_staging.unmap(); // Giải phóng unmap nếu channel nhận được lỗi
                 break;
             }
             if start_poll.elapsed().as_millis() > 5000 {
+                score_staging.unmap(); // Giải phóng unmap khi quá thời gian chờ 5s
                 break; // Timeout an toàn 5s
             }
             std::thread::yield_now(); // Nhường lượt ngắn tránh xoay vòng lãng phí CPU
         }
 
+        score_staging.unmap(); // Giải phóng unmap trước khi chuyển sang fallback
         self.fallback(batch, count) // Hạ cấp an toàn về CPU SIMD fallback nếu timeout
     } // Kết thúc hàm execute
 
@@ -254,6 +265,30 @@ impl Evaluator { // Khối triển khai các phương thức cho Evaluator
         self.active = true; // Đặt cờ active true
         Ok(()) // Trả về thành công Ok
     } // Kết thúc hàm reset
+
+    /// Phương thức `evaluate_positions`: Tính điểm trực tiếp một mảng các thế cờ `Position` trên GPU phần cứng.
+    pub fn evaluate_positions(&self, positions: &[Position], scores: &mut [i32]) -> Result<usize, Status> {
+        if positions.is_empty() {
+            return Ok(0);
+        }
+        let count = positions.len().min(scores.len());
+        let mut batch = Batch::allocate(&self.device, count)?;
+        let mut i = 0usize;
+        while i < count {
+            let sample = Sample::pack(&positions[i], i as u32);
+            let _ = batch.push(&sample);
+            i += 1;
+        }
+        self.execute(&mut batch, count)?;
+        let mut j = 0usize;
+        while j < count {
+            if let Ok(sample) = batch.pull(j) {
+                scores[j] = sample.score();
+            }
+            j += 1;
+        }
+        Ok(count)
+    }
 } // Kết thúc khối impl Evaluator
 
 impl Evaluable for Evaluator { // Triển khai trait Evaluable cho Evaluator
@@ -261,8 +296,10 @@ impl Evaluable for Evaluator { // Triển khai trait Evaluable cho Evaluator
         if !self.active { // Nếu chưa kích hoạt
             return Err(Status::Fault); // Trả về lỗi Fault
         } // Kết thúc kiểm tra active
-        let score = self.compute(sample)?; // Tính toán điểm số NNUE
-        self.buffer.push(&score.to_le_bytes())?; // Ghi 4 byte điểm số vào bộ đệm VRAM
+        let bytes = unsafe {
+            std::slice::from_raw_parts(sample as *const Sample as *const u8, std::mem::size_of::<Sample>())
+        };
+        self.buffer.push(bytes)?; // Ghi 128 byte dữ liệu mẫu Sample vào bộ đệm tích lũy
         Ok(()) // Trả về thành công Ok
     } // Kết thúc phương thức submit
 
@@ -270,12 +307,28 @@ impl Evaluable for Evaluator { // Triển khai trait Evaluable cho Evaluator
         if !self.active { // Nếu chưa kích hoạt
             return Err(Status::Fault); // Trả về lỗi Fault
         } // Kết thúc kiểm tra active
+
+        // Nếu batch chưa có dữ liệu nhưng buffer tích lũy có dữ liệu -> Chuyển toàn bộ dữ liệu mẫu vào batch
+        if batch.count() == 0 && self.buffer.commit() > 0 {
+            let sample_stride = std::mem::size_of::<Sample>();
+            let sample_cnt = self.buffer.commit() / sample_stride;
+            let ptr = self.buffer.pointer();
+            if !ptr.is_null() && sample_cnt > 0 {
+                let samples = unsafe { std::slice::from_raw_parts(ptr as *const Sample, sample_cnt) };
+                batch.clear();
+                for sample in samples {
+                    let _ = batch.push(sample);
+                }
+            }
+            self.buffer.clear();
+        }
+
         let count = batch.count(); // Đọc số mẫu có trong lô batch
         if count == 0 { // Nếu lô rỗng
             return Ok(0); // Trả về 0 mẫu ngay
         } // Kết thúc kiểm tra count 0
 
-        self.execute(batch, count)?; // Thực thi tính toán gia tốc lô trên GPU phần cứng (hoặc fallback)
+        self.execute(batch, count)?; // Thực thi tính toán gia tốc lô trên GPU phần cứng
         Ok(count) // Trả về số lượng mẫu FEN đã được tính điểm
     } // Kết thúc phương thức flush
 

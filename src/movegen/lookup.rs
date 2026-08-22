@@ -15,7 +15,7 @@ use crate::board::{Bitboard, Square};
 
 /// Hàm `const fn` tính bảng tra cứu nước đi của Tướng (King) trong Cung cho 2 phe.
 const fn kings() -> [[Bitboard; 90]; 2] {
-    let mut table = [[Bitboard(0); 90]; 2];
+    let mut table = [[Bitboard::empty(); 90]; 2];
     let mut side = 0;
     while side < 2 {
         let floor = if side == 0 { 0 } else { 7 };
@@ -38,7 +38,7 @@ const fn kings() -> [[Bitboard; 90]; 2] {
                     }
                     d += 1;
                 }
-                table[side][sq] = Bitboard(mask);
+                table[side][sq] = Bitboard::from_u128(mask);
             }
             sq += 1;
         }
@@ -49,7 +49,7 @@ const fn kings() -> [[Bitboard; 90]; 2] {
 
 /// Hàm `const fn` tính bảng tra cứu nước đi chéo của Sĩ (Advisor) trong Cung cho 2 phe.
 const fn advisors() -> [[Bitboard; 90]; 2] {
-    let mut table = [[Bitboard(0); 90]; 2];
+    let mut table = [[Bitboard::empty(); 90]; 2];
     let mut side = 0;
     while side < 2 {
         let floor = if side == 0 { 0 } else { 7 };
@@ -71,7 +71,7 @@ const fn advisors() -> [[Bitboard; 90]; 2] {
                     }
                     d += 1;
                 }
-                table[side][sq] = Bitboard(mask);
+                table[side][sq] = Bitboard::from_u128(mask);
             }
             sq += 1;
         }
@@ -82,7 +82,7 @@ const fn advisors() -> [[Bitboard; 90]; 2] {
 
 /// Hàm `const fn` tính bảng tra cứu nước đi của Tượng (Elephant) và ô cản mắt Tượng (`EYE`).
 const fn elephants() -> ([[Bitboard; 90]; 2], [[u8; 90]; 90]) {
-    let mut table = [[Bitboard(0); 90]; 2];
+    let mut table = [[Bitboard::empty(); 90]; 2];
     let mut eye = [[255u8; 90]; 90];
     let mut side = 0;
     while side < 2 {
@@ -111,7 +111,7 @@ const fn elephants() -> ([[Bitboard; 90]; 2], [[u8; 90]; 90]) {
                     }
                     d += 1;
                 }
-                table[side][sq] = Bitboard(mask);
+                table[side][sq] = Bitboard::from_u128(mask);
             }
             sq += 1;
         }
@@ -122,7 +122,7 @@ const fn elephants() -> ([[Bitboard; 90]; 2], [[u8; 90]; 90]) {
 
 /// Hàm `const fn` tính bảng tra cứu bước nhảy của Mã (Knight) và ô chân Mã cản (`LEG`).
 const fn knights() -> ([Bitboard; 90], [[u8; 90]; 90]) {
-    let mut table = [Bitboard(0); 90];
+    let mut table = [Bitboard::empty(); 90];
     let mut leg = [[255u8; 90]; 90];
     let mut sq = 0;
     while sq < 90 {
@@ -153,7 +153,7 @@ const fn knights() -> ([Bitboard; 90], [[u8; 90]; 90]) {
             }
             i += 1;
         }
-        table[sq] = Bitboard(mask);
+        table[sq] = Bitboard::from_u128(mask);
         sq += 1;
     }
     (table, leg)
@@ -161,7 +161,7 @@ const fn knights() -> ([Bitboard; 90], [[u8; 90]; 90]) {
 
 /// Hàm `const fn` tính bảng tra cứu nước đi của Tốt (Pawn) chưa qua sông và đã qua sông.
 const fn pawns() -> [[Bitboard; 90]; 2] {
-    let mut table = [[Bitboard(0); 90]; 2];
+    let mut table = [[Bitboard::empty(); 90]; 2];
     let mut side = 0;
     while side < 2 {
         let mut sq = 0;
@@ -196,7 +196,7 @@ const fn pawns() -> [[Bitboard; 90]; 2] {
                     }
                 }
             }
-            table[side][sq] = Bitboard(mask);
+            table[side][sq] = Bitboard::from_u128(mask);
             sq += 1;
         }
         side += 1;
@@ -206,7 +206,7 @@ const fn pawns() -> [[Bitboard; 90]; 2] {
 
 /// Hàm `const fn` tính bảng tra cứu 4 tia chiếu Ray Bitboard (North=0, South=1, East=2, West=3).
 const fn rays() -> [[Bitboard; 90]; 4] {
-    let mut table = [[Bitboard(0); 90]; 4];
+    let mut table = [[Bitboard::empty(); 90]; 4];
     let mut sq = 0;
     while sq < 90 {
         let f = (sq % 9) as i8;
@@ -219,7 +219,7 @@ const fn rays() -> [[Bitboard; 90]; 4] {
             mask0 |= 1u128 << (nr * 9 + f);
             nr += 1;
         }
-        table[0][sq] = Bitboard(mask0);
+        table[0][sq] = Bitboard::from_u128(mask0);
 
         // Hướng 1: South (-9, rank giảm)
         let mut mask1 = 0u128;
@@ -228,7 +228,7 @@ const fn rays() -> [[Bitboard; 90]; 4] {
             mask1 |= 1u128 << (nr * 9 + f);
             nr -= 1;
         }
-        table[1][sq] = Bitboard(mask1);
+        table[1][sq] = Bitboard::from_u128(mask1);
 
         // Hướng 2: East (+1, file tăng)
         let mut mask2 = 0u128;
@@ -237,7 +237,7 @@ const fn rays() -> [[Bitboard; 90]; 4] {
             mask2 |= 1u128 << (r * 9 + nf);
             nf += 1;
         }
-        table[2][sq] = Bitboard(mask2);
+        table[2][sq] = Bitboard::from_u128(mask2);
 
         // Hướng 3: West (-1, file giảm)
         let mut mask3 = 0u128;
@@ -246,9 +246,48 @@ const fn rays() -> [[Bitboard; 90]; 4] {
             mask3 |= 1u128 << (r * 9 + nf);
             nf -= 1;
         }
-        table[3][sq] = Bitboard(mask3);
+        table[3][sq] = Bitboard::from_u128(mask3);
 
         sq += 1;
+    }
+    table
+}
+
+/// Hàm `const fn` tính bảng Bitboard các ô nằm giữa 2 ô `a` và `b` trên cùng hàng hoặc cùng cột.
+const fn betweens() -> [[Bitboard; 90]; 90] {
+    let mut table = [[Bitboard::empty(); 90]; 90];
+    let mut a = 0;
+    while a < 90 {
+        let fa = (a % 9) as i8;
+        let ra = (a / 9) as i8;
+        let mut b = 0;
+        while b < 90 {
+            let fb = (b % 9) as i8;
+            let rb = (b / 9) as i8;
+            let mut mask = 0u128;
+            if fa == fb && ra != rb {
+                let min_r = if ra < rb { ra } else { rb };
+                let max_r = if ra > rb { ra } else { rb };
+                let mut r = min_r + 1;
+                while r < max_r {
+                    let sq = (r * 9 + fa) as u8;
+                    mask |= 1u128 << sq;
+                    r += 1;
+                }
+            } else if ra == rb && fa != fb {
+                let min_f = if fa < fb { fa } else { fb };
+                let max_f = if fa > fb { fa } else { fb };
+                let mut f = min_f + 1;
+                while f < max_f {
+                    let sq = (ra * 9 + f) as u8;
+                    mask |= 1u128 << sq;
+                    f += 1;
+                }
+            }
+            table[a][b] = Bitboard::from_u128(mask);
+            b += 1;
+        }
+        a += 1;
     }
     table
 }
@@ -272,6 +311,14 @@ pub static LEG: [[u8; 90]; 90] = KNIGHTS_DATA.1;
 pub static PAWN: [[Bitboard; 90]; 2] = pawns();
 /// Bảng Bitboard 4 tia chiếu Rayleigh toàn cục
 pub static RAY: [[Bitboard; 90]; 4] = rays();
+/// Bảng Bitboard các ô nằm giữa 2 ô cờ
+pub static BETWEEN: [[Bitboard; 90]; 90] = betweens();
+
+/// Lấy Bitboard các ô nằm giữa ô `from` và ô `to`.
+#[inline(always)]
+pub fn between(from: usize, to: usize) -> Bitboard {
+    BETWEEN[from][to]
+}
 
 /// Lấy Bitboard các nước đi tấn công của Tướng tại ô `sq` của phe `side`.
 #[inline(always)]
@@ -324,64 +371,126 @@ pub fn ray(dir: usize, sq: usize) -> Bitboard {
 /// Tính toán Bitboard các nước đi hợp lệ cho Xe tại ô `from` với Bitboard `occupied` và `own`.
 #[inline(always)]
 pub fn rook(from: u8, occupied: Bitboard, own: Bitboard) -> Bitboard {
-    let mut target = Bitboard::empty();
     let sq = from as usize;
-    let mut d = 0;
-    while d < 4 {
-        let r = RAY[d][sq];
-        let block = r & occupied;
-        if !block.active() {
-            target |= r;
-        } else {
-            let hit = if d == 0 || d == 2 {
-                block.lsb().unwrap().index()
-            } else {
-                block.msb().unwrap().index()
-            };
-            target |= r ^ RAY[d][hit];
-        }
-        d += 1;
+    let mut target = Bitboard::empty();
+
+    // North (d = 0)
+    let r0 = RAY[0][sq];
+    let b0 = r0 & occupied;
+    if !b0.active() {
+        target |= r0;
+    } else {
+        let hit = b0.lsb_idx();
+        target |= r0 ^ RAY[0][hit];
     }
+
+    // South (d = 1)
+    let r1 = RAY[1][sq];
+    let b1 = r1 & occupied;
+    if !b1.active() {
+        target |= r1;
+    } else {
+        let hit = b1.msb_idx();
+        target |= r1 ^ RAY[1][hit];
+    }
+
+    // East (d = 2)
+    let r2 = RAY[2][sq];
+    let b2 = r2 & occupied;
+    if !b2.active() {
+        target |= r2;
+    } else {
+        let hit = b2.lsb_idx();
+        target |= r2 ^ RAY[2][hit];
+    }
+
+    // West (d = 3)
+    let r3 = RAY[3][sq];
+    let b3 = r3 & occupied;
+    if !b3.active() {
+        target |= r3;
+    } else {
+        let hit = b3.msb_idx();
+        target |= r3 ^ RAY[3][hit];
+    }
+
     target & !own
 }
 
 /// Tính toán Bitboard các nước đi và ăn quân hợp lệ cho Pháo tại ô `from`.
 #[inline(always)]
 pub fn cannon(from: u8, occupied: Bitboard, enemy: Bitboard) -> Bitboard {
-    let mut target = Bitboard::empty();
     let sq = from as usize;
-    let mut d = 0;
-    while d < 4 {
-        let r = RAY[d][sq];
-        let block = r & occupied;
-        if !block.active() {
-            target |= r;
-        } else {
-            // Ngòi Pháo (Mount piece)
-            let mount = if d == 0 || d == 2 {
-                block.lsb().unwrap().index()
-            } else {
-                block.msb().unwrap().index()
-            };
-            let quiet = (r ^ RAY[d][mount]) ^ Bitboard::mask(Square(mount as u8));
-            target |= quiet;
+    let mut target = Bitboard::empty();
 
-            // Tìm quân đối phương nằm sau ngòi Pháo để ăn
-            let behind = RAY[d][mount] & occupied;
-            if behind.active() {
-                let victim = if d == 0 || d == 2 {
-                    behind.lsb().unwrap().index()
-                } else {
-                    behind.msb().unwrap().index()
-                };
-                let v = Square(victim as u8);
-                if enemy.test(v) {
-                    target.set(v);
-                }
+    // North (d = 0)
+    let r0 = RAY[0][sq];
+    let b0 = r0 & occupied;
+    if !b0.active() {
+        target |= r0;
+    } else {
+        let mount = b0.lsb_idx();
+        target |= (r0 ^ RAY[0][mount]) ^ Bitboard::mask(Square(mount as u8));
+        let behind = RAY[0][mount] & occupied;
+        if behind.active() {
+            let victim = Square(behind.lsb_idx() as u8);
+            if enemy.test(victim) {
+                target.set(victim);
             }
         }
-        d += 1;
     }
+
+    // South (d = 1)
+    let r1 = RAY[1][sq];
+    let b1 = r1 & occupied;
+    if !b1.active() {
+        target |= r1;
+    } else {
+        let mount = b1.msb_idx();
+        target |= (r1 ^ RAY[1][mount]) ^ Bitboard::mask(Square(mount as u8));
+        let behind = RAY[1][mount] & occupied;
+        if behind.active() {
+            let victim = Square(behind.msb_idx() as u8);
+            if enemy.test(victim) {
+                target.set(victim);
+            }
+        }
+    }
+
+    // East (d = 2)
+    let r2 = RAY[2][sq];
+    let b2 = r2 & occupied;
+    if !b2.active() {
+        target |= r2;
+    } else {
+        let mount = b2.lsb_idx();
+        target |= (r2 ^ RAY[2][mount]) ^ Bitboard::mask(Square(mount as u8));
+        let behind = RAY[2][mount] & occupied;
+        if behind.active() {
+            let victim = Square(behind.lsb_idx() as u8);
+            if enemy.test(victim) {
+                target.set(victim);
+            }
+        }
+    }
+
+    // West (d = 3)
+    let r3 = RAY[3][sq];
+    let b3 = r3 & occupied;
+    if !b3.active() {
+        target |= r3;
+    } else {
+        let mount = b3.msb_idx();
+        target |= (r3 ^ RAY[3][mount]) ^ Bitboard::mask(Square(mount as u8));
+        let behind = RAY[3][mount] & occupied;
+        if behind.active() {
+            let victim = Square(behind.msb_idx() as u8);
+            if enemy.test(victim) {
+                target.set(victim);
+            }
+        }
+    }
+
     target
 }
 

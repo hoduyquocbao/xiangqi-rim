@@ -15,7 +15,7 @@ use std::sync::Arc;
 use std::thread;
 use std::time::{Duration, Instant};
 
-use xiangrust::board::{Parser, Position, Serializer};
+use xiangrust::board::{Parser, Serializer};
 use xiangrust::book::Book;
 use xiangrust::gpu::{Batch, Device, Evaluable, Evaluator, Sample};
 use xiangrust::movegen::{legal, List};

@@ -44,5 +44,28 @@ impl Prune {
             _ => 0,
         }
     }
+
+    /// Tính độ sâu rút gọn cho ProbCut (Probability Cutoff): $(depth - 4).max(1)$.
+    #[inline(always)]
+    pub const fn probcut_depth(depth: i32) -> i32 {
+        if depth - 4 > 1 {
+            depth - 4
+        } else {
+            1
+        }
+    }
+
+    /// Biên độ nới rộng ProbCut Margin: 200 Centipawns.
+    #[inline(always)]
+    pub const fn probcut_margin() -> i32 {
+        200
+    }
+
+    /// Biên độ Singular Extension Margin: $depth \times 2$ Centipawns.
+    #[inline(always)]
+    pub const fn singular_margin(depth: i32) -> i32 {
+        depth * 2
+    }
 }
+
 

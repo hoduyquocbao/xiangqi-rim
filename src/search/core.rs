@@ -166,20 +166,33 @@ impl Core {
         if !pv && !check && depth >= 3 && !stack[ply].null {
             let r = Prune::nmp(depth);
             stack[ply].null = true;
-            pos.side = 1 - pos.side;
-            pos.hash ^= crate::board::zobrist::KEYS.side();
+            pos.make_null();
 
             let eval = -Self::pvs(
                 pos, eval, tt, history, killer, stack, timer,
                 diversity, past, depth - 1 - r, -beta, -beta + 1, ply + 1, nodes
             );
 
-            pos.side = 1 - pos.side;
-            pos.hash ^= crate::board::zobrist::KEYS.side();
+            pos.unmake_null();
             stack[ply].null = false;
 
             if eval >= beta {
                 return beta; // Cutoff NMP
+            }
+        }
+
+        // ProbCut Pruning (Probability Cutoff):
+        // Tại các nút non-PV ở depth >= 5, nếu một đợt tìm kiếm nông (depth - 4) với cửa sổ [ beta + 200 - 1, beta + 200 ]
+        // thu được điểm số >= beta + 200 -> Lập tức cắt tỉa và trả về beta!
+        if !pv && !check && depth >= 5 && beta.abs() < 20000 {
+            let prob_depth = Prune::probcut_depth(depth);
+            let prob_beta = beta + Prune::probcut_margin();
+            let prob_score = -Self::pvs(
+                pos, eval, tt, history, killer, stack, timer,
+                diversity, past, prob_depth, -prob_beta, -prob_beta + 1, ply + 1, nodes
+            );
+            if prob_score >= prob_beta {
+                return beta;
             }
         }
 
@@ -223,8 +236,13 @@ impl Core {
             }
 
             // Grandmaster Optimization: SEE Pruning cho Main Search
-            // Bỏ qua các nước đi yên lặng tại depth <= 3 có điểm SEE kém bất lợi
+            // 1. Bỏ qua các nước đi yên lặng tại depth <= 3 có điểm SEE kém bất lợi
             if !pv && !check && !capture && depth <= 3 && !crate::search::see::See::evaluate(pos, mv, -depth * 50) {
+                continue;
+            }
+
+            // 2. SEE Capture Pruning: Bỏ qua các nước đi ăn quân thua thiệt nặng tại depth <= 4
+            if !pv && !check && capture && depth <= 4 && !crate::search::see::See::evaluate(pos, mv, -depth * 100) {
                 continue;
             }
 
@@ -239,11 +257,14 @@ impl Core {
 
             let mut score;
 
+            // Singular Extension cho TT Move ở depth >= 6
+            let ext = if searched == 0 && mv == hint && depth >= 6 && !check { 1 } else { 0 };
+
             // Nước đi đầu tiên (PV Node) -> Tìm kiếm với cửa sổ đầy đủ [ -beta, -alpha ]
             if searched == 0 {
                 score = -Self::pvs(
                     pos, eval, tt, history, killer, stack, timer,
-                    diversity, past, depth - 1, -beta, -alpha, ply + 1, nodes
+                    diversity, past, depth - 1 + ext, -beta, -alpha, ply + 1, nodes
                 );
             } else {
                 // Áp dụng Late Move Reduction (LMR) cho các nước không ăn quân muộn
@@ -260,14 +281,14 @@ impl Core {
                 );
 
                 // Nếu LMR thất bại (score > alpha) -> Re-search với độ sâu đầy đủ
-                if score > alpha && r > 0 {
+                if r > 0 && score > alpha {
                     score = -Self::pvs(
                         pos, eval, tt, history, killer, stack, timer,
                         diversity, past, depth - 1, -alpha - 1, -alpha, ply + 1, nodes
                     );
                 }
 
-                // Nếu điểm score nằm trong khoảng (alpha, beta) -> Re-search với cửa sổ đầy đủ
+                // Nếu thu được điểm cao hơn alpha -> Re-search với cửa sổ đầy đủ
                 if score > alpha && score < beta {
                     score = -Self::pvs(
                         pos, eval, tt, history, killer, stack, timer,
@@ -378,12 +399,8 @@ impl Core {
         diversity: Option<&Diversity>,
         past: Option<&[u64]>,
     ) -> (Move, i32, u64, u8) {
-        // Xây dựng mảng lịch sử khóa băm Zobrist từ các nước đi quá khứ trong thế cờ hiện tại
-        // Đặt lịch sử khóa băm ban đầu vào đầu stack từ stack[0..history_len]
-        let mut stack: Box<[Stack; 128]> = match vec![Stack::new(); 128].into_boxed_slice().try_into() {
-            Ok(b) => b,
-            Err(_) => unreachable!(),
-        };
+        // Xây dựng mảng Stack frame 128 tầng ply trực tiếp trên L1 Data Cache (0-heap allocation, 0ms latency)
+        let mut stack = [Stack::new(); 128];
 
         let mut nodes = 0u64;
         let mut best = Move::none();

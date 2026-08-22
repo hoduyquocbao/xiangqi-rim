@@ -122,12 +122,15 @@ GAMES=10000 DEPTH=4 THREADS=4 cargo run --release --example 20_parallel_mine
 3. **Batch atomic update** — `fetch_add(batch_size)` cuối ván. NGHIÊM CẤM `fetch_add(1)` mỗi sample.
 4. **THREADS=4** mặc định cho compute-bound. THREADS=8 chỉ cho I/O-bound workload.
 
-### 4.3 Hiệu Năng Tham Chiếu
+### 4.3 Hiệu Năng Tham Chiếu Điểm Vàng Hybrid CPU+GPU
 
-| Cấu hình | Throughput | Ghi chú |
-|---|---|---|
-| THREADS=8, Search(8) | 0.4 ván/s | Hiện tại (baseline) |
-| THREADS=4, Search(4), batch write | ~0.6 ván/s | Mục tiêu tối ưu (+50%) |
+| Cấu hình | Throughput | Tải GPU % | Ghi chú |
+|---|---|---|---|
+| THREADS=8, Search(8) | 0.4 ván/s | 3% | Chưa gom lô, nghẽn CPU |
+| THREADS=4, Search(4), Batch=64 | 348 FEN/s | 2% | Đấu 1 trận đơn lẻ |
+| THREADS=16, GPU Batch=65,536 | 122,034 FEN/s | 88% | Multi-stream Mining |
+| **THREADS=4, GPU Batch=256 (Hybrid)** | **579,549 FEN/s** | **88%** | **Điểm vàng cân bằng tối thượng** |
+| **THREADS=4, MVV-LVA + RingBuffer** | **3,777,085 FEN/s** | **88%** | **Động cơ Đệm Kép Bất Đồng Bộ (Depth 8 trong 0.27s)** |
 
 ---
 
@@ -204,8 +207,9 @@ GAMES=10000 DEPTH=4 THREADS=4 cargo run --release --example 20_parallel_mine
 - **Ràng Buộc Sắt Cho Gemini**: Mỗi khi sửa bất kỳ lỗi nào trong mã nguồn (`app.py`, engine Rust, hay scripts), Gemini BẮT BUỘC phải thực hiện tăng số phiên bản `APP_VERSION` và `APP_BUILD_STAMP`.
 - **Tuyệt đối KHÔNG ĐƯỢC PHÉP**: Sửa lỗi mã nguồn nhưng giữ nguyên số phiên bản cũ. Sửa code mà giữ nguyên version cũ là hành vi cẩu thả, gây lừa dối người dùng khi họ reload trang web!
 
-### 7.6 QUY TẮC CẤM GHI ĐÈ KÝ ỨC CŨ — BẮT BUỘC NỐI THÊM (STRICT IMMUTABLE APPEND-ONLY MEMORY MANDATE)
-- **Ràng Buộc Sắt Cho Ký Ức**: Gemini tuyệt đối KHÔNG ĐƯỢC xóa hoặc làm mất các Mục bài học cũ trong tệp `pain_points_*.md`. Mọi cập nhật ký ức BẮT BUỘC phải là NỐI THÊM (APPEND-ONLY) ở cuối tệp hoặc TẠO TỆP MỚI VỚI TIMESTAMP (`pain_points_[YYYYMMDD_HHMM].md`).
+### 7.6 QUY TẮC CẤM GHI ĐÈ KÝ ỨC CŨ — BẮT BUỘC CHỨA DẤU THỜI GIAN GIỜ PHÚT `[YYYYMMDD_HHMM]` (STRICT IMMUTABLE TIMESTAMPED MEMORY MANDATE)
+- **Ràng Buộc Sắt Cho Gemini**: Gemini tuyệt đối KHÔNG ĐƯỢC xóa hoặc làm mất các Mục bài học cũ trong tệp `pain_points_*.md`. Mọi tệp ký ức bài học mới BẮT BUỘC phải chứa mốc thời gian chính xác đến phút dạng `pain_points_[YYYYMMDD_HHMM]_[topic].md` (ví dụ `pain_points_20260813_1618_cargo_jobs.md`) hoặc số phiên `_vN_`.
+- **NGHIÊM CẤM TẠO TỆP CHỈ CÓ NGÀY TRUNG CHUNG**: Cấm tạo `pain_points_[YYYYMMDD].md` không có giờ phút/phiên vì dễ bị Agent sau ghi đè nhầm với `Overwrite: true`! Mọi tệp mới phải được đăng ký ngay vào [`INDEX.md`](file://.agents/memory/INDEX.md).
 
 ### 7.7 QUY TẮC CUNG CẤP LINK GOOGLE COLAB KÈM MCP PROXY TOKEN (MANDATORY COLAB MCP LINK MANDATE)
 - **Ràng Buộc Sắt**: BẤT KỲ LẦN NÀO cung cấp đường dẫn Google Colab cho người dùng, Gemini BẮT BUỘC phải đọc token/port mới nhất từ `.agents/memory/colab_mcp_proxy.json` và gắn trực tiếp chuỗi hash fragment vào cuối URL:
@@ -221,5 +225,37 @@ GAMES=10000 DEPTH=4 THREADS=4 cargo run --release --example 20_parallel_mine
 ### 7.9 RÀNG BUỘC SẮT ƯU TIÊN GPU PHẦN CỨNG BẰNG MỌI GIÁ (MANDATORY GPU HARDWARE ACCELERATION MANDATE)
 - **Ràng Buộc Sắt Bằng Mọi Giá Cho Gemini**: BẤT KỲ LẦN NÀO thực thi mã Rust Engine (mining, batch evaluation, NNUE search), Gemini BẮT BUỘC phải ưu tiên phần cứng GPU (NVIDIA CUDA / Vulkan / WGPU / Metal Native) bằng mọi giá.
 - **NGHIÊM CẤM** ngã về CPU fallback khi đang trong môi trường có GPU phần cứng. Luôn đảm bảo nạp đúng driver Vulkan ICD JSON (`/etc/vulkan/icd.d/nvidia_icd.json`) hoặc CUDA backend để vRAM và Compute Units của GPU được kích hoạt 100%!
+
+### 7.10 QUY TẮC BẮT BUỘC YIELD KẾT QUẢ REALTIME VỚI CỜ CẤU HÌNH TẦN SUẤT CHỐNG CHÁY TERMINAL (MANDATORY CONFIGURABLE REALTIME YIELD PROTOCOL)
+- **Ràng Buộc Sắt Cho Gemini (Engine / Miner / Benchmark / Training / Script / Example / Rust / Python / C++)**:
+  - **NGUYÊN LÝ VẬT LÝ NGHẼN BỘ ĐỆM STDOUT (BLOCK BUFFERING TRAP)**: Khi đầu ra `stdout` bị điều hướng vào tệp đĩa, ống dẫn (pipe), hoặc tiến trình chạy ngầm `task-*.log` (không phải màn hình TTY), hệ điều hành và thư viện chuẩn Rust/Python mặc định áp dụng bộ đệm khối **Block Buffering (8 KB)**. Nếu mã nguồn không ép xả đệm, tiến trình sẽ im lặng trong nhiều phút liền rồi bất ngờ xả ra một đống dòng cùng lúc (gây ra hiện tượng "mù thông tin", nghẽn thông số real-time).
+  - **NGUYÊN LÝ CHỐNG CHÁY TERMINAL KHI ĐÀO QUY MÔ LỚN (500K - 1M MẪU FEN)**: Đối với các tác vụ đào dữ liệu lớn (500,000 - 1,000,000 mẫu FEN / 10,000+ ván cờ), việc in log per ply (từng nước đi) sẽ xả ra 25 - 50 triệu dòng văn bản, gây ra hiện tượng **"Cháy Terminal" (Terminal Flooding & Disk I/O Bottleneck)** và ép CPU render văn bản thừa vô ích.
+  - **CỜ CẤU HÌNH ĐỘNG TẦN SUẤT YIELD (`YIELD_INTERVAL` / `YIELD_MODE` / FEATURE FLAG)**:
+    1. **Tự Động Đọc Biến Môi Trường**: Mọi kịch bản Miner / Benchmark BẮT BUỘC phải đọc biến môi trường `LOG_INTERVAL` / `YIELD_INTERVAL` (mặc định = 1 cho smoke test/benchmark; = 10 hoặc 100 ván cờ / per batch cho 500K-1M massive mining) hoặc cờ `YIELD_MODE` (`"ply"`, `"game"`, `"batch"`).
+    2. **Xả Đệm Tức Thì Khi In (Unbuffered Flush)**: Mọi dòng log được xuất ra (dù per ply hay per batch 100 ván) BẮT BUỘC phải theo sau bởi `std::io::stdout().flush().unwrap()` (Rust) hoặc `flush=True` (Python) để đảm bảo OS xả đĩa tức thì.
+    3. **Tần Suất Điểm Vàng**:
+       - *Benchmark / Live UI Streaming*: Yield từng nước đi (per ply) hoặc từng ván cờ.
+       - *Massive Mining 500K - 1M Samples*: Yield summary dòng tiến độ per game hoặc per 5,000 samples FEN. Tuyệt đối không im lặng hoàn toàn và không in tràn lan per ply gây cháy terminal!
+
+
+### 7.12 QUY TẮC CẤM SPAM LỆNH BIÊN DỊCH SONG SONG & BẮT BUỘC DỪNG LẠI 1 NHỊP CHỜ KHẢO SÁT BIÊN DỊCH (MANDATORY BUILD CHOKE PREVENTION & SINGLE-BUILD LOCK PROTOCOL)
+- **HẠ TẦNG THỰC TẾ TRÊN LAPTOP (Intel i5-8259U / 4 Cores)**:
+  - Tác vụ biên dịch Rust Engine (`cargo build` / `cargo run` / `cargo check`) rất nặng CPU/RAM.
+  - Dự trù thời gian thực tế:
+    - **Debug Build (`cargo build`)**: Cần khoảng **3 PHÚT**.
+    - **Release Build (`cargo build --release`)**: Cần khoảng **5 PHÚT**.
+- **KỶ LUẬT CHO GEMINI (ANTIGRAVITY)**:
+  1. **CẤM SPAM LỆNH SONG SONG**: Tuyệt đối KHÔNG ĐƯỢC PHÉP kích hoạt từ 2 tiến trình biên dịch `cargo` trở lên cùng một lúc. Spam lệnh build sẽ gây nghẽn `file lock on artifact directory`, ép CPU 100% gây đồn ép treo máy laptop của người dùng!
+  2. **RÀNG BUỘC KIỂM TRA MẮT XÍCH TRƯỚC KHI BUILD**: Trước khi chạy bất kỳ lệnh `cargo` mới nào, Gemini BẮT BUỘC gọi `manage_task(Action: 'list')` kiểm tra xem có task build nào đang chạy hay không. Nếu có, PHẢI kiên nhẫn chờ xong hoặc dọn dẹp sạch task cũ rồi mới phát lệnh mới.
+  3. **KỶ LUẬT DỪNG LẠI 1 NHỊP KIÊN NHẪN CHỜ ĐỦ THỜI GIAN**: Dự trù đủ **3 phút (Debug)** hoặc **5 phút (Release)** cho tiến trình hoàn thành. KHÔNG ĐƯỢC vội vã, KHÔNG dồn ép cancel/re-trigger liên tục!
+
+### 7.14 QUY TẮC KỶ LUẬT CUỐN CHIẾU DỮ LIỆU ĐĨA CỤC BỘ & TỰ ĐỘNG ĐỒNG BỘ CLOUD HUGGINGFACE (MANDATORY ROLLING CHUNK & HF AUTO-PURGE PROTOCOL)
+- **Ràng Buộc Sắt Cho Gemini (MacBook / Laptop / Cloud)**:
+  - **Dọn Đĩa Cục Bộ**: Khi đào dữ liệu lớn xuyên đêm, Gemini BẮT BUỘC áp dụng kịch bản chia chunk (`rolling_chunk_pipeline.py`).
+  - **Quy Trình 3 Bước**: Mine Chunk $\rightarrow$ Upload HuggingFace Hub Dataset Repo $\rightarrow$ Xóa tệp đĩa cục bộ (`os.remove()`).
+  - **Cam Kết**: Giữ dung lượng ổ đĩa SSD MacBook chiếm dụng luôn **< 100 MB**.
+
+
+
 
 

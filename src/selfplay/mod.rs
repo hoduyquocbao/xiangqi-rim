@@ -9,6 +9,8 @@
 
 /// Module con `engine` điều phối tự đấu
 pub mod engine;
+/// Module con `miner` khai thác dữ liệu tự đấu đa luồng GPU
+pub mod miner;
 /// Module con `pgn` định dạng PGN và FEN
 pub mod pgn;
 /// Module con `stats` theo dõi chỉ số thống kê
@@ -16,5 +18,6 @@ pub mod stats;
 
 // Xuất bản công khai (re-export) các cấu trúc dữ liệu cốt lõi
 pub use engine::{Config, Match, Outcome, Runner, Side};
+pub use miner::Miner;
 pub use pgn::{Fen, Pgn};
 pub use stats::Stats;

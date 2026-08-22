@@ -1,0 +1,16 @@
+# ============================================================================
+# CẤU HÌNH GIA TỐC BIÊN DỊCH BỨT PHÁ TỐC ĐỘ CARGO & RUSTC (MAX PERFORMANCE)
+# ============================================================================
+# Tự động nhận diện số luồng CPU (nproc), kích hoạt target-cpu=native và bộ đệm Incremental.
+# ============================================================================
+
+[build]
+# Tự động nhận diện số luồng CPU hệ thống (nproc): 2 luồng trên Colab, 8 luồng trên MacBook (Tránh CPU Context Switch)
+# Ép rustc tối ưu trực tiếp cho tập lệnh CPU phần cứng native (AVX2 / FMA / SIMD)
+rustflags = ["-C", "target-cpu=native"]
+
+[env]
+# Bật cờ Cargo Incremental Compilation siêu tốc
+CARGO_INCREMENTAL = "1"
+# Thiết lập độ sâu bản ghi log Cargo
+RUST_BACKTRACE = "1"

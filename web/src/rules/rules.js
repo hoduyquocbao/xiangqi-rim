@@ -347,4 +347,40 @@ export function uciToMove(uci) {
   return { from, to };
 }
 
+// Kiểm tra Luật Trường Chiếu & Luật Lặp Cờ 3 Lần từ lịch sử các FEN ván cờ
+export function checkRepetition(fenHistory) {
+  if (!fenHistory || !Array.isArray(fenHistory) || fenHistory.length < 4) {
+    return { over: false, reason: null, winner: null };
+  }
+
+  const currentFen = fenHistory[fenHistory.length - 1];
+  if (!currentFen) return { over: false, reason: null, winner: null };
+
+  const parsedCurrent = parse(currentFen);
+  const currentTurn = parsedCurrent.turn;
+
+  // Đếm số lần xuất hiện của FEN hiện tại (trùng cả vị trí bàn cờ và lượt đi)
+  let count = 0;
+  for (let i = 0; i < fenHistory.length; i++) {
+    const f = fenHistory[i];
+    if (f && f.split(' ')[0] === currentFen.split(' ')[0] && f.split(' ')[1] === currentTurn) {
+      count += 1;
+    }
+  }
+
+  if (count >= 3) {
+    const isCheck = check(parsedCurrent.board, currentTurn);
+    if (isCheck) {
+      // Bên đang tới lượt bị chiếu -> Bên vừa di chuyển phạm luật Trường Chiếu -> Bị XỬ THUA!
+      const winner = currentTurn === 'w' ? 'red' : 'black';
+      return { over: true, reason: 'PERPETUAL_CHECK_LOSS', winner };
+    } else {
+      // Lặp cờ 3 lần nhàn -> Xử HÒA!
+      return { over: true, reason: 'DRAW_REPETITION_3FOLD', winner: 'draw' };
+    }
+  }
+
+  return { over: false, reason: null, winner: null };
+}
+
 

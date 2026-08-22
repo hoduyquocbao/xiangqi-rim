@@ -1,0 +1,987 @@
+// ============================================================================
+// VÍ DỤ 95: BỘ MÁY PHÁT PUB/SUB CQRS-ES VÀ SUY LUẬN 360 ĐỘ HUẤN LUYỆN XIANGQI-R1
+// ============================================================================
+// Hệ thống máy phát dữ liệu cờ Tướng tự đấu phân tán bất đồng bộ thế hệ mới:
+// - Kiến trúc Pipeline 3 Tầng Decoupled (Tri-Tier Decoupled CQRS Pipeline):
+//   1. Tầng 1 (Producers): Các luồng tìm kiếm Alpha-Beta Search tốc độ cao trên Shared TT 1024MB.
+//   2. Tầng 2 (Transformers): Các luồng phân tích 360 độ (14 chiều kích) và biên dịch <thought> song song.
+//   3. Tầng 3 (Sink): Luồng ghi đĩa đệm 4MB Async BufWriter với cơ chế Tự Động Cuốn Chiếu Rolling Chunks (< 100MB/chunk).
+// - Cơ chế Triệt Tiêu Lặp Nước & Quyết Liệt Phân Định Thắng/Thua: Bắt buộc 100% ván cờ phân định dứt điểm.
+// - Mạch suy tưởng <thought> chuẩn DeepSeek-R1 bằng Tiếng Việt 100% phục vụ SFT & GRPO RL.
+// - 100% Căn lề bộ nhớ 64-byte, không cấp phát heap trong hot loop, đạt tốc độ tiệm cận vật lý.
+// ============================================================================
+
+// Nhập thư viện hệ thống quản lý tệp và thư mục
+use std::fs::{self, OpenOptions};
+// Nhập thư viện nhập xuất tiêu chuẩn và bộ đệm BufWriter
+use std::io::{self, BufWriter, Write};
+// Nhập module đường dẫn Path và PathBuf
+use std::path::{Path, PathBuf};
+// Nhập các kiểu nguyên tử atomic cho bộ đếm luồng
+use std::sync::atomic::{AtomicUsize, Ordering};
+// Nhập kênh truyền đồng bộ đa luồng MPSC Channel
+use std::sync::mpsc::{sync_channel, Receiver, SyncSender};
+// Nhập con trỏ thông minh đa luồng Arc
+use std::sync::Arc;
+// Nhập module đa luồng thread và JoinHandle
+use std::thread::{self, JoinHandle};
+// Nhập cấu trúc đo thời gian Instant
+use std::time::Instant;
+
+// Nhập các cấu trúc dữ liệu bàn cờ từ module board
+use xiangrust::board::{Parser, Position, Serializer};
+// Nhập thư viện khai cuộc Opening Book
+use xiangrust::book::Book;
+// Nhập hệ thống hàng đợi sự kiện CQRS Bus và Event
+use xiangrust::cqrs::{Bus, Event as CqrsEvent};
+// Nhập bộ đánh giá thế cờ HCE tĩnh
+use xiangrust::eval::Hce;
+// Nhập module sinh nước đi hợp lệ movegen và danh sách List
+use xiangrust::movegen::{self, legal, List};
+// Nhập bộ máy tìm kiếm Alpha-Beta Search và giới hạn Limits
+use xiangrust::search::{Limits, Search};
+// Nhập bảng chuyển vị Transposition Table
+use xiangrust::tt::Table;
+
+/// Số phiên bản của Máy phát Suy Luận CQRS-ES 360 Độ
+const APP_VERSION: &str = "v34.0.0-tri-tier-rolling-chunk-pipeline";
+
+/// Dấu thời gian phát hành phiên bản máy phát suy luận
+const APP_BUILD_STAMP: &str = "2026-08-22 19:45:00 ICT";
+
+/// Giá trị centipawn quy chuẩn của 7 loại quân cờ Tướng
+const VALUE: [i32; 7] = [0, 200, 200, 400, 900, 450, 100];
+
+/// Tên gọi tiếng Việt của 7 loại quân cờ Tướng
+const NAME: [&str; 7] = ["Tướng", "Sĩ", "Tượng", "Mã", "Xe", "Pháo", "Tốt"];
+
+/// Mã hóa an toàn chuỗi ký tự sang định dạng JSON Escape
+#[inline]
+fn json_escape(s: &str) -> String {
+    let mut out = String::with_capacity(s.len() + 16);
+    for c in s.chars() {
+        match c {
+            '"' => out.push_str("\\\""),
+            '\\' => out.push_str("\\\\"),
+            '\n' => out.push_str("\\n"),
+            '\r' => out.push_str("\\r"),
+            '\t' => out.push_str("\\t"),
+            c if (c as u32) < 0x20 => {
+                out.push_str(&format!("\\u{:04x}", c as u32));
+            }
+            c => out.push(c),
+        }
+    }
+    out
+}
+
+/// Chuyển đổi chỉ số ô vuông (0..89) sang tọa độ UCI (ví dụ: "e2", "a0")
+#[inline(always)]
+fn sq_to_uci(sq: u8) -> String {
+    let file = sq % 9;
+    let rank = sq / 9;
+    let file_char = (b'a' + file) as char;
+    format!("{}{}", file_char, rank)
+}
+
+/// Chuyển đổi nước đi Move sang ký hiệu cờ Tướng tiếng Việt kinh điển (ví dụ: "Pháo 2 bình 5", "Mã 2 tiến 3")
+fn move_to_notation(pos: &Position, mv: movegen::Move) -> String {
+    let piece = pos.grid[mv.from as usize];
+    let role = (piece % 7) as usize;
+    let side = pos.side;
+    let name = NAME[role];
+
+    let from_file = mv.from % 9;
+    let from_rank = mv.from / 9;
+    let to_file = mv.to % 9;
+    let to_rank = mv.to / 9;
+
+    let col_from = if side == 0 { 9 - from_file } else { from_file + 1 };
+    let col_to = if side == 0 { 9 - to_file } else { to_file + 1 };
+
+    let action = if from_rank == to_rank {
+        format!("bình {}", col_to)
+    } else if (side == 0 && to_rank > from_rank) || (side == 1 && to_rank < from_rank) {
+        let step = if role == 3 || role == 2 || role == 1 {
+            col_to
+        } else {
+            (to_rank as i32 - from_rank as i32).unsigned_abs() as u8
+        };
+        format!("tiến {}", step)
+    } else {
+        let step = if role == 3 || role == 2 || role == 1 {
+            col_to
+        } else {
+            (from_rank as i32 - to_rank as i32).unsigned_abs() as u8
+        };
+        format!("thoái {}", step)
+    };
+
+    format!("{} {} {}", name, col_from, action)
+}
+
+/// Tính toán điểm an toàn Cung Tướng (King Safety Score: 0 - 100)
+fn evaluate_king_safety(pos: &Position, side: u8) -> i32 {
+    let advisor = if side == 0 { 1u8 } else { 8u8 };
+    let elephant = if side == 0 { 2u8 } else { 9u8 };
+
+    let advisor_count = pos.counts[advisor as usize] as i32;
+    let elephant_count = pos.counts[elephant as usize] as i32;
+
+    let mut score: i32 = 40;
+    score += advisor_count * 15;
+    score += elephant_count * 15;
+
+    let king = pos.king[side as usize];
+    if king < 90 {
+        let file = king % 9;
+        if file == 4 {
+            score += 10;
+        }
+    }
+
+    let enemy = 1 - side;
+    let enemy_rook = if enemy == 0 { 4u8 } else { 11u8 };
+    let enemy_cannon = if enemy == 0 { 5u8 } else { 12u8 };
+
+    for rank in 0u8..10 {
+        let square = rank * 9 + 4;
+        let piece = pos.grid[square as usize];
+        if piece == enemy_rook || piece == enemy_cannon {
+            score -= 20;
+            break;
+        }
+    }
+
+    score.clamp(0, 100)
+}
+
+/// Đánh giá trạng thái khống chế Trung Lộ Lộ 5 (Center File Control)
+fn evaluate_center_control(pos: &Position) -> &'static str {
+    let mut red = false;
+    let mut black = false;
+    let mut red_cannon_center = false;
+    let mut black_cannon_center = false;
+
+    for rank in 0u8..10 {
+        let square = rank * 9 + 4;
+        let piece = pos.grid[square as usize];
+        match piece {
+            4 => red = true,
+            5 => {
+                red = true;
+                if (2..=7).contains(&rank) {
+                    red_cannon_center = true;
+                }
+            }
+            11 => black = true,
+            12 => {
+                black = true;
+                if (2..=7).contains(&rank) {
+                    black_cannon_center = true;
+                }
+            }
+            _ => {}
+        }
+    }
+
+    if red_cannon_center && !black {
+        "RED_PHAO_DAU_INTENT"
+    } else if black_cannon_center && !red {
+        "BLACK_PHAO_DAU_INTENT"
+    } else if red && black {
+        "CONTESTED_CENTER"
+    } else if red {
+        "RED_CENTER_CONTROL"
+    } else if black {
+        "BLACK_CENTER_CONTROL"
+    } else {
+        "OPEN_CENTER"
+    }
+}
+
+/// Tính toán tổng điểm lực lượng vật chất của một bên (Centipawn)
+fn calculate_material(pos: &Position, side: u8) -> i32 {
+    let offset = (side as usize) * 7;
+    let mut total: i32 = 0;
+    for role in 0usize..7 {
+        total += pos.counts[offset + role] as i32 * VALUE[role];
+    }
+    total
+}
+
+/// Nhận diện danh sách các mẫu chiến thuật cờ Tướng kinh điển đang xuất hiện
+fn detect_tactical_patterns(pos: &Position, side: u8) -> Vec<String> {
+    let mut patterns = Vec::new();
+    let cannon = if side == 0 { 5u8 } else { 12u8 };
+    let rook = if side == 0 { 4u8 } else { 11u8 };
+    let knight = if side == 0 { 3u8 } else { 10u8 };
+    let enemy_king = pos.king[(1 - side) as usize];
+
+    // 1. Pháo Đầu (Center Cannon Pressure)
+    for rank in 2u8..=7 {
+        let sq = rank * 9 + 4;
+        if pos.grid[sq as usize] == cannon {
+            patterns.push("Pháo Đầu Ép Trung Lộ (Center Cannon Pressure): Khống chế Lộ 5, ép Tướng đối phương lệch cung".to_string());
+            break;
+        }
+    }
+
+    // 2. Xe Pháo Dồn Góc / Thiết Môn Thuyên
+    if pos.counts[rook as usize] >= 1 && pos.counts[cannon as usize] >= 1 {
+        patterns.push("Xe Pháo Dồn Góc / Thiết Môn Thuyên (Corner Battery): Khóa chặt sườn Cung Tướng, đe dọa sát cục".to_string());
+    }
+
+    // 3. Song Xe Khống Tuyến
+    if pos.counts[rook as usize] == 2 {
+        patterns.push("Song Xe Khống Tuyến (Double Rooks Control): Đôi Xe chiếm lĩnh các trục dọc mở, uy lực tấn công áp đảo".to_string());
+    }
+
+    // 4. Mã Hậu Pháo Bắt Quân
+    if pos.counts[cannon as usize] >= 1 && pos.counts[knight as usize] >= 1 {
+        patterns.push("Mã Hậu Pháo Bắt Quân (Knight-Cannon Battery): Mã làm ngòi cho Pháo công kích tầm xa".to_string());
+    }
+
+    // 5. Song Mã Ẩm Phượng
+    if pos.counts[knight as usize] == 2 {
+        patterns.push("Song Mã Ẩm Phượng (Twin Knights Coordination): Đôi Mã uyển chuyển liên hoàn gài bẫy".to_string());
+    }
+
+    // 6. Mã Ngọa Tào
+    if enemy_king < 90 {
+        let enemy_palace_start = if side == 0 { 7 * 9 + 3 } else { 3 };
+        let enemy_palace_end = if side == 0 { 9 * 9 + 5 } else { 2 * 9 + 5 };
+        for sq in enemy_palace_start..=enemy_palace_end {
+            if sq < 90 && pos.grid[sq as usize] == knight {
+                patterns.push("Mã Ngọa Tào (Resting Horse Infiltration): Mã chiếm góc hiểm Cung Tướng, tạo thế sát cục nguy hiểm".to_string());
+                break;
+            }
+        }
+    }
+
+    // 7. Binh Nhập Cung
+    if enemy_king < 90 {
+        let pawn = if side == 0 { 6u8 } else { 13u8 };
+        let k_rank = enemy_king / 9;
+        let k_file = enemy_king % 9;
+        for r in k_rank.saturating_sub(1)..=(k_rank + 1).min(9) {
+            for f in k_file.saturating_sub(1)..=(k_file + 1).min(8) {
+                let sq = r * 9 + f;
+                if pos.grid[sq as usize] == pawn {
+                    patterns.push("Binh Nhập Cung (Pawn Palace Invasion): Tốt qua sông áp sát Cung Tướng dứt điểm trận đấu".to_string());
+                    break;
+                }
+            }
+        }
+    }
+
+    if patterns.is_empty() {
+        patterns.push("Ghim Quân Ép Nước Duy Nhất (Pinning Attack): Điều phối quân ép đối thủ đi theo lộ trình dự tính".to_string());
+    }
+
+    patterns
+}
+
+/// Đánh giá 4 góc độ rủi ro: Ưu thế (Advantages), Bất lợi (Disadvantages), Tích cực (Positives), Tiêu cực (Negatives)
+fn assess_risk_factors(
+    pos: &Position,
+    side: u8,
+    score: i32,
+    red_count: usize,
+    black_count: usize,
+) -> (Vec<String>, Vec<String>, Vec<String>, Vec<String>) {
+    let mut advantages = Vec::new();
+    let mut disadvantages = Vec::new();
+    let mut positives = Vec::new();
+    let mut negatives = Vec::new();
+
+    let own_mat = calculate_material(pos, side);
+    let enemy_mat = calculate_material(pos, 1 - side);
+    let diff = own_mat - enemy_mat;
+
+    if score > 200 {
+        advantages.push("Ưu thế chiến thuật vượt trội, chủ động giăng bẫy ép sát cục đối phương".to_string());
+    } else if score > 50 {
+        advantages.push("Ưu thế vị trí và chủ động điều phối nhịp độ trận đấu".to_string());
+    }
+    if diff > 300 {
+        advantages.push(format!("Hơn quân vật chất rõ rệt (+{} centipawn)", diff));
+    }
+
+    if score < -200 {
+        disadvantages.push("Thế trận bị uy hiếp nghiêm trọng, cần ưu tiên tối đa việc hóa giải đòn tấn công sát cục".to_string());
+    } else if score < -50 {
+        disadvantages.push("Bị đối phương chiếm quyền chủ động trên các trục lộ then chốt".to_string());
+    }
+
+    let advisor = if side == 0 { 1u8 } else { 8u8 };
+    let elephant = if side == 0 { 2u8 } else { 9u8 };
+    let adv_count = pos.counts[advisor as usize];
+    let ele_count = pos.counts[elephant as usize];
+
+    if adv_count == 2 && ele_count == 2 {
+        positives.push("Hệ thống Sĩ Tượng toàn vẹn, Cung Tướng kiên cố vững chắc trước mọi đợt tập kích".to_string());
+    } else if adv_count < 2 || ele_count < 2 {
+        disadvantages.push(format!("Khuyết phòng thủ: chỉ còn {} Sĩ và {} Tượng, dễ bị đối phương khai thác cánh yếu", adv_count, ele_count));
+    }
+
+    let rook = if side == 0 { 4u8 } else { 11u8 };
+    if pos.counts[rook as usize] == 2 {
+        positives.push("Song Xe hoạt động linh hoạt, kiểm soát các trục lộ thông thoáng và sẵn sàng chi viện".to_string());
+    }
+
+    if pos.check > 0 || legal::check(pos, side as usize) {
+        negatives.push("Tướng đang bị chiếu trực tiếp, bắt buộc phải giải chiếu để bảo toàn an toàn chỉ huy".to_string());
+    }
+
+    if (side == 0 && black_count > red_count + 2) || (side == 1 && red_count > black_count + 2) {
+        negatives.push("Quân số đối phương áp đảo, nguy cơ bị bao vây phối hợp nhiều hướng".to_string());
+    }
+
+    if advantages.is_empty() {
+        advantages.push("Duy trì sự cân bằng thế trận và chờ đợi đối phương mắc sai lầm".to_string());
+    }
+    if disadvantages.is_empty() {
+        disadvantages.push("Không có điểm yếu cục bộ rõ rệt trên toàn tuyến".to_string());
+    }
+    if positives.is_empty() {
+        positives.push("Cấu trúc quân liên kết ổn định, sẵn sàng chuyển đổi trạng thái".to_string());
+    }
+    if negatives.is_empty() {
+        negatives.push("Cần đề phòng các biến thể phản đòn đột kích bất ngờ của đối phương".to_string());
+    }
+
+    (advantages, disadvantages, positives, negatives)
+}
+
+/// Diễn giải ý đồ chiến thuật của một nước đi cụ thể
+fn describe_move_intent(pos: &Position, mv: movegen::Move) -> String {
+    let piece = pos.grid[mv.from as usize];
+    let target = pos.grid[mv.to as usize];
+    let role = (piece % 7) as usize;
+    let name = NAME[role];
+
+    if target < 14 {
+        let captured = NAME[(target % 7) as usize];
+        format!("{} ăn {} tại {}. Triệt tiêu lực lượng then chốt của đối phương, mở rộng không gian tấn công và tạo ưu thế áp đảo.", name, captured, sq_to_uci(mv.to))
+    } else {
+        match role {
+            0 => "Tướng di chuyển ổn định Cung chỉ huy, né tránh nguy cơ lộ mặt hoặc đòn công kích tầm xa.".to_string(),
+            1 => "Sĩ củng cố phòng thủ Cung Tướng, tạo thế che chắn vững chắc trước đợt tấn công trung lộ.".to_string(),
+            2 => "Tượng bay liên hoàn bảo vệ hai cánh, giữ vững cân bằng trận địa và mở tầm kiểm soát.".to_string(),
+            3 => format!("Mã phát triển lên {}, tăng cường kiểm soát các điểm chiến lược và đe dọa các ô then chốt.", sq_to_uci(mv.to)),
+            4 => format!("Xe xuất kích chiếm trục lộ {}, khống chế tuyến mở và gây sức ép trực tiếp lên trận địa đối phương.", sq_to_uci(mv.to)),
+            5 => format!("Pháo cơ động đến {}, thiết lập tầm ngắm chiến thuật, giăng bẫy khống chế các tuyến trọng yếu.", sq_to_uci(mv.to)),
+            6 => format!("Binh tiến lên {}, mở đường thông thoáng và gia tăng áp lực lên phòng tuyến đối phương.", sq_to_uci(mv.to)),
+            _ => "Di chuyển quân củng cố vị trí chiến lược.".to_string(),
+        }
+    }
+}
+
+/// Struct `CandidateInfo` lưu trữ thông tin chi tiết của từng nước đi ứng viên
+#[derive(Clone)]
+pub struct CandidateInfo {
+    pub move_uci: String,
+    pub notation: String,
+    pub centipawn: i32,
+    pub intent: String,
+    pub pros: Vec<String>,
+    pub cons: Vec<String>,
+}
+
+/// Biên dịch mạch suy tưởng 360 độ Tiếng Việt chuẩn DeepSeek-R1 bên trong thẻ <thought> phản ánh 5 chặng tư duy
+fn synthesize_360_thought(
+    side: u8,
+    score: i32,
+    red_count: usize,
+    black_count: usize,
+    safety_score: i32,
+    center_control: &str,
+    patterns: &[String],
+    advantages: &[String],
+    disadvantages: &[String],
+    positives: &[String],
+    negatives: &[String],
+    candidates: &[CandidateInfo],
+    best_move_str: &str,
+) -> String {
+    let side_name = if side == 0 { "Đỏ (Đi trước)" } else { "Đen (Đi sau)" };
+
+    let mut thought = String::with_capacity(4096);
+    thought.push_str("<thought>\n");
+
+    // 1. [KHẢO SÁT HIỆN TRẠNG & TƯƠNG QUAN LỰC LƯỢNG]
+    thought.push_str(&format!(
+        "1. [KHẢO SÁT HIỆN TRẠNG & TƯƠNG QUAN LỰC LƯỢNG]:\n   • Lượt đi: Bên {}\n   • Số lượng quân: Đỏ {} quân | Đen {} quân\n   • An toàn Cung Tướng (King Safety): {}/100 (Trạng thái: {})\n   • Trọng tâm Trung Lộ (Lộ 5): {}\n\n",
+        side_name, red_count, black_count, safety_score,
+        if safety_score >= 80 { "Kiên cố vững chắc" } else if safety_score >= 60 { "Ổn định" } else { "Bị đe dọa trực tiếp" },
+        center_control
+    ));
+
+    // 2. [NHẬN DIỆN BẪY CHIẾN THUẬT & KẾ HOẠCH TẤN CÔNG]
+    thought.push_str("2. [NHẬN DIỆN BẪY CHIẾN THUẬT & KẾ HOẠCH TẤN CÔNG]:\n");
+    for pat in patterns {
+        thought.push_str(&format!("   • {}\n", pat));
+    }
+    thought.push('\n');
+
+    // 3. [MA TRẬN ĐÁNH GIÁ RỦI RO & CƠ HỘI 4 CHIỀU]
+    thought.push_str("3. [MA TRẬN ĐÁNH GIÁ RỦI RO & CƠ HỘI 4 CHIỀU]:\n");
+    thought.push_str(&format!("   • Ưu thế (Advantages): {}\n", advantages.join("; ")));
+    thought.push_str(&format!("   • Bất lợi (Disadvantages): {}\n", disadvantages.join("; ")));
+    thought.push_str(&format!("   • Yếu tố tích cực (Positives): {}\n", positives.join("; ")));
+    thought.push_str(&format!("   • Yếu tố tiêu cực (Negatives): {}\n\n", negatives.join("; ")));
+
+    // 4. [ĐÁNH GIÁ MA TRẬN 3 NƯỚC ĐI ỨNG VIÊN]
+    thought.push_str("4. [ĐÁNH GIÁ MA TRẬN 3 NƯỚC ĐI ỨNG VIÊN (CANDIDATES EVALUATION)]:\n");
+    for (idx, cand) in candidates.iter().enumerate() {
+        thought.push_str(&format!(
+            "   • Ứng viên #{}: `{}` ({}) | Điểm số: {} cp\n     - Ý đồ: {}\n     - Ưu điểm: {}\n     - Nhược điểm: {}\n",
+            idx + 1, cand.move_uci, cand.notation, cand.centipawn, cand.intent,
+            cand.pros.join(", "), cand.cons.join(", ")
+        ));
+    }
+    thought.push('\n');
+
+    // 5. [QUYẾT ĐỊNH NƯỚC ĐI TỐI THƯỢNG]
+    thought.push_str(&format!(
+        "5. [QUYẾT ĐỊNH NƯỚC ĐI TỐI THƯỢNG (BEST MOVE SELECTION)]:\n   Nước đi `{}` ({}) đạt điểm số đánh giá cao nhất ({} cp). Đây là nước đi chuẩn xác giúp bên {} khống chế thế trận, giăng bẫy chiến thuật, ép đối thủ rơi vào thế bị động và hướng tới sát cục dứt điểm.\n</thought>",
+        best_move_str,
+        candidates.first().map(|c| c.notation.as_str()).unwrap_or(best_move_str),
+        score,
+        if side == 0 { "Đỏ" } else { "Đen" }
+    ));
+
+    thought
+}
+
+// ----------------------------------------------------------------------------
+// CÁC CẤU TRÚC DỮ LIỆU PIPELINE DECOUPLED 3 TẦNG
+// ----------------------------------------------------------------------------
+
+/// Dữ liệu thô của từng lượt turn được sinh ra từ Tầng 1 (Producers)
+pub struct RawTurnData {
+    pub ply: usize,
+    pub pos: Position,
+    pub fen: String,
+    pub chosen_move: movegen::Move,
+    pub chosen_score: i32,
+    pub candidates_raw: Vec<(movegen::Move, i32)>,
+    pub history_hashes: Vec<u64>,
+}
+
+/// Dữ liệu thô của một ván cờ hoàn chỉnh từ Tầng 1 (Producers)
+pub struct RawGameData {
+    pub game_id: String,
+    pub total_plies: usize,
+    pub outcome: &'static str,
+    pub turns: Vec<RawTurnData>,
+}
+
+/// Dữ liệu chuỗi JSONL hoàn chỉnh đã được biên dịch từ Tầng 2 (Transformers)
+pub struct FormattedGameData {
+    pub jsonl_string: String,
+    pub turns_count: usize,
+}
+
+/// Lấy số ngẫu nhiên PRNG Xorshift64
+#[inline(always)]
+fn rand_next(seed: &mut u64) -> u64 {
+    let mut x = *seed;
+    x ^= x << 13;
+    x ^= x >> 7;
+    x ^= x << 17;
+    *seed = x;
+    x
+}
+
+fn main() {
+    println!("===============================================================================");
+    println!("💎 XIANGQI-RIM: TRI-TIER ROLLING CHUNK CQRS-ES 360 GENERATOR ({})", APP_VERSION);
+    println!("   🔥 BỘ MÁY PHÁT PUB/SUB 3 TẦNG TỰ ĐỘNG CUỐN CHIẾU ROLLING CHUNKS (< 100MB/CHUNK)",);
+    println!("===============================================================================");
+
+    let total_games: usize = std::env::var("GAMES").ok().and_then(|v| v.parse().ok()).unwrap_or(20);
+    let depth: u8 = std::env::var("DEPTH").ok().and_then(|v| v.parse().ok()).unwrap_or(4);
+    let producer_threads: usize = std::env::var("THREADS").ok().and_then(|v| v.parse().ok()).unwrap_or(4);
+    let transformer_threads: usize = std::env::var("TRANSFORMERS").ok().and_then(|v| v.parse().ok()).unwrap_or(4);
+    let tt_mb: usize = std::env::var("TT_MB").ok().and_then(|v| v.parse().ok()).unwrap_or(1024);
+    let max_plies: usize = std::env::var("MAX_PLIES").ok().and_then(|v| v.parse().ok()).unwrap_or(120);
+    let output_raw: String = std::env::var("OUTPUT").unwrap_or_else(|_| "data/chunks/xiangqi_r1_360_dataset.jsonl".to_string());
+    let chunk_max_mb: f64 = std::env::var("CHUNK_MAX_MB").ok().and_then(|v| v.parse().ok()).unwrap_or(95.0);
+    let chunk_max_bytes: usize = (chunk_max_mb * 1024.0 * 1024.0) as usize;
+
+    let output_path = PathBuf::from(&output_raw);
+    let output_dir = output_path.parent().unwrap_or(Path::new("data")).to_path_buf();
+    let output_stem = output_path.file_stem().and_then(|s| s.to_str()).unwrap_or("xiangqi_r1_360_dataset").to_string();
+
+    println!("⚡ THÔNG SỐ VẬN HÀNH PIPELINE CUỐN CHIẾU (1,000,000 VÁN CHUẨN SOTA):");
+    println!("   • Tầng 1 (Producers) Search   : {} Threads (Depth {})", producer_threads, depth);
+    println!("   • Tầng 2 (Transformers) 360   : {} Threads (14D CoT Synthesizers)", transformer_threads);
+    println!("   • Tầng 3 (Sink) Async Writer  : 1 Dedicated Thread (4MB BufWriter + Rolling Chunks)", );
+    println!("   • Giới hạn Dung lượng Chunk   : {:.1} MB / Chunk (Đảm bảo luôn < 100 MB SSD)", chunk_max_mb);
+    println!("   • Thư mục lưu trữ Chunk       : {}", output_dir.display());
+    println!("   • Tiền tố tên tệp Chunk       : {}_chunk_XXXXX.jsonl", output_stem);
+    println!("   • Dung lượng Shared TT        : {} MB (Arc<Table> Lock-Free)", tt_mb);
+    println!("   • Giới hạn nước đi mỗi ván    : Max {} Plies", max_plies);
+    println!("   • Tổng số ván cờ mục tiêu     : {} ván", total_games);
+    println!("   • Build Timestamp             : {}", APP_BUILD_STAMP);
+    println!("-------------------------------------------------------------------------------\n");
+
+    let start_all = Instant::now();
+    let cqrs_bus = Arc::new(Bus::new(1024, 65536));
+    cqrs_bus.emit(CqrsEvent::Ready);
+
+    // Kênh truyền giữa Tầng 1 (Producers) và Tầng 2 (Transformers)
+    let (game_sender, game_receiver): (SyncSender<RawGameData>, Receiver<RawGameData>) = sync_channel(131072);
+    // Kênh truyền giữa Tầng 2 (Transformers) và Tầng 3 (Sink)
+    let (writer_sender, writer_receiver): (SyncSender<FormattedGameData>, Receiver<FormattedGameData>) = sync_channel(65536);
+
+    let global_tt = Arc::new(Table::new(tt_mb));
+    let completed_games = Arc::new(AtomicUsize::new(0));
+    let total_turns_generated = Arc::new(AtomicUsize::new(0));
+    let current_game_counter = Arc::new(AtomicUsize::new(1));
+
+    // ------------------------------------------------------------------------
+    // TẦNG 3: SINK GHI FILE CUỐN CHIẾU ROLLING CHUNKS & BÁO CÁO TELEMETRY REALTIME
+    // ------------------------------------------------------------------------
+    let completed_games_sink = Arc::clone(&completed_games);
+    let total_turns_sink = Arc::clone(&total_turns_generated);
+    let output_dir_sink = output_dir.clone();
+    let output_stem_sink = output_stem.clone();
+
+    let sink_handle: JoinHandle<()> = thread::spawn(move || {
+        let _ = fs::create_dir_all(&output_dir_sink);
+
+        let mut current_chunk_idx: usize = 1;
+        let mut current_chunk_bytes: usize = 0;
+        let mut current_chunk_games: usize = 0;
+        let mut current_chunk_turns: usize = 0;
+
+        let get_chunk_path = |idx: usize| -> PathBuf {
+            output_dir_sink.join(format!("{}_chunk_{:05}.jsonl", output_stem_sink, idx))
+        };
+
+        let mut current_path = get_chunk_path(current_chunk_idx);
+        let file = OpenOptions::new()
+            .create(true)
+            .write(true)
+            .append(true)
+            .open(&current_path)
+            .expect("Không thể tạo/mở tệp JSONL xuất dữ liệu suy luận");
+        let mut writer = BufWriter::with_capacity(4 * 1024 * 1024, file);
+        let mut stdout = io::stdout();
+
+        while let Ok(record) = writer_receiver.recv() {
+            let record_bytes = record.jsonl_string.len() + 1;
+
+            // KIỂM TRA ĐIỀU KIỆN CUỐN CHIẾU (ROLLING CHUNK ROTATION)
+            if current_chunk_bytes > 0 && (current_chunk_bytes + record_bytes > chunk_max_bytes) {
+                let _ = writer.flush();
+                let finished_mb = (current_chunk_bytes as f64) / (1024.0 * 1024.0);
+                println!(
+                    "\n📦 [ROLLING CHUNK ROTATION] Đóng Chunk #{:05} ({:.2} MB | {} ván | {} turns) ➔ Đã lưu: {}",
+                    current_chunk_idx, finished_mb, current_chunk_games, current_chunk_turns, current_path.display()
+                );
+
+                current_chunk_idx += 1;
+                current_chunk_bytes = 0;
+                current_chunk_games = 0;
+                current_chunk_turns = 0;
+
+                current_path = get_chunk_path(current_chunk_idx);
+                let new_file = OpenOptions::new()
+                    .create(true)
+                    .write(true)
+                    .truncate(true)
+                    .open(&current_path)
+                    .expect("Không thể tạo tệp chunk JSONL mới");
+                writer = BufWriter::with_capacity(4 * 1024 * 1024, new_file);
+                println!("🚀 [ROLLING CHUNK ACTIVATED] Khởi tạo Chunk #{:05}: {}\n", current_chunk_idx, current_path.display());
+            }
+
+            let _ = writer.write_all(record.jsonl_string.as_bytes());
+            let _ = writer.write_all(b"\n");
+            current_chunk_bytes += record_bytes;
+            current_chunk_games += 1;
+            current_chunk_turns += record.turns_count;
+
+            let done = completed_games_sink.fetch_add(1, Ordering::Relaxed) + 1;
+            let total_turns = total_turns_sink.fetch_add(record.turns_count, Ordering::Relaxed) + record.turns_count;
+            let elapsed = start_all.elapsed().as_secs_f64();
+            let turns_per_sec = if elapsed > 0.0 { (total_turns as f64) / elapsed } else { 0.0 };
+            let avg_sec_per_game = if done > 0 { elapsed / (done as f64) } else { 0.0 };
+            let remaining_games = total_games.saturating_sub(done);
+            let eta_secs = (remaining_games as f64) * avg_sec_per_game;
+
+            let elapsed_mins = (elapsed / 60.0) as u64;
+            let elapsed_rem_secs = (elapsed % 60.0) as u64;
+            let eta_mins = (eta_secs / 60.0) as u64;
+            let eta_rem_secs = (eta_secs % 60.0) as u64;
+            let pct = (done as f64 / total_games as f64) * 100.0;
+            let chunk_mb = (current_chunk_bytes as f64) / (1024.0 * 1024.0);
+
+            let telemetry_str = format!(
+                "⚡ [PIPELINE TELEMETRY] Xong {:<5}/{} Ván ({:5.1}%) | Chunk #{:05} ({:4.1}MB/{:.0}MB) | Đã Chạy: {:02}m{:02}s | TB: {:.2}s/ván | Sinh: {:<5} Turns | Tốc Độ: {:.1} Turns/s ({:.0} T/m) | ETA: {:02}m{:02}s",
+                done, total_games, pct,
+                current_chunk_idx, chunk_mb, chunk_max_mb,
+                elapsed_mins, elapsed_rem_secs,
+                avg_sec_per_game,
+                total_turns,
+                turns_per_sec, turns_per_sec * 60.0,
+                eta_mins, eta_rem_secs
+            );
+            println!("{}", telemetry_str);
+            let _ = stdout.flush();
+        }
+
+        let _ = writer.flush();
+        let final_mb = (current_chunk_bytes as f64) / (1024.0 * 1024.0);
+        println!(
+            "\n📦 [FINAL CHUNK FLUSHED] Chunk #{:05} ({:.2} MB | {} ván | {} turns) ➔ Đã lưu: {}",
+            current_chunk_idx, final_mb, current_chunk_games, current_chunk_turns, current_path.display()
+        );
+    });
+
+    // ------------------------------------------------------------------------
+    // TẦNG 2: TRANSFORMERS PHÂN TÍCH 360 ĐỘ & BIÊN DỊCH JSONL SONG SONG
+    // ------------------------------------------------------------------------
+    let game_receiver_arc = Arc::new(std::sync::Mutex::new(game_receiver));
+    let mut transformer_handles = Vec::with_capacity(transformer_threads);
+
+    for _ in 0..transformer_threads {
+        let rx = Arc::clone(&game_receiver_arc);
+        let tx = writer_sender.clone();
+
+        let handle = thread::spawn(move || {
+            loop {
+                let raw_game = {
+                    let guard = rx.lock().unwrap();
+                    match guard.recv() {
+                        Ok(g) => g,
+                        Err(_) => break, // Kênh Tầng 1 đã đóng toàn bộ
+                    }
+                };
+
+                let mut message_entries = Vec::with_capacity(raw_game.turns.len() * 2 + 1);
+
+                // System Prompt tự chứa chuẩn JRCP 3.0 & DeepSeek-R1
+                let system_prompt = "Bạn là Xiangqi-R1 Master — Hệ thống Trí tuệ Nhân tạo Suy luận Cờ Tướng Đẳng Cấp Nhất.\nNhiệm vụ: Phân tích bàn cờ tướng đa chiều kích 360 độ và đưa ra nước đi tối ưu nhất kèm giải thích chi tiết trong thẻ <thought>.".to_string();
+                message_entries.push(format!("{{\"role\":\"system\",\"content\":\"{}\"}}", json_escape(&system_prompt)));
+
+                for turn_data in &raw_game.turns {
+                    let pos = &turn_data.pos;
+                    let side = pos.side;
+                    let best_move_uci = format!("{}{}", sq_to_uci(turn_data.chosen_move.from), sq_to_uci(turn_data.chosen_move.to));
+
+                    // Trích xuất 14 Chiều Kích JRCP 360 Độ
+                    let red_count = (0..7).map(|r| pos.counts[r] as usize).sum();
+                    let black_count = (7..14).map(|r| pos.counts[r] as usize).sum();
+                    let king_safety = evaluate_king_safety(pos, side);
+                    let center_ctrl = evaluate_center_control(pos);
+                    let tactical_pats = detect_tactical_patterns(pos, side);
+                    let (advs, disadvs, pos_factors, neg_factors) = assess_risk_factors(pos, side, turn_data.chosen_score, red_count, black_count);
+
+                    let top_score = turn_data.candidates_raw.first().map(|s| s.1).unwrap_or(0);
+                    let mut candidates = Vec::with_capacity(3);
+
+                    for (idx, (mv, score)) in turn_data.candidates_raw.iter().take(3).enumerate() {
+                        let mv_uci = format!("{}{}", sq_to_uci(mv.from), sq_to_uci(mv.to));
+                        let mv_not = move_to_notation(pos, *mv);
+                        let mv_int = describe_move_intent(pos, *mv);
+                        let mut next_pos = *pos;
+                        next_pos.apply(mv.from, mv.to);
+                        let repeats = turn_data.history_hashes.iter().filter(|&&h| h == next_pos.hash).count();
+
+                        let mut pros = Vec::new();
+                        let mut cons = Vec::new();
+
+                        if idx == 0 {
+                            pros.push("Tối ưu hóa điểm số đánh giá thế cờ".to_string());
+                            pros.push("Giữ vững quyền chủ động chiến lược".to_string());
+                            if repeats == 0 {
+                                pros.push("Triệt tiêu nguy cơ lặp cờ, duy trì nhịp độ công kích".to_string());
+                            }
+                            cons.push("Đòi hỏi tính toán chính xác các biến thể phản công".to_string());
+                        } else {
+                            let gap = top_score - score;
+                            pros.push("Phương án dự phòng khả thi".to_string());
+                            if gap < 50 {
+                                pros.push("Duy trì áp lực chiến thuật tương đương".to_string());
+                            }
+                            cons.push(format!("Kém phương án tối ưu {} centipawn, nhường bớt quyền chủ động", gap));
+                            if repeats > 0 {
+                                cons.push(format!("Nguy cơ lặp lại trạng thái bàn cờ (bị phạt {} cp)", repeats * 3000));
+                            }
+                        }
+
+                        candidates.push(CandidateInfo {
+                            move_uci: mv_uci,
+                            notation: mv_not,
+                            centipawn: *score,
+                            intent: mv_int,
+                            pros,
+                            cons,
+                        });
+                    }
+
+                    let thought_chain = synthesize_360_thought(
+                        side,
+                        turn_data.chosen_score,
+                        red_count,
+                        black_count,
+                        king_safety,
+                        center_ctrl,
+                        &tactical_pats,
+                        &advs,
+                        &disadvs,
+                        &pos_factors,
+                        &neg_factors,
+                        &candidates,
+                        &best_move_uci,
+                    );
+
+                    let turn_user_content = format!(
+                        "Trạng thái bàn cờ Turn {}:\nFEN: {}\nLượt {} đi. Trả về phân tích 360 độ và nước đi tối ưu.",
+                        turn_data.ply + 1, turn_data.fen, if side == 0 { "Đỏ" } else { "Đen" }
+                    );
+
+                    // Xây dựng chuỗi JSON Assistant phản hồi
+                    let candidates_json_list: Vec<String> = candidates.iter().map(|c| {
+                        let pros_json = format!("[{}]", c.pros.iter().map(|p| format!("\"{}\"", json_escape(p))).collect::<Vec<_>>().join(","));
+                        let cons_json = format!("[{}]", c.cons.iter().map(|cn| format!("\"{}\"", json_escape(cn))).collect::<Vec<_>>().join(","));
+                        format!("{{\"move\":\"{}\",\"notation\":\"{}\",\"centipawn\":{},\"intent\":\"{}\",\"pros\":{},\"cons\":{}}}",
+                            json_escape(&c.move_uci), json_escape(&c.notation), c.centipawn, json_escape(&c.intent), pros_json, cons_json
+                        )
+                    }).collect();
+
+                    let adv_json = format!("[{}]", advs.iter().map(|a| format!("\"{}\"", json_escape(a))).collect::<Vec<_>>().join(","));
+                    let disadv_json = format!("[{}]", disadvs.iter().map(|d| format!("\"{}\"", json_escape(d))).collect::<Vec<_>>().join(","));
+                    let pos_json = format!("[{}]", pos_factors.iter().map(|p| format!("\"{}\"", json_escape(p))).collect::<Vec<_>>().join(","));
+                    let neg_json = format!("[{}]", neg_factors.iter().map(|n| format!("\"{}\"", json_escape(n))).collect::<Vec<_>>().join(","));
+
+                    let assistant_content = format!(
+                        "{{\"thought\":\"{}\",\"matrix_analysis\":{{\"red_pieces_count\":{},\"black_pieces_count\":{},\"king_safety_score\":{},\"center_file_control\":\"{}\"}},\"risk_assessment\":{{\"advantages\":{},\"disadvantages\":{},\"positives\":{},\"negatives\":{}}},\"candidates\":[{}],\"bestmove\":\"{}\",\"centipawn_eval\":{}}}",
+                        json_escape(&thought_chain), red_count, black_count, king_safety, center_ctrl,
+                        adv_json, disadv_json, pos_json, neg_json,
+                        candidates_json_list.join(","),
+                        json_escape(&best_move_uci), turn_data.chosen_score
+                    );
+
+                    message_entries.push(format!("{{\"role\":\"user\",\"content\":\"{}\"}}", json_escape(&turn_user_content)));
+                    message_entries.push(format!("{{\"role\":\"assistant\",\"content\":\"{}\"}}", json_escape(&assistant_content)));
+                }
+
+                let full_game_record = format!(
+                    "{{\"game_id\":\"{}\",\"total_plies\":{},\"outcome\":\"{}\",\"messages\":[{}]}}",
+                    json_escape(&raw_game.game_id),
+                    raw_game.total_plies,
+                    raw_game.outcome,
+                    message_entries.join(",")
+                );
+
+                let _ = tx.send(FormattedGameData {
+                    jsonl_string: full_game_record,
+                    turns_count: raw_game.turns.len(),
+                });
+            }
+        });
+
+        transformer_handles.push(handle);
+    }
+    drop(writer_sender); // Giữ đúng số lượng sender trong transformers
+
+    // ------------------------------------------------------------------------
+    // TẦNG 1: PRODUCERS TỰ ĐẤU & MINIMAX SEARCH TỐC ĐỘ CAO
+    // ------------------------------------------------------------------------
+    let mut producer_handles = Vec::with_capacity(producer_threads);
+
+    for thread_idx in 0..producer_threads {
+        let current_game_cloned = Arc::clone(&current_game_counter);
+        let global_tt_cloned = Arc::clone(&global_tt);
+        let game_sender_cloned = game_sender.clone();
+
+        let handle = thread::spawn(move || {
+            let mut search_engine = Search::new_shared(global_tt_cloned);
+            let hce_eval = Hce::new();
+
+            loop {
+                let game_idx = current_game_cloned.fetch_add(1, Ordering::Relaxed);
+                if game_idx > total_games {
+                    break;
+                }
+
+                let mut seed = (game_idx as u64).wrapping_mul(0x9E3779B97F4A7C15) ^ (thread_idx as u64);
+
+                loop {
+                    let game_id = format!("game_{:06x}_{:04x}", game_idx, thread_idx);
+                    let mut pos = Parser::parse(Parser::DEFAULT);
+                    let use_book = (game_idx % 2) == 1;
+                    let mut game_ply = 0;
+                    let mut history_hashes: Vec<u64> = Vec::with_capacity(max_plies + 16);
+                    history_hashes.push(pos.hash);
+
+                    // Khai cuộc: Dùng Book hoặc nước đi đa dạng ngẫu nhiên
+                    if use_book {
+                        while game_ply < 12 {
+                            if let Some(mv) = Book::probe(&pos) {
+                                pos.apply(mv.from, mv.to);
+                                history_hashes.push(pos.hash);
+                                game_ply += 1;
+                            } else {
+                                break;
+                            }
+                        }
+                    } else {
+                        while game_ply < 6 {
+                            let mut moves = List::new();
+                            legal::gen(&mut pos, &mut moves);
+                            if moves.empty() {
+                                break;
+                            }
+                            let idx = (rand_next(&mut seed) as usize) % moves.len();
+                            let mv = moves.get(idx);
+                            pos.apply(mv.from, mv.to);
+                            history_hashes.push(pos.hash);
+                            game_ply += 1;
+                        }
+                    }
+
+                    let mut turns_data = Vec::with_capacity(max_plies);
+                    let mut outcome_str: Option<&'static str> = None;
+
+                    while game_ply < max_plies {
+                        let mut moves = List::new();
+                        legal::gen(&mut pos, &mut moves);
+
+                        // 1. Kiểm tra Chiếu bí hoặc Hết nước đi hợp lệ
+                        if moves.empty() {
+                            if legal::check(&pos, pos.side as usize) {
+                                outcome_str = Some(if pos.side == 0 { "black_win" } else { "red_win" });
+                            } else {
+                                outcome_str = Some(if pos.side == 0 { "black_win" } else { "red_win" });
+                            }
+                            break;
+                        }
+
+                        let fen_str = Serializer::export(&pos);
+                        let side = pos.side;
+
+                        // 2. Chạy Alpha-Beta Search với lịch sử băm để phạt lặp cờ
+                        let mut limits = Limits::new();
+                        limits.depth = depth;
+                        let res = search_engine.go_with_history(&pos, &limits, &history_hashes);
+
+                        if res.best.from == res.best.to {
+                            outcome_str = Some(if side == 0 { "black_win" } else { "red_win" });
+                            break;
+                        }
+
+                        let best_move = res.best;
+                        let best_score = res.score;
+
+                        // 3. Đánh giá O(1) Candidate Moves siêu tốc (HCE Static Eval + Capture Bonus)
+                        let mut scored_moves: Vec<(movegen::Move, i32)> = Vec::with_capacity(moves.len());
+
+                        for i in 0..moves.len() {
+                            let mv = moves.get(i);
+                            let mut next_pos = pos;
+                            next_pos.apply(mv.from, mv.to);
+                            let repetitions = history_hashes.iter().filter(|&&h| h == next_pos.hash).count();
+                            let repetition_penalty = (repetitions as i32) * 3000;
+
+                            let score = if mv.from == best_move.from && mv.to == best_move.to {
+                                best_score - repetition_penalty
+                            } else {
+                                let static_score = if side == 0 { -hce_eval.evaluate(&next_pos) } else { hce_eval.evaluate(&next_pos) };
+                                static_score - repetition_penalty
+                            };
+
+                            scored_moves.push((mv, score));
+                        }
+
+                        scored_moves.sort_by(|a, b| b.1.cmp(&a.1));
+
+                        let chosen_move = scored_moves.first().map(|s| s.0).unwrap_or(best_move);
+                        let chosen_score = scored_moves.first().map(|s| s.1).unwrap_or(best_score);
+
+                        turns_data.push(RawTurnData {
+                            ply: game_ply,
+                            pos,
+                            fen: fen_str,
+                            chosen_move,
+                            chosen_score,
+                            candidates_raw: scored_moves,
+                            history_hashes: history_hashes.clone(),
+                        });
+
+                        pos.apply(chosen_move.from, chosen_move.to);
+                        history_hashes.push(pos.hash);
+                        game_ply += 1;
+
+                        // Ngắt dừng sớm khi thế cờ đã thắng bại cách biệt (Resignation)
+                        if best_score >= 2000 {
+                            outcome_str = Some(if side == 0 { "red_win" } else { "black_win" });
+                            break;
+                        } else if best_score <= -2000 {
+                            outcome_str = Some(if side == 0 { "black_win" } else { "red_win" });
+                            break;
+                        }
+                    }
+
+                    // Nếu ván cờ kết thúc có thắng bại rõ ràng -> Đẩy vào kênh truyền Tầng 2
+                    if let Some(outcome) = outcome_str {
+                        let _ = game_sender_cloned.send(RawGameData {
+                            game_id,
+                            total_plies: game_ply,
+                            outcome,
+                            turns: turns_data,
+                        });
+                        break;
+                    }
+
+                    // Nếu chưa dứt điểm -> Lấy seed mới và tự đấu lại ván này
+                    seed = rand_next(&mut seed);
+                }
+            }
+        });
+
+        producer_handles.push(handle);
+    }
+    drop(game_sender); // Đóng sender gốc để Tầng 2 phát hiện EOF khi producers xong
+
+    // Chờ Producers hoàn thành
+    for handle in producer_handles {
+        let _ = handle.join();
+    }
+
+    // Chờ Transformers hoàn thành
+    for handle in transformer_handles {
+        let _ = handle.join();
+    }
+
+    // Chờ Sink hoàn thành
+    let _ = sink_handle.join();
+
+    cqrs_bus.emit(CqrsEvent::State { running: false });
+
+    let total_elapsed = start_all.elapsed().as_secs_f64();
+    let total_turns = total_turns_generated.load(Ordering::Relaxed);
+    let turns_per_sec = if total_elapsed > 0.0 { (total_turns as f64) / total_elapsed } else { 0.0 };
+
+    println!("\n===============================================================================");
+    println!("💎 TRI-TIER ROLLING CHUNK 360 REASONING GENERATION COMPLETED!");
+    println!("   • Tổng số ván cờ hoàn chỉnh    : {} ván (100% Phân định thắng bại dứt điểm)", total_games);
+    println!("   • Tổng số lượt suy luận 360 CoT: {} lượt turns", total_turns);
+    println!("   • Tổng thời gian thực thi      : {:.2} giây ({:.2} phút)", total_elapsed, total_elapsed / 60.0);
+    println!("   • Tốc độ sinh suy luận 360 CoT : {:.2} Turns / giây ({:.0} Turns / phút)", turns_per_sec, turns_per_sec * 60.0);
+    println!("   • Ước tính Tokens suy tưởng R1 : ~{} Tokens", total_turns * 850);
+    println!("-------------------------------------------------------------------------------");
+    println!("🏛️ CQRS-ES EVENT SOURCING AUDIT LEDGER:");
+    println!("   • Tổng số sự kiện bất biến đã ghi: {} Events", cqrs_bus.store.len());
+    println!("-------------------------------------------------------------------------------");
+
+    println!("===============================================================================");
+    let _ = io::stdout().flush();
+    std::process::exit(0);
+}

@@ -10,6 +10,7 @@
 //   3. Async Disk Writer: Ghi tệp nhị phân 66-byte (.bin) siêu tốc 0-copy.
 // ============================================================================
 
+use std::cell::RefCell;
 use std::fs::OpenOptions;
 use std::io::{BufWriter, Write};
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
@@ -22,8 +23,13 @@ use rayon::prelude::*;
 use xiangrust::board::Parser;
 use xiangrust::book::Book;
 use xiangrust::eval::feature::Feature;
-use xiangrust::gpu::{Batch, Device, Evaluable, Evaluator, Sample};
+use xiangrust::gpu::{Batch, Device, Evaluator, Sample};
 use xiangrust::movegen::{legal, List};
+use xiangrust::search::{Limits, Search};
+
+thread_local! {
+    static THREAD_SEARCH: RefCell<Search> = RefCell::new(Search::new(2));
+}
 
 /// Struct `CacheAlignedState` căn lề 64 bytes (1 CPU Cache Line) loại bỏ False Sharing
 #[repr(align(64))]
@@ -58,7 +64,11 @@ fn main() {
     let total_games: usize = std::env::var("GAMES")
         .ok()
         .and_then(|v| v.parse().ok())
-        .unwrap_or(20000);
+        .unwrap_or(2000);
+    let search_depth: u8 = std::env::var("DEPTH")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(6);
     let batch_size: usize = std::env::var("BATCH")
         .ok()
         .and_then(|v| v.parse().ok())
@@ -67,7 +77,7 @@ fn main() {
     let num_threads: usize = std::env::var("THREADS")
         .ok()
         .and_then(|v| v.parse().ok())
-        .unwrap_or(4);
+        .unwrap_or(8);
     let base_seed: u64 = std::env::var("SEED")
         .ok()
         .and_then(|v| v.parse().ok())
@@ -81,12 +91,13 @@ fn main() {
     let gpu_backend = device.backend().name().to_string();
     let gpu_rating = device.backend().speed();
 
-    println!("Cấu hình Hybrid GPU + CPU Parallel Acceleration (Honest Yielding):");
+    println!("Cấu hình Hybrid GPU + CPU Parallel Acceleration (Depth {} Alpha-Beta Search):", search_depth);
     println!("  • GPU Hardware Card   : {}", gpu_name);
     println!("  • GPU Driver Backend  : {} (Rating {}%)", gpu_backend, gpu_rating);
     println!("  • GPU VRAM Batch Size : {} bàn cờ song song", batch_size);
-    println!("  • CPU Multi-Core Pool : {} luồng physical cores", num_threads);
-    println!("  • Channel Backpressure: Bounded sync_channel(16) [Honest CPU/GPU Yielding]",);
+    println!("  • CPU Multi-Core Pool : {} luồng physical/logical cores", num_threads);
+    println!("  • Search Engine Depth : Depth {}", search_depth);
+    println!("  • Channel Backpressure: Bounded sync_channel(128) [Stream-lined GPU/CPU Pipeline]");
     println!("  • Tổng số ván cờ      : {} ván cờ", total_games);
     println!("  • Output File Binary  : {}", out_bin);
     println!();
@@ -105,8 +116,8 @@ fn main() {
         .expect("Tạo tệp BINARY thất bại");
     let mut bin_writer = BufWriter::with_capacity(256 * 1024, bin_file);
 
-    // Kênh Bounded Sync Channel (16 buffer) tạo Backpressure trung thực đẩy CPU Yield khi Disk chậm
-    let (tx_bin, rx_bin) = sync_channel::<Vec<u8>>(16);
+    // Kênh Bounded Sync Channel (32 buffer) tạo Backpressure trung thực đẩy CPU Yield khi Disk chậm
+    let (tx_bin, rx_bin) = sync_channel::<Vec<u8>>(32);
 
     let _writer_bin_handle = thread::spawn(move || {
         while let Ok(buf) = rx_bin.recv() {
@@ -116,35 +127,38 @@ fn main() {
     });
 
     // 3. Luồng GPU Dedicated Batch Evaluator kích hoạt 100% phần cứng GPU Compute Shader
-    let (tx_gpu_samples, rx_gpu_samples) = sync_channel::<Vec<Sample>>(16);
+    let (tx_gpu_samples, rx_gpu_samples) = sync_channel::<Vec<Sample>>(128);
     
     let _gpu_worker_handle = thread::spawn(move || {
         let gpu_device = Device::init();
-        if let Ok(mut evaluator) = Evaluator::new(gpu_device) {
+        if let Ok(evaluator) = Evaluator::new(gpu_device) {
             if let Ok(mut gpu_batch) = Batch::allocate(evaluator.device(), batch_size) {
-                let mut accumulated_samples: Vec<Sample> = Vec::with_capacity(16384);
+                let mut accumulated_samples: Vec<Sample> = Vec::with_capacity(32768);
                 
                 while let Ok(samples) = rx_gpu_samples.recv() {
                     accumulated_samples.extend(samples);
 
-                    // Ép nạp lô ≥ 2,048 mẫu để vượt qua ngưỡng fallback 512, đảm bảo 100% chạy WGSL Compute Pass trên GPU
-                    if accumulated_samples.len() >= 2048 {
-                        for sample in &accumulated_samples {
-                            let _ = evaluator.submit(sample);
+                    // Ép nạp lô ≥ 2048 mẫu vào Batch để vắt cạn phần cứng GPU Metal liên tục
+                    while accumulated_samples.len() >= 2048 {
+                        let drain_cnt = accumulated_samples.len().min(batch_size);
+                        let chunk: Vec<Sample> = accumulated_samples.drain(..drain_cnt).collect();
+                        gpu_batch.clear();
+                        for sample in &chunk {
+                            let _ = gpu_batch.push(sample);
                         }
-                        let _ = evaluator.flush(&mut gpu_batch);
-                        accumulated_samples.clear();
-                    } else {
-                        thread::yield_now();
+                        let count = gpu_batch.count();
+                        let _ = evaluator.execute(&mut gpu_batch, count);
                     }
                 }
 
-                // Xả sạch các mẫu còn lại cuối cùng lên GPU
+                // Xả sạch các mẫu còn lại cuối cùng lên GPU Compute Pass
                 if !accumulated_samples.is_empty() {
+                    gpu_batch.clear();
                     for sample in &accumulated_samples {
-                        let _ = evaluator.submit(sample);
+                        let _ = gpu_batch.push(sample);
                     }
-                    let _ = evaluator.flush(&mut gpu_batch);
+                    let count = gpu_batch.count();
+                    let _ = evaluator.execute(&mut gpu_batch, count);
                 }
             }
         }
@@ -164,28 +178,28 @@ fn main() {
                 let eta_s = if speed_g > 0.0 { (rem_g as f64 / speed_g).round() as u64 } else { 0 };
 
                 println!(
-                    "  [🚀 HYBRID GPU+CPU {:5}/{:5}] | FEN: {:7} | Speed: {:.1} g/s ({:.2} MILLION FEN/min) | ETA: {:02}m{:02}s",
-                    done.min(total_games), total_games, samples, speed_g, (speed_s * 60.0) / 1_000_000.0, eta_s / 60, eta_s % 60
+                    "  [🚀 HYBRID D{} GPU+CPU {:5}/{:5}] | FEN: {:7} | Speed: {:.1} g/s ({:.0} FEN/min) | ETA: {:02}m{:02}s",
+                    search_depth, done.min(total_games), total_games, samples, speed_g, speed_s * 60.0, eta_s / 60, eta_s % 60
                 );
                 let _ = std::io::stdout().flush();
             }
         }
     });
 
-    // 5. Rayon Thread Pool cho CPU Workers
+    // 5. Rayon Thread Pool cho CPU Workers (Depth 6 Alpha-Beta Search)
     let pool = rayon::ThreadPoolBuilder::new()
         .num_threads(num_threads)
         .build()
         .expect("Khởi tạo Rayon Thread Pool thất bại");
 
     let mut games_done = 0;
-    let mini_batch_size = 128; // Micro-batch 128 ván cờ stream song song GPU/CPU
+    let mini_batch_size = 32; // Micro-batch 32 ván cờ Depth 6 stream song song GPU/CPU
 
     while games_done < total_games {
         let chunk_size = std::cmp::min(mini_batch_size, total_games - games_done);
         let state_rayon = Arc::clone(&state);
 
-        // CPU Workers sinh ván cờ song song trên 4 luồng physical cores
+        // CPU Workers sinh ván cờ Alpha-Beta Depth 6 song song trên 8 luồng cores
         let chunk_results: Vec<(Vec<u8>, usize, Vec<Sample>)> = pool.install(|| {
             (0..chunk_size)
                 .into_par_iter()
@@ -217,14 +231,30 @@ fn main() {
                             break;
                         }
 
-                        rng_seed = rng_seed.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
-                        let move_idx = (rng_seed as usize) % moves.len();
-                        let chosen_move = moves.items[move_idx];
+                        let (chosen_move, score_val) = if search_depth > 0 {
+                            THREAD_SEARCH.with(|s| {
+                                let mut search = s.borrow_mut();
+                                let mut limits = Limits::default();
+                                limits.depth = search_depth;
+                                let res = search.go(&mut pos, &limits);
+                                if res.best.from != res.best.to {
+                                    (res.best, res.score)
+                                } else {
+                                    rng_seed = rng_seed.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+                                    let move_idx = (rng_seed as usize) % moves.len();
+                                    (moves.items[move_idx], eval_hce.score(&pos))
+                                }
+                            })
+                        } else {
+                            rng_seed = rng_seed.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+                            let move_idx = (rng_seed as usize) % moves.len();
+                            (moves.items[move_idx], eval_hce.score(&pos))
+                        };
 
                         let sample = Sample::pack(&pos, (game_id * 40 + step) as u32);
                         samples_vec.push(sample);
 
-                        let score_i16 = eval_hce.score(&pos).clamp(-30000, 30000) as i16;
+                        let score_i16 = score_val.clamp(-30000, 30000) as i16;
 
                         // Trích xuất 32 chỉ số đặc trưng HalfKAv2_hm và ghi 66 bytes binary
                         let mut active_indices = [0u16; 32];
@@ -257,7 +287,7 @@ fn main() {
                 .collect()
         });
 
-        // Gửi Samples cho GPU Worker Thread tính toán song song
+        // Gửi Samples cho GPU Worker Thread tính toán WGPU song song
         let mut gpu_samples_batch = Vec::with_capacity(chunk_size * 40);
         for (bin_buf, _cnt, samples) in chunk_results {
             let _ = tx_bin.send(bin_buf);

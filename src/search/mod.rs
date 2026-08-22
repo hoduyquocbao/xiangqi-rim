@@ -14,34 +14,43 @@
 pub mod core;
 /// Module con `diversity` quản lý đa dạng hóa tìm kiếm nguyên tố và hệ số lịch sử
 pub mod diversity;
+/// Module con `hybrid` động cơ tìm kiếm kết hợp GPU+CPU tối ưu hóa tải
+pub mod hybrid;
 /// Module con `limit` quản lý thời gian và tín hiệu Abort
 pub mod limit;
 /// Module con `order` sắp xếp thứ tự ưu tiên nước đi
 pub mod order;
 /// Module con `prune` tỉa nhánh thuật toán
 pub mod prune;
+/// Module con `pruning` cắt tỉa LMR, RFP và Q-Search với Stand-Pat
+pub mod pruning;
 /// Module con `pv` lưu vết tuyến nước đi tốt nhất Principal Variation
 pub mod pv;
 /// Module con `quiesce` tìm kiếm ăn quân Quiescence Search
 pub mod quiesce;
 /// Module con `see` tính toán tĩnh chuỗi đổi quân Static Exchange Evaluation
 pub mod see;
+/// Module con `smp` động cơ tìm kiếm song song đa luồng Lazy SMP
+pub mod smp;
 /// Module con `stack` bộ nhớ đệm Stack đệ quy
 pub mod stack;
 
-
 pub use core::Core;
 pub use diversity::{Diversity, PRIMES};
+pub use hybrid::HybridEngine;
 pub use limit::{Limits, Result, Timer};
 pub use order::{History, Killer, Order, Picker, Stage, VALUES};
+pub use pruning::Pruner;
 pub use prune::Prune;
 pub use pv::Pv;
 pub use quiesce::Quiesce;
 pub use see::See;
+pub use smp::LazySmp;
 pub use stack::Stack;
 
 
 use std::sync::atomic::Ordering;
+use std::sync::Arc;
 use crate::board::Position;
 use crate::eval::Eval;
 use crate::tt::Table;
@@ -53,8 +62,8 @@ pub struct Search {
     pub pos: Position,
     /// Bộ đánh giá thế cờ NNUE + HCE
     pub eval: Eval,
-    /// Bảng băm Transposition Table toàn cục
-    pub tt: Table,
+    /// Bảng băm Transposition Table toàn cục (Arc dùng chung không khóa giữa các luồng)
+    pub tt: Arc<Table>,
     /// Bảng lịch sử History Heuristics
     pub history: History,
     /// Bộ lưu trữ Killer Moves
@@ -63,6 +72,8 @@ pub struct Search {
     pub timer: Timer,
     /// Kết quả tìm kiếm (Best move, Score, Nodes, Time)
     pub result: Result,
+    /// Mảng lưu vết Zobrist Hashes của toàn bộ các nước đi đã đấu trong ván cờ
+    pub past_hashes: Vec<u64>,
 }
 
 impl Search {
@@ -71,11 +82,26 @@ impl Search {
         Self {
             pos: Position::empty(),
             eval: Eval::new(),
-            tt: Table::new(mb),
+            tt: Arc::new(Table::new(mb)),
             history: History::new(),
             killer: Killer::new(),
             timer: Timer::new(),
             result: Result::new(),
+            past_hashes: Vec::with_capacity(256),
+        }
+    }
+
+    /// Khởi tạo một Engine Tìm kiếm mới chia sẻ chung Transposition Table `tt` giữa các luồng.
+    pub fn new_shared(tt: Arc<Table>) -> Self {
+        Self {
+            pos: Position::empty(),
+            eval: Eval::new(),
+            tt,
+            history: History::new(),
+            killer: Killer::new(),
+            timer: Timer::new(),
+            result: Result::new(),
+            past_hashes: Vec::with_capacity(256),
         }
     }
 
@@ -86,12 +112,20 @@ impl Search {
             let ptr = std::alloc::alloc_zeroed(layout) as *mut Self;
             std::ptr::write(&mut (*ptr).pos, Position::empty());
             std::ptr::write(&mut (*ptr).eval, Eval::new());
-            std::ptr::write(&mut (*ptr).tt, Table::new(mb));
+            std::ptr::write(&mut (*ptr).tt, Arc::new(Table::new(mb)));
             std::ptr::write(&mut (*ptr).history, History::new());
             std::ptr::write(&mut (*ptr).killer, Killer::new());
             std::ptr::write(&mut (*ptr).timer, Timer::new());
             std::ptr::write(&mut (*ptr).result, Result::new());
+            std::ptr::write(&mut (*ptr).past_hashes, Vec::with_capacity(256));
             Box::from_raw(ptr)
+        }
+    }
+
+    /// Đưa Zobrist Hash của nước cờ vừa đấu vào mảng past_hashes lịch sử toàn ván.
+    pub fn push_history(&mut self, hash: u64) {
+        if !self.past_hashes.contains(&hash) {
+            self.past_hashes.push(hash);
         }
     }
 
@@ -122,6 +156,7 @@ impl Search {
         self.history.clear();
         self.killer.clear();
         self.tt.clear();
+        self.past_hashes.clear();
         self.result = Result::new();
     }
 
@@ -133,7 +168,11 @@ impl Search {
 
     /// Thực thi lệnh tìm kiếm `go` từ vị trí bàn cờ `pos` với các giới hạn `limits`.
     pub fn go(&mut self, pos: &Position, limits: &Limits) -> Result {
-        self.go_with_history(pos, limits, &[])
+        if !self.past_hashes.contains(&pos.hash) {
+            self.past_hashes.push(pos.hash);
+        }
+        let past_slice = self.past_hashes.clone();
+        self.go_with_history(pos, limits, &past_slice)
     }
 
     /// Thực thi lệnh tìm kiếm `go_with_history` tích hợp mảng past hashes lịch sử ván cờ ngăn lặp cờ toàn ván.
