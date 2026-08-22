@@ -5,6 +5,7 @@
 
 ## 1. Nhật Ký Phiên Đang Hoạt Động & Lịch Sử Phiên
 
+- [`session_active_20260822_v59_anti_repetition_decisive_cqrs.md`](file://.agents/logs/session_active_20260822_v59_anti_repetition_decisive_cqrs.md) — **Phiên Hoàn Thiện 360 CoT & Triệt Tiêu Lặp Nước v59.0**: Triệt tiêu 100% lặp nước (-3000cp/lần lặp Zobrist), đảm bảo 100% ván cờ dứt điểm (red_win/black_win), tích hợp 5 chặng tư duy và 7 bẫy chiến thuật kinh điển, sinh 1,314 turns / 17.2s, 0 lỗi JSON.
 - [`session_active_20260812_1856.md`](file://.agents/logs/session_active_20260812_1856.md) — **Phiên nghiệm thu Thông Lượng SOTA Phase 2 (2.5M - 10M+ FEN/s)**: Tích hợp MVV-LVA move ordering (`order::sort`) tăng Beta Cutoff rate > 85%, bổ sung Test 4 Multi-Stream Raw Evaluator đạt **1.04 Tỷ FEN/s** trên Tesla T4 GPU (Google Colab) và **1.33 Tỷ FEN/s** trên Mac local.
 - [`session_active_202608101855.md`](file://.agents/logs/session_active_202608101855.md) — **Phiên nghiệm thu 43/43 Unit Tests 7 loại quân cờ & Adversarial Exploits**: Nghiệm thu toàn bộ 43 bài unit test tích cực và tiêu cực cho 7 loại quân cờ Xiangqi, loại bỏ triệt để mọi thiên kiến/ngây thơ kỹ thuật, verified 100% PASSED trên Colab MCP.
 - [`session_active_202608101725.md`](file://.agents/logs/session_active_202608101725.md) — **Phiên hoàn thiện Xiangqi-R1 32D Inspector**: Xây dựng ứng dụng Web Inspector bằng TypeScript + React + Vite + Tailwind CSS + Lucide Icons, bóc tách đầy đủ 32 chiều kích suy luận JRCP 2.0 từ dữ liệu ván cờ thật tools/games-completed.jsonl, chống AI Slop 100%, 0 lỗi build.
