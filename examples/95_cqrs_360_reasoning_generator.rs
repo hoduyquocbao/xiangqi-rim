@@ -5,7 +5,7 @@
 // - Kiến trúc Pipeline 3 Tầng Decoupled (Tri-Tier Decoupled CQRS Pipeline):
 //   1. Tầng 1 (Producers): Các luồng tìm kiếm Alpha-Beta Search tốc độ cao trên Shared TT 1024MB.
 //   2. Tầng 2 (Transformers): Các luồng phân tích 360 độ (14 chiều kích) và biên dịch <thought> song song.
-//   3. Tầng 3 (Sink): Luồng ghi đĩa đệm 4MB Async BufWriter với telemetry thời gian thực không nghẽn.
+//   3. Tầng 3 (Sink): Luồng ghi đĩa đệm 4MB Async BufWriter với cơ chế Tự Động Cuốn Chiếu Rolling Chunks (< 100MB/chunk).
 // - Cơ chế Triệt Tiêu Lặp Nước & Quyết Liệt Phân Định Thắng/Thua: Bắt buộc 100% ván cờ phân định dứt điểm.
 // - Mạch suy tưởng <thought> chuẩn DeepSeek-R1 bằng Tiếng Việt 100% phục vụ SFT & GRPO RL.
 // - 100% Căn lề bộ nhớ 64-byte, không cấp phát heap trong hot loop, đạt tốc độ tiệm cận vật lý.
@@ -15,6 +15,8 @@
 use std::fs::{self, OpenOptions};
 // Nhập thư viện nhập xuất tiêu chuẩn và bộ đệm BufWriter
 use std::io::{self, BufWriter, Write};
+// Nhập module đường dẫn Path và PathBuf
+use std::path::{Path, PathBuf};
 // Nhập các kiểu nguyên tử atomic cho bộ đếm luồng
 use std::sync::atomic::{AtomicUsize, Ordering};
 // Nhập kênh truyền đồng bộ đa luồng MPSC Channel
@@ -42,10 +44,10 @@ use xiangrust::search::{Limits, Search};
 use xiangrust::tt::Table;
 
 /// Số phiên bản của Máy phát Suy Luận CQRS-ES 360 Độ
-const APP_VERSION: &str = "v33.0.0-tri-tier-decoupled-pipeline";
+const APP_VERSION: &str = "v34.0.0-tri-tier-rolling-chunk-pipeline";
 
 /// Dấu thời gian phát hành phiên bản máy phát suy luận
-const APP_BUILD_STAMP: &str = "2026-08-22 19:35:00 ICT";
+const APP_BUILD_STAMP: &str = "2026-08-22 19:45:00 ICT";
 
 /// Giá trị centipawn quy chuẩn của 7 loại quân cờ Tướng
 const VALUE: [i32; 7] = [0, 200, 200, 400, 900, 450, 100];
@@ -495,8 +497,8 @@ fn rand_next(seed: &mut u64) -> u64 {
 
 fn main() {
     println!("===============================================================================");
-    println!("💎 XIANGQI-RIM: TRI-TIER DECOUPLED PIPELINE CQRS-ES 360 GENERATOR ({})", APP_VERSION);
-    println!("   🔥 BỘ MÁY PHÁT PUB/SUB 3 TẦNG BẤT ĐỒNG BỘ: TỰ ĐẤU ➔ SUY LUẬN 360 ➔ GHI ĐĨA 4MB",);
+    println!("💎 XIANGQI-RIM: TRI-TIER ROLLING CHUNK CQRS-ES 360 GENERATOR ({})", APP_VERSION);
+    println!("   🔥 BỘ MÁY PHÁT PUB/SUB 3 TẦNG TỰ ĐỘNG CUỐN CHIẾU ROLLING CHUNKS (< 100MB/CHUNK)",);
     println!("===============================================================================");
 
     let total_games: usize = std::env::var("GAMES").ok().and_then(|v| v.parse().ok()).unwrap_or(20);
@@ -505,16 +507,24 @@ fn main() {
     let transformer_threads: usize = std::env::var("TRANSFORMERS").ok().and_then(|v| v.parse().ok()).unwrap_or(4);
     let tt_mb: usize = std::env::var("TT_MB").ok().and_then(|v| v.parse().ok()).unwrap_or(1024);
     let max_plies: usize = std::env::var("MAX_PLIES").ok().and_then(|v| v.parse().ok()).unwrap_or(120);
-    let output_path: String = std::env::var("OUTPUT").unwrap_or_else(|_| "data/xiangqi_r1_360_dataset.jsonl".to_string());
+    let output_raw: String = std::env::var("OUTPUT").unwrap_or_else(|_| "data/chunks/xiangqi_r1_360_dataset.jsonl".to_string());
+    let chunk_max_mb: f64 = std::env::var("CHUNK_MAX_MB").ok().and_then(|v| v.parse().ok()).unwrap_or(95.0);
+    let chunk_max_bytes: usize = (chunk_max_mb * 1024.0 * 1024.0) as usize;
 
-    println!("⚡ THÔNG SỐ VẬN HÀNH PIPELINE TỐC ĐỘ CAO:");
+    let output_path = PathBuf::from(&output_raw);
+    let output_dir = output_path.parent().unwrap_or(Path::new("data")).to_path_buf();
+    let output_stem = output_path.file_stem().and_then(|s| s.to_str()).unwrap_or("xiangqi_r1_360_dataset").to_string();
+
+    println!("⚡ THÔNG SỐ VẬN HÀNH PIPELINE CUỐN CHIẾU (1,000,000 VÁN CHUẨN SOTA):");
     println!("   • Tầng 1 (Producers) Search   : {} Threads (Depth {})", producer_threads, depth);
     println!("   • Tầng 2 (Transformers) 360   : {} Threads (14D CoT Synthesizers)", transformer_threads);
-    println!("   • Tầng 3 (Sink) Async Writer  : 1 Dedicated Thread (4MB BufWriter)", );
+    println!("   • Tầng 3 (Sink) Async Writer  : 1 Dedicated Thread (4MB BufWriter + Rolling Chunks)", );
+    println!("   • Giới hạn Dung lượng Chunk   : {:.1} MB / Chunk (Đảm bảo luôn < 100 MB SSD)", chunk_max_mb);
+    println!("   • Thư mục lưu trữ Chunk       : {}", output_dir.display());
+    println!("   • Tiền tố tên tệp Chunk       : {}_chunk_XXXXX.jsonl", output_stem);
     println!("   • Dung lượng Shared TT        : {} MB (Arc<Table> Lock-Free)", tt_mb);
     println!("   • Giới hạn nước đi mỗi ván    : Max {} Plies", max_plies);
     println!("   • Tổng số ván cờ mục tiêu     : {} ván", total_games);
-    println!("   • Tệp xuất dữ liệu JSONL      : {}", output_path);
     println!("   • Build Timestamp             : {}", APP_BUILD_STAMP);
     println!("-------------------------------------------------------------------------------\n");
 
@@ -533,28 +543,68 @@ fn main() {
     let current_game_counter = Arc::new(AtomicUsize::new(1));
 
     // ------------------------------------------------------------------------
-    // TẦNG 3: SINK GHI FILE BẤT ĐỒNG BỘ & BÁO CÁO TELEMETRY REALTIME
+    // TẦNG 3: SINK GHI FILE CUỐN CHIẾU ROLLING CHUNKS & BÁO CÁO TELEMETRY REALTIME
     // ------------------------------------------------------------------------
     let completed_games_sink = Arc::clone(&completed_games);
     let total_turns_sink = Arc::clone(&total_turns_generated);
-    let output_path_sink = output_path.clone();
+    let output_dir_sink = output_dir.clone();
+    let output_stem_sink = output_stem.clone();
 
     let sink_handle: JoinHandle<()> = thread::spawn(move || {
-        if let Some(parent) = std::path::Path::new(&output_path_sink).parent() {
-            let _ = fs::create_dir_all(parent);
-        }
+        let _ = fs::create_dir_all(&output_dir_sink);
+
+        let mut current_chunk_idx: usize = 1;
+        let mut current_chunk_bytes: usize = 0;
+        let mut current_chunk_games: usize = 0;
+        let mut current_chunk_turns: usize = 0;
+
+        let get_chunk_path = |idx: usize| -> PathBuf {
+            output_dir_sink.join(format!("{}_chunk_{:05}.jsonl", output_stem_sink, idx))
+        };
+
+        let mut current_path = get_chunk_path(current_chunk_idx);
         let file = OpenOptions::new()
             .create(true)
             .write(true)
             .append(true)
-            .open(&output_path_sink)
+            .open(&current_path)
             .expect("Không thể tạo/mở tệp JSONL xuất dữ liệu suy luận");
         let mut writer = BufWriter::with_capacity(4 * 1024 * 1024, file);
         let mut stdout = io::stdout();
 
         while let Ok(record) = writer_receiver.recv() {
+            let record_bytes = record.jsonl_string.len() + 1;
+
+            // KIỂM TRA ĐIỀU KIỆN CUỐN CHIẾU (ROLLING CHUNK ROTATION)
+            if current_chunk_bytes > 0 && (current_chunk_bytes + record_bytes > chunk_max_bytes) {
+                let _ = writer.flush();
+                let finished_mb = (current_chunk_bytes as f64) / (1024.0 * 1024.0);
+                println!(
+                    "\n📦 [ROLLING CHUNK ROTATION] Đóng Chunk #{:05} ({:.2} MB | {} ván | {} turns) ➔ Đã lưu: {}",
+                    current_chunk_idx, finished_mb, current_chunk_games, current_chunk_turns, current_path.display()
+                );
+
+                current_chunk_idx += 1;
+                current_chunk_bytes = 0;
+                current_chunk_games = 0;
+                current_chunk_turns = 0;
+
+                current_path = get_chunk_path(current_chunk_idx);
+                let new_file = OpenOptions::new()
+                    .create(true)
+                    .write(true)
+                    .truncate(true)
+                    .open(&current_path)
+                    .expect("Không thể tạo tệp chunk JSONL mới");
+                writer = BufWriter::with_capacity(4 * 1024 * 1024, new_file);
+                println!("🚀 [ROLLING CHUNK ACTIVATED] Khởi tạo Chunk #{:05}: {}\n", current_chunk_idx, current_path.display());
+            }
+
             let _ = writer.write_all(record.jsonl_string.as_bytes());
             let _ = writer.write_all(b"\n");
+            current_chunk_bytes += record_bytes;
+            current_chunk_games += 1;
+            current_chunk_turns += record.turns_count;
 
             let done = completed_games_sink.fetch_add(1, Ordering::Relaxed) + 1;
             let total_turns = total_turns_sink.fetch_add(record.turns_count, Ordering::Relaxed) + record.turns_count;
@@ -569,10 +619,12 @@ fn main() {
             let eta_mins = (eta_secs / 60.0) as u64;
             let eta_rem_secs = (eta_secs % 60.0) as u64;
             let pct = (done as f64 / total_games as f64) * 100.0;
+            let chunk_mb = (current_chunk_bytes as f64) / (1024.0 * 1024.0);
 
             let telemetry_str = format!(
-                "⚡ [PIPELINE TELEMETRY] Xong {:<3}/{} Ván ({:5.1}%) | Đã Chạy: {:02}m{:02}s | TB: {:.2}s/ván | Sinh: {:<5} Turns 360 CoT | Tốc Độ: {:.1} Turns/s ({:.0} Turns/phút) | ETA: {:02}m{:02}s",
+                "⚡ [PIPELINE TELEMETRY] Xong {:<5}/{} Ván ({:5.1}%) | Chunk #{:05} ({:4.1}MB/{:.0}MB) | Đã Chạy: {:02}m{:02}s | TB: {:.2}s/ván | Sinh: {:<5} Turns | Tốc Độ: {:.1} Turns/s ({:.0} T/m) | ETA: {:02}m{:02}s",
                 done, total_games, pct,
+                current_chunk_idx, chunk_mb, chunk_max_mb,
                 elapsed_mins, elapsed_rem_secs,
                 avg_sec_per_game,
                 total_turns,
@@ -584,6 +636,11 @@ fn main() {
         }
 
         let _ = writer.flush();
+        let final_mb = (current_chunk_bytes as f64) / (1024.0 * 1024.0);
+        println!(
+            "\n📦 [FINAL CHUNK FLUSHED] Chunk #{:05} ({:.2} MB | {} ván | {} turns) ➔ Đã lưu: {}",
+            current_chunk_idx, final_mb, current_chunk_games, current_chunk_turns, current_path.display()
+        );
     });
 
     // ------------------------------------------------------------------------
@@ -913,10 +970,10 @@ fn main() {
     let turns_per_sec = if total_elapsed > 0.0 { (total_turns as f64) / total_elapsed } else { 0.0 };
 
     println!("\n===============================================================================");
-    println!("💎 TRI-TIER DECOUPLED PIPELINE 360 REASONING GENERATION COMPLETED!");
+    println!("💎 TRI-TIER ROLLING CHUNK 360 REASONING GENERATION COMPLETED!");
     println!("   • Tổng số ván cờ hoàn chỉnh    : {} ván (100% Phân định thắng bại dứt điểm)", total_games);
     println!("   • Tổng số lượt suy luận 360 CoT: {} lượt turns", total_turns);
-    println!("   • Tổng thời gian thực thi      : {:.2} giây", total_elapsed);
+    println!("   • Tổng thời gian thực thi      : {:.2} giây ({:.2} phút)", total_elapsed, total_elapsed / 60.0);
     println!("   • Tốc độ sinh suy luận 360 CoT : {:.2} Turns / giây ({:.0} Turns / phút)", turns_per_sec, turns_per_sec * 60.0);
     println!("   • Ước tính Tokens suy tưởng R1 : ~{} Tokens", total_turns * 850);
     println!("-------------------------------------------------------------------------------");

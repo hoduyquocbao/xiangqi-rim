@@ -5,6 +5,7 @@
 
 ## 1. Nhật Ký Phiên Đang Hoạt Động & Lịch Sử Phiên
 
+- [`session_active_20260822_v61_rolling_chunks.md`](file://.agents/logs/session_active_20260822_v61_rolling_chunks.md) — **Engine v34.0.0: Rolling Chunk Miner Pipeline (< 100MB/chunk)**: Tích hợp cơ chế cuốn chiếu tự động và kịch bản điều phối Python `scripts/rolling_cqrs_360_miner.py` phục vụ 1.000.000 ván cờ.
 - [`session_active_20260822_v60_tri_tier_pipeline.md`](file://.agents/logs/session_active_20260822_v60_tri_tier_pipeline.md) — **Engine v33.0.0: Tri-Tier Decoupled Pipeline Architecture** (Search Producers ➔ 360 Transformers ➔ 4MB Async Sink), gia tốc throughput lên 471.74 turns/s, đồng bộ hóa pipeline thông lượng cao.
 - [`session_active_20260822_v59_anti_repetition_decisive_cqrs.md`](file://.agents/logs/session_active_20260822_v59_anti_repetition_decisive_cqrs.md) — **Phiên Hoàn Thiện 360 CoT & Triệt Tiêu Lặp Nước v59.0**: Triệt tiêu 100% lặp nước (-3000cp/lần lặp Zobrist), đảm bảo 100% ván cờ dứt điểm (red_win/black_win), tích hợp 5 chặng tư duy và 7 bẫy chiến thuật kinh điển, sinh 1,314 turns / 17.2s, 0 lỗi JSON.
 - [`session_active_20260812_1856.md`](file://.agents/logs/session_active_20260812_1856.md) — **Phiên nghiệm thu Thông Lượng SOTA Phase 2 (2.5M - 10M+ FEN/s)**: Tích hợp MVV-LVA move ordering (`order::sort`) tăng Beta Cutoff rate > 85%, bổ sung Test 4 Multi-Stream Raw Evaluator đạt **1.04 Tỷ FEN/s** trên Tesla T4 GPU (Google Colab) và **1.33 Tỷ FEN/s** trên Mac local.
