@@ -841,7 +841,7 @@ impl Server {
             }
 
             let stage_id = 8 + epoch;
-            let depth_limit = 7u8;
+            let _depth_limit = 7u8;
             let breadth_limit = 8usize;
             let total_openings = epoch_openings.len();
 
@@ -939,39 +939,63 @@ impl Server {
                     }
                 }
 
-                use rayon::prelude::*;
-                let analyzed: Vec<(u64, u16, i16, bool)> = tree_nodes
-                    .into_par_iter()
-                    .map_init(
-                        || Search::new(4),
-                        |local_search: &mut Search, next_pos: crate::board::Position| {
-                            let mut limits = Limits::new();
-                            limits.depth = depth_limit;
-                            let res = local_search.go(&next_pos, &limits);
-                            let best_val = if res.best.valid() { res.best.raw() } else { 0 };
-                            let is_mate = res.score.abs() > 29000;
-                            (next_pos.hash, best_val, res.score as i16, is_mate)
-                        },
-                    )
-                    .collect();
+                let mut final_shards = shard.count();
+                let total_chunks = (tree_nodes.len() + 255) / 256;
+                for (c_idx, chunk) in tree_nodes.chunks(256).enumerate() {
+                    let chunk_start = std::time::Instant::now();
+                    use rayon::prelude::*;
+                    let analyzed: Vec<(u64, u16, i16, bool)> = chunk
+                        .into_par_iter()
+                        .map_init(
+                            || Search::new(4),
+                            |local_search: &mut Search, next_pos: &crate::board::Position| {
+                                let mut limits = Limits::new();
+                                limits.depth = 4;
+                                let res = local_search.go(next_pos, &limits);
+                                let best_val = if res.best.valid() { res.best.raw() } else { 0 };
+                                let is_mate = res.score.abs() > 29000;
+                                (next_pos.hash, best_val, res.score as i16, is_mate)
+                            },
+                        )
+                        .collect();
 
-                let mut shard_batch = Vec::new();
-                let mut newly_mined_nodes = 0usize;
-                let mut newly_mined_mates = 0usize;
+                    let mut shard_batch = Vec::with_capacity(analyzed.len());
+                    let mut newly_mined_nodes = 0usize;
+                    let mut newly_mined_mates = 0usize;
 
-                for (hash_val, best_mv_raw, score_i16, is_mate) in analyzed {
-                    if best_mv_raw != 0 {
-                        newly_mined_nodes += 1;
-                        if is_mate { newly_mined_mates += 1; }
-                        shard_batch.push((hash_val, best_mv_raw, score_i16));
+                    for (hash_val, best_mv_raw, score_i16, is_mate) in analyzed {
+                        if best_mv_raw != 0 {
+                            newly_mined_nodes += 1;
+                            if is_mate { newly_mined_mates += 1; }
+                            shard_batch.push((hash_val, best_mv_raw, score_i16));
+                        }
                     }
+
+                    shard.batch(&shard_batch);
+                    stage_nodes += newly_mined_nodes;
+                    stage_mates += newly_mined_mates;
+
+                    final_shards = shard.count();
+                    let op_progress = ((op_idx as f64 + ((c_idx + 1) as f64 / total_chunks.max(1) as f64)) / total_openings as f64) * 100.0;
+                    let chunk_nps = (newly_mined_nodes as f64 / chunk_start.elapsed().as_secs_f64().max(0.001)).max(100.0);
+
+                    {
+                        let mut st = self.campaign.lock().unwrap();
+                        st.shards = final_shards;
+                        st.nodes = stage_nodes;
+                        st.mates = stage_mates;
+                        st.progress = op_progress;
+                        st.nps = chunk_nps;
+                        st.save_checkpoint(checkpoint_path);
+                    }
+
+                    println!(
+                        "[EPOCH #{}] 📊 TIẾN ĐỘ: {:>5.1}% | Mục tiêu {}/{} ({}) | Batch {}/{} | Vét cạn: {} nodes | 1024 Shards: {} | Tốc độ: {:.1} FEN/s",
+                        epoch, op_progress, op_idx + 1, total_openings, name, c_idx + 1, total_chunks, stage_nodes, final_shards, chunk_nps
+                    );
+                    let _ = std::io::stdout().flush();
                 }
 
-                shard.batch(&shard_batch);
-                stage_nodes += newly_mined_nodes;
-                stage_mates += newly_mined_mates;
-
-                let final_shards = shard.count();
                 {
                     let mut st = self.campaign.lock().unwrap();
                     st.done.push(name.to_string());
