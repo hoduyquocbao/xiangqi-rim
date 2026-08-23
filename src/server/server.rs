@@ -851,6 +851,15 @@ impl Server {
                     search.tt.populate(&replay);
                 }
 
+                // Tra cứu 1,024 Shards NVMe (2.72M bản ghi) để nạp trước Hash Move vào TT
+                let shard = crate::learn::Shard::default();
+                if let Some((raw_mv, shard_score)) = shard.probe(pos.hash) {
+                    let mv = crate::movegen::types::Move::from_raw(raw_mv);
+                    if mv.valid() {
+                        search.tt.save(pos.hash, depth, crate::tt::Bound::Exact as u8, mv, shard_score);
+                    }
+                }
+
                 let history_fens = json::list(&body, "history");
                 let past_hashes: Vec<u64> = if history_fens.len() > 1 {
                     history_fens[..history_fens.len() - 1]

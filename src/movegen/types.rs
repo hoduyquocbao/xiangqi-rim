@@ -43,6 +43,15 @@ impl Move {
     pub const fn raw(self) -> u16 {
         ((self.from as u16) << 8) | (self.to as u16)
     }
+
+    /// Khởi tạo một nước đi từ số nguyên 16-bit thô (`u16`).
+    #[inline(always)]
+    pub const fn from_raw(raw: u16) -> Self {
+        Self {
+            from: (raw >> 8) as u8,
+            to: (raw & 0xFF) as u8,
+        }
+    }
 }
 
 /// Struct `List` chứa danh sách các nước đi được sinh ra, căn lề bộ nhớ 64-byte.
