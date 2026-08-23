@@ -14,6 +14,7 @@ import Audit from './components/Audit.jsx';
 import Studio from './components/Studio.jsx';
 import Tournament from './components/Tournament.jsx';
 import { R1Studio } from './components/R1Studio.jsx';
+import { MindmapVisualizer } from './components/MindmapVisualizer.jsx';
 import { Debugger } from './components/Debugger.jsx';
 import { parse, fen, check, moves as getMoves, uciToMove, hasLegalMoves } from './rules/rules.js';
 import * as sound from './sound/audio.js';
@@ -46,6 +47,7 @@ export default function App() {
     auditShow: false,
     studioShow: false,
     r1Show: false,
+    mindmapShow: false,
     tournamentShow: false,
     active: null,
     hint: null,
@@ -531,6 +533,14 @@ export default function App() {
           </button>
 
           <button
+            onClick={() => update((prev) => ({ ...prev, mindmapShow: true }))}
+            className="px-3 py-2 rounded bg-gradient-to-r from-purple-600/30 via-gold/30 to-emerald-600/30 text-gold border border-gold/60 hover:border-gold text-xs font-bold transition flex items-center gap-1.5 shadow-glow"
+          >
+            <span>🧠</span>
+            SƠ ĐỒ TƯ DUY 360°
+          </button>
+
+          <button
             onClick={() => update((prev) => ({ ...prev, r1Show: true }))}
             className="px-3 py-2 rounded bg-gradient-to-r from-gold/20 via-amber-500/20 to-gold/20 text-gold border border-gold/50 hover:border-gold text-xs font-bold transition flex items-center gap-1.5 shadow-glow"
           >
@@ -820,6 +830,12 @@ export default function App() {
       <R1Studio
         show={game.r1Show}
         close={() => update((prev) => ({ ...prev, r1Show: false }))}
+      />
+
+      {/* Sơ Đồ Tư Duy Cây Suy Luận 360° & Hậu Kiểm Toàn Ván Modal */}
+      <MindmapVisualizer
+        show={game.mindmapShow}
+        close={() => update((prev) => ({ ...prev, mindmapShow: false }))}
       />
 
       {/* Interactive Studio Board Setup Studio Modal */}
