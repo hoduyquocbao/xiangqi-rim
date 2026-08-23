@@ -384,6 +384,12 @@ export function Debugger({ show, close }) {
                 >
                   COPY LOGS
                 </button>
+                <button
+                  onClick={() => logger.clear()}
+                  className="px-2 py-0.5 rounded bg-red-500/10 border border-red-500/30 text-red-300 text-[11px] font-bold"
+                >
+                  CLEAR
+                </button>
                 <span className="text-[11px] text-gold/40">
                   Showing {filteredLogs.length} of {logs.length} logs
                 </span>

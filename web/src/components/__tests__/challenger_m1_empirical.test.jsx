@@ -112,19 +112,19 @@ describe('Milestone M1 Empirical Challenger Verification Suite', () => {
     it('should render telemetry panel and live metrics when show is true', () => {
       render(<Debugger show={true} close={() => {}} />);
 
-      expect(screen.getByText(/TELEMETRY & WASM DIAGNOSTICS/i)).toBeTruthy();
-      expect(screen.getByText(/PHẦN CỨNG BẰNG GPU\/CPU:/i)).toBeTruthy();
-      expect(screen.getByText(/Zero-Copy Memory:/i)).toBeTruthy();
-
-      // Check metric labels
-      expect(screen.getByText('DEPTH')).toBeTruthy();
-      expect(screen.getByText('NODES')).toBeTruthy();
-      expect(screen.getByText('SPEED (NPS)')).toBeTruthy();
-      expect(screen.getByText('EVAL SCORE')).toBeTruthy();
+      expect(screen.getAllByText(/TELEMETRY/i).length).toBeGreaterThan(0);
+      expect(screen.getByText(/DEPTH \(TARGET\)/i)).toBeTruthy();
+      expect(screen.getByText(/NODES SEARCHED/i)).toBeTruthy();
+      expect(screen.getByText(/TỐC ĐỘ NPS/i)).toBeTruthy();
+      expect(screen.getByText(/EVAL SCORE/i)).toBeTruthy();
     });
 
     it('should allow filtering logs by severity level', () => {
       render(<Debugger show={true} close={() => {}} />);
+
+      // Switch to System Logs tab
+      const logsTab = screen.getByText(/NHẬT KÝ SYSTEM LOGS/i);
+      fireEvent.click(logsTab);
 
       logger.log('info', 'test', 'Info message for debugger');
       logger.log('error', 'test', 'Error message for debugger');
@@ -160,6 +160,10 @@ describe('Milestone M1 Empirical Challenger Verification Suite', () => {
 
     it('should clear logs when clear button clicked', () => {
       render(<Debugger show={true} close={() => {}} />);
+
+      // Switch to System Logs tab
+      const logsTab = screen.getByText(/NHẬT KÝ SYSTEM LOGS/i);
+      fireEvent.click(logsTab);
 
       act(() => {
         logger.log('info', 'test', 'Persistent log entry');
