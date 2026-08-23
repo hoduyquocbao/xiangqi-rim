@@ -727,8 +727,9 @@ impl Server {
                     }
 
                     println!(
-                        "[STAGE {}/5] 📊 TIẾN ĐỘ: {:>5.1}% | Mục tiêu {}/{} ({}) | Nhánh {}/{} | Vét cạn: {} nodes | Sát cục: {} | 1024 Shards: {} | ETA: {:.1}s",
+                        "[STAGE {}/{}] 📊 TIẾN ĐỘ: {:>5.1}% | Mục tiêu {}/{} ({}) | Nhánh {}/{} | Vét cạn: {} nodes | Sát cục: {} | 1024 Shards: {} | ETA: {:.1}s",
                         stage_id,
+                        total_stages,
                         current_progress,
                         op_idx + 1,
                         total_openings,

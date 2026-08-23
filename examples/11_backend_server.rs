@@ -17,9 +17,9 @@ use std::time::Duration;
 use xiangrust::server::{Base64, Frame, Opcode, Server, Sha1};
 
 /// Hằng số phiên bản ứng dụng APP_VERSION
-pub const APP_VERSION: &str = "v10.0.0-endless-campaign-engine";
+pub const APP_VERSION: &str = "v10.0.1-endless-campaign-engine";
 /// Hằng số dấu thời gian đóng gói APP_BUILD_STAMP
-pub const APP_BUILD_STAMP: &str = "2026-08-24 01:36:00 ICT";
+pub const APP_BUILD_STAMP: &str = "2026-08-24 01:41:00 ICT";
 
 fn main() {
     // Nạp cấu hình độ sâu mặc định DEPTH 60 từ biến môi trường OS (Rule 8.11 / 7.11)
