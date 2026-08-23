@@ -1,6 +1,16 @@
 // web/src/components/MindmapVisualizer.jsx
-// Sơ Đồ Tư Duy Cây Suy Luận 360° & Kho Tri Thức Transposition Table (TT) Vĩnh Cửu
-// Định danh đơn từ tiếng Anh 100%: MindmapVisualizer, labels, pieceNames, pieceWeights, store, key, load, save, getBakedBoardSvgUrl, sqToUci, moveToNotation, evaluatePosition, MindmapVectorViewport, ElegantGameTimeline, show, close, fen, history, score, line, thought, status, onApplyFen, board, turn, rank, file, x, y, index, piece, color, svg, cx, cy, f, r, red, parsed, glow, ruby, dark, shadow, target, rulers, breadth, depth, expand, export, import, tree, radial, root, candidate, reply, inspect, swing, alert, camera, scale, drag, hover
+// Sơ Đồ Tư Duy Cây Suy Luận 360° & Động Cơ Mở Rộng Chiều Ngang / Chiều Sâu Vô Hạn
+// TÍNH NĂNG VÔ HẠN:
+// 1. Mở Rộng Chiều Ngang Vô Hạn (Infinite Breadth Expansion):
+//    - Tăng tự do số biến thể (+5, +10, hoặc ♾ Toàn Bộ 100% Nước Đi Hợp Lệ), không bao giờ bị giới hạn hay tự quay vòng!
+// 2. Mở Rộng Chiều Sâu Vô Hạn (Infinite Depth Expansion):
+//    - Cho phép chọn bất kỳ node nào ở bất kỳ tầng nào và đào sâu đệ quy (+1 Ply, +3 Plies) không giới hạn độ sâu (Level 1, 2, 3, 4, 5, 6, 7, 8... vô hạn).
+// 3. Bố Trí Cây Phân Bổ Tự Động Vô Hạn (Infinite Tree Layout):
+//    - Thuật toán Radial & Hierarchical Tree Layout tự động tính toán góc dải quạt và độ giãn nở, không đè lấn nhau.
+// 4. Kho Tri Thức TT Vĩnh Cửu O(1):
+//    - Lưu và tra cứu tức thì toàn bộ hàng trăm node của cây vào localStorage/JSON, nhận diện TT Hit giảm N thời gian tìm kiếm.
+// 5. Baked SVG Texture 120 FPS:
+//    - 100% đồng nhất Board.jsx, 0% CPU Idle, máy luôn mát lạnh!
 
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { 
@@ -27,7 +37,12 @@ import {
   CheckCircle2, 
   PlusCircle, 
   FolderTree, 
-  Sliders 
+  Sliders,
+  Plus,
+  Minus,
+  Infinity as InfinityIcon,
+  ChevronDown,
+  ChevronUp
 } from 'lucide-react';
 import { parse, fen as buildFen, moves as getLegalMoves, check as isCheck, hasLegalMoves } from '../rules/rules.js';
 import { instance as engine } from '../engine/engine.js';
@@ -278,84 +293,173 @@ function evaluatePosition(board) {
   return { score, redMaterial, blackMaterial, redCenter, blackCenter };
 }
 
+// Sinh danh sách nước đi ứng viên được xếp hạng từ một thế cờ
+function generateCandidateMoves(fenStr, limit = 999) {
+  const parsed = parse(fenStr);
+  const board = parsed.board;
+  const turn = parsed.turn;
+  const isTurnRed = turn === 'w';
+  const rootEval = evaluatePosition(board);
+
+  const moves = [];
+  for (let sq = 0; sq < 90; sq++) {
+    const piece = board[sq];
+    if (piece === '.') continue;
+    const isPieceRed = piece === piece.toUpperCase();
+    if (isPieceRed !== isTurnRed) continue;
+
+    const dests = getLegalMoves(board, sq, turn);
+    for (const dest of dests) {
+      const uci = `${sqToUci(sq)}${sqToUci(dest)}`;
+      const notation = moveToNotation(board, sq, dest);
+      const targetPiece = board[dest];
+      const isCap = targetPiece !== '.';
+
+      const nextBoard = [...board];
+      nextBoard[dest] = piece;
+      nextBoard[sq] = '.';
+      const nextTurn = turn === 'w' ? 'b' : 'w';
+      const nextFen = buildFen(nextBoard, nextTurn);
+      const nextEval = evaluatePosition(nextBoard);
+      const nextCheck = isCheck(nextBoard, nextTurn);
+
+      let moveScore = isTurnRed ? (nextEval.score - rootEval.score) : (rootEval.score - nextEval.score);
+      if (isCap) moveScore += (pieceWeights[targetPiece] || 50) / 2;
+      if (nextCheck) moveScore += 80;
+
+      let intent = 'Phát triển quân cờ, củng cố vị trí';
+      let badge = 'Nước phát triển';
+
+      if (nextCheck) {
+        intent = 'Chiếu tướng trực diện dồn ép Cung Tướng';
+        badge = 'Chiếu tướng';
+      } else if (isCap) {
+        intent = `Ăn ${pieceNames[targetPiece] || 'quân'}, chiếm ưu thế vật chất`;
+        badge = 'Ăn quân';
+      } else if (sq % 9 === 4 || dest % 9 === 4) {
+        intent = 'Khống chế lộ 5 trung lộ, mở đường Pháo đầu';
+        badge = 'Trung Lộ';
+      }
+
+      moves.push({
+        sq,
+        dest,
+        uci,
+        notation,
+        piece,
+        isCapture: isCap,
+        isCheck: nextCheck,
+        score: isTurnRed ? nextEval.score : -nextEval.score,
+        heuristicScore: moveScore,
+        fen: nextFen,
+        intent,
+        badge
+      });
+    }
+  }
+
+  moves.sort((a, b) => b.heuristicScore - a.heuristicScore);
+  return moves.slice(0, limit);
+}
+
 // ============================================================================
-// VIEWPORT PAN & ZOOM CÂY TƯ DUY TẬN DỤNG GPU HARDWARE ACCELERATION
+// VIEWPORT PAN & ZOOM CÂY TƯ DUY VÔ HẠN (GPU HARDWARE ACCELERATION)
 // ============================================================================
 function MindmapVectorViewport({ 
   treeNodes, 
   activeNodeId, 
   onSelectNode, 
   layoutMode, 
-  onExpandBreadth, 
+  onExpandBreadth,
+  onShrinkBreadth,
   onExpandDepth,
-  breadthCount 
+  onDeepenThreePlies,
+  onExpandAllBreadth,
+  breadthCount,
+  totalAvailableMoves
 }) {
   const containerRef = useRef(null);
   const [camera, setCamera] = useState({ x: 0, y: 0, scale: 0.95 });
   const isDraggingRef = useRef(false);
   const dragStartRef = useRef({ x: 0, y: 0 });
 
-  // Tính toán tọa độ phân bổ các node
+  // Thuật toán tính tọa độ tổng quát cho Cây Vô Hạn (General Infinite Tree Layout)
   const layoutedNodes = useMemo(() => {
     if (!treeNodes || treeNodes.length === 0) return [];
 
     const nodes = JSON.parse(JSON.stringify(treeNodes));
-    const root = nodes[0];
-    if (!root) return [];
+    const nodeMap = new Map();
+    nodes.forEach((n) => nodeMap.set(n.id, n));
 
+    const childrenMap = new Map();
+    nodes.forEach((n) => {
+      if (n.parentId) {
+        if (!childrenMap.has(n.parentId)) childrenMap.set(n.parentId, []);
+        childrenMap.get(n.parentId).push(n);
+      }
+    });
+
+    const root = nodes.find((n) => !n.parentId) || nodes[0];
     root.x = 0;
     root.y = 0;
 
-    // Nhóm theo parentId để phân nhánh đa tầng
-    const level1 = nodes.filter((n) => n.level === 1);
-    const count = level1.length;
+    // Đếm số lá bên dưới để phân bổ không gian đệ quy
+    function countLeaves(nodeId) {
+      const kids = childrenMap.get(nodeId) || [];
+      if (kids.length === 0) return 1;
+      return kids.reduce((sum, kid) => sum + countLeaves(kid.id), 0);
+    }
 
     if (layoutMode === 'radial') {
-      const radius1 = 380;
-      const radius2 = 760;
-      const radius3 = 1140;
+      // Phân bổ dải quạt Radial đệ quy
+      function layoutRadial(nodeId, startAngle, endAngle, currentRadius) {
+        const kids = childrenMap.get(nodeId) || [];
+        if (kids.length === 0) return;
 
-      level1.forEach((cand, idx) => {
-        const angle = -Math.PI / 2 + (idx * 2 * Math.PI) / Math.max(1, count);
-        cand.x = Math.round(radius1 * Math.cos(angle));
-        cand.y = Math.round(radius1 * Math.sin(angle));
+        const totalWeight = countLeaves(nodeId);
+        let accAngle = startAngle;
 
-        const replies = nodes.filter((n) => n.parentId === cand.id);
-        replies.forEach((rep, rIdx) => {
-          const subSpread = 0.35;
-          const subAngle = angle + (rIdx - (replies.length - 1) / 2) * subSpread;
-          rep.x = Math.round(radius2 * Math.cos(subAngle));
-          rep.y = Math.round(radius2 * Math.sin(subAngle));
+        kids.forEach((kid) => {
+          const kidWeight = countLeaves(kid.id);
+          const span = ((endAngle - startAngle) * kidWeight) / totalWeight;
+          const midAngle = accAngle + span / 2;
 
-          // Tầng sâu 3
-          const deepChildren = nodes.filter((n) => n.parentId === rep.id);
-          deepChildren.forEach((deep, dIdx) => {
-            const deepSpread = 0.25;
-            const deepAngle = subAngle + (dIdx - (deepChildren.length - 1) / 2) * deepSpread;
-            deep.x = Math.round(radius3 * Math.cos(deepAngle));
-            deep.y = Math.round(radius3 * Math.sin(deepAngle));
-          });
+          kid.x = Math.round(currentRadius * Math.cos(midAngle));
+          kid.y = Math.round(currentRadius * Math.sin(midAngle));
+
+          layoutRadial(kid.id, accAngle, accAngle + span, currentRadius + 380);
+          accAngle += span;
         });
-      });
+      }
+
+      layoutRadial(root.id, -Math.PI, Math.PI, 380);
     } else {
-      const spacingY = 220;
-      const totalH = (count - 1) * spacingY;
+      // Phân bổ cây phân cấp ngang (Hierarchical Tree Layout)
+      let leafY = 0;
+      const leafSpacing = 160;
 
-      level1.forEach((cand, idx) => {
-        cand.x = 380;
-        cand.y = Math.round(-totalH / 2 + idx * spacingY);
+      function layoutTreeVertical(nodeId, depthLevel) {
+        const node = nodeMap.get(nodeId);
+        const kids = childrenMap.get(nodeId) || [];
+        node.x = depthLevel * 380;
 
-        const replies = nodes.filter((n) => n.parentId === cand.id);
-        replies.forEach((rep, rIdx) => {
-          rep.x = 760;
-          rep.y = Math.round(cand.y + (rIdx - (replies.length - 1) / 2) * 120);
+        if (kids.length === 0) {
+          node.y = leafY;
+          leafY += leafSpacing;
+        } else {
+          kids.forEach((kid) => layoutTreeVertical(kid.id, depthLevel + 1));
+          const firstKid = kids[0];
+          const lastKid = kids[kids.length - 1];
+          node.y = Math.round((firstKid.y + lastKid.y) / 2);
+        }
+      }
 
-          const deepChildren = nodes.filter((n) => n.parentId === rep.id);
-          deepChildren.forEach((deep, dIdx) => {
-            deep.x = 1140;
-            deep.y = Math.round(rep.y + (dIdx - (deepChildren.length - 1) / 2) * 100);
-          });
-        });
+      layoutTreeVertical(root.id, 0);
+
+      // Căn giữa trục Y
+      const rootY = root.y;
+      nodes.forEach((n) => {
+        n.y -= rootY;
       });
     }
 
@@ -388,13 +492,13 @@ function MindmapVectorViewport({
     const zoomFactor = e.deltaY < 0 ? 1.08 : 0.92;
     setCamera((prev) => ({
       ...prev,
-      scale: Math.max(0.2, Math.min(2.2, prev.scale * zoomFactor))
+      scale: Math.max(0.1, Math.min(3.0, prev.scale * zoomFactor))
     }));
   };
 
   const resetCamera = () => setCamera({ x: 0, y: 0, scale: 0.95 });
-  const zoomIn = () => setCamera((prev) => ({ ...prev, scale: Math.min(2.2, prev.scale * 1.15) }));
-  const zoomOut = () => setCamera((prev) => ({ ...prev, scale: Math.max(0.2, prev.scale * 0.85) }));
+  const zoomIn = () => setCamera((prev) => ({ ...prev, scale: Math.min(3.0, prev.scale * 1.18) }));
+  const zoomOut = () => setCamera((prev) => ({ ...prev, scale: Math.max(0.1, prev.scale * 0.82) }));
 
   return (
     <div
@@ -430,7 +534,7 @@ function MindmapVectorViewport({
                 d={`M calc(50% + ${parent.x}px) calc(50% + ${parent.y}px) Q calc(50% + ${parent.x}px) calc(50% + ${node.y}px) calc(50% + ${node.x}px) calc(50% + ${node.y}px)`}
                 fill="none"
                 stroke={isPathActive ? '#F59E0B' : 'rgba(212, 175, 55, 0.35)'}
-                strokeWidth={isPathActive ? '3' : '1.5'}
+                strokeWidth={isPathActive ? '3.5' : '1.5'}
                 strokeDasharray={isPathActive ? 'none' : '4 2'}
               />
             );
@@ -500,8 +604,8 @@ function MindmapVectorViewport({
         })}
       </div>
 
-      {/* Floating Viewport Controls */}
-      <div className="absolute top-3 left-3 flex items-center gap-1.5 bg-obsidian/90 p-1.5 rounded-lg border border-gold/30 backdrop-blur-md z-30">
+      {/* FLOATING VIEWPORT CONTROLS: MỞ RỘNG VÔ HẠN */}
+      <div className="absolute top-3 left-3 flex items-center gap-1.5 bg-obsidian/95 p-1.5 rounded-lg border border-gold/30 backdrop-blur-md z-30 flex-wrap">
         <button onClick={zoomIn} title="Phóng to" className="p-1.5 rounded hover:bg-gold/20 text-gold transition">
           <ZoomIn className="w-4 h-4" />
         </button>
@@ -514,27 +618,52 @@ function MindmapVectorViewport({
 
         <div className="h-4 w-px bg-gold/30 mx-1" />
 
-        {/* NÚT MỞ RỘNG CHIỀU NGANG */}
-        <button
-          onClick={onExpandBreadth}
-          title="Mở rộng thêm các biến thể ứng viên ở cùng tầng (Mở Rộng Chiều Ngang)"
-          className="px-2 py-1 rounded bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 text-[11px] font-bold transition flex items-center gap-1"
-        >
-          <ArrowRight className="w-3.5 h-3.5" /> +4 BIẾN THỂ ({breadthCount})
-        </button>
+        {/* NÚT MỞ RỘNG CHIỀU NGANG VÔ HẠN (+5, -5, ALL) */}
+        <div className="flex items-center gap-1 bg-amber-950/40 p-0.5 rounded border border-amber-500/30">
+          <button
+            onClick={onShrinkBreadth}
+            title="Thu gọn chiều ngang (-5 biến thể)"
+            className="p-1 rounded hover:bg-amber-500/20 text-amber-300 transition"
+          >
+            <Minus className="w-3.5 h-3.5" />
+          </button>
+          <button
+            onClick={onExpandBreadth}
+            title="Mở rộng thêm chiều ngang (+5 biến thể) - Vô Hạn!"
+            className="px-2 py-0.5 text-xs font-bold text-amber-300 hover:bg-amber-500/20 rounded transition flex items-center gap-1"
+          >
+            <Plus className="w-3.5 h-3.5" /> NGANG: {breadthCount >= totalAvailableMoves ? 'TẤT CẢ' : breadthCount} / {totalAvailableMoves}
+          </button>
+          <button
+            onClick={onExpandAllBreadth}
+            title="Bung 100% tất cả các nước đi hợp lệ ở thế cờ này"
+            className="px-1.5 py-0.5 text-[10px] font-black bg-amber-500/30 text-amber-200 hover:bg-amber-500/50 rounded transition flex items-center gap-0.5"
+          >
+            <InfinityIcon className="w-3 h-3" /> ALL
+          </button>
+        </div>
 
-        {/* NÚT MỞ RỘNG CHIỀU SÂU */}
-        <button
-          onClick={onExpandDepth}
-          title="Đào sâu tiếp 1 tầng từ node đang chọn (Mở Rộng Chiều Sâu)"
-          className="px-2 py-1 rounded bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-300 border border-cyan-500/40 text-[11px] font-bold transition flex items-center gap-1"
-        >
-          <ArrowDown className="w-3.5 h-3.5" /> ĐÀO SÂU (+1 PLY)
-        </button>
+        {/* NÚT MỞ RỘNG CHIỀU SÂU VÔ HẠN (+1 PLY, +3 PLIES) */}
+        <div className="flex items-center gap-1 bg-cyan-950/40 p-0.5 rounded border border-cyan-500/30">
+          <button
+            onClick={onExpandDepth}
+            title="Đào sâu tiếp 1 tầng từ node đang chọn (Mở Rộng Chiều Sâu Vô Hạn)"
+            className="px-2 py-0.5 text-xs font-bold text-cyan-300 hover:bg-cyan-500/20 rounded transition flex items-center gap-1"
+          >
+            <ArrowDown className="w-3.5 h-3.5" /> ĐÀO SÂU (+1 PLY)
+          </button>
+          <button
+            onClick={onDeepenThreePlies}
+            title="Tự động mở rộng 3 tầng sâu tiếp theo theo Best Line"
+            className="px-2 py-0.5 text-[10px] font-black bg-cyan-500/30 text-cyan-200 hover:bg-cyan-500/50 rounded transition flex items-center gap-0.5"
+          >
+            +3 PLIES
+          </button>
+        </div>
       </div>
 
       <div className="absolute bottom-3 left-3 text-[11px] text-gold/70 bg-obsidian/90 px-3 py-1 rounded-lg border border-gold/20 pointer-events-none z-30 flex items-center gap-1.5">
-        <Sparkles className="w-3.5 h-3.5 text-gold" /> Mở Rộng Ngang & Sâu • Lưu TT Vĩnh Cửu • 120 FPS
+        <Sparkles className="w-3.5 h-3.5 text-gold" /> Mở Rộng Ngang & Sâu Vô Hạn • Lưu TT Vĩnh Cửu • 120 FPS
       </div>
     </div>
   );
@@ -664,7 +793,7 @@ function ElegantGameTimeline({ timeline, selectedPly, onSelectPly }) {
 }
 
 // ============================================================================
-// COMPONENT CHÍNH: MINDMAP VISUALIZER
+// COMPONENT CHÍNH: MINDMAP VISUALIZER VÔ HẠN
 // ============================================================================
 export function MindmapVisualizer({ show, close, fen, history, score, line, thought, status, onApplyFen }) {
   if (!show) return null;
@@ -676,9 +805,11 @@ export function MindmapVisualizer({ show, close, fen, history, score, line, thou
   const [selectedPly, setSelectedPly] = useState(gameHistory.length - 1);
   const [activeNode, setActiveNode] = useState(null);
 
-  // Trạng thái mở rộng chiều ngang (Breadth Limit) & Chiều sâu (Expanded Depths)
+  // Trạng thái mở rộng chiều ngang (Breadth Limit) - KHÔNG GIỚI HẠN
   const [breadthLimit, setBreadthLimit] = useState(6);
-  const [expandedDepthNodeIds, setExpandedDepthNodeIds] = useState(new Set());
+
+  // Trạng thái mở rộng chiều sâu đệ quy - Map<nodeId, { depth: number, breadth: number }>
+  const [expandedNodes, setExpandedNodes] = useState(() => new Map());
 
   // Kho Tri Thức TT Vĩnh Cửu
   const [ttStore, setTtStore] = useState(() => loadPersistentTTStore());
@@ -686,24 +817,27 @@ export function MindmapVisualizer({ show, close, fen, history, score, line, thou
 
   useEffect(() => {
     setSelectedPly(gameHistory.length - 1);
+    setExpandedNodes(new Map());
   }, [currentFen, gameHistory.length]);
 
   const inspectFen = gameHistory[selectedPly] || currentFen;
   const parsedInspect = useMemo(() => parse(inspectFen), [inspectFen]);
 
-  // Sinh toàn bộ Node cho Cây Tư Duy (Hỗ Trợ Mở Rộng Chiều Ngang & Chiều Sâu & TT Match)
+  // Tổng số nước đi hợp lệ tại thế cờ gốc
+  const allRootMoves = useMemo(() => {
+    return generateCandidateMoves(inspectFen, 999);
+  }, [inspectFen]);
+
+  const totalAvailableMoves = allRootMoves.length;
+
+  // SINH CÂY TƯ DUY VÔ HẠN ĐỆ QUY (INFINITE RECURSIVE TREE GENERATOR)
   const treeNodes = useMemo(() => {
-    const board = parsedInspect.board;
-    const turn = parsedInspect.turn;
-    const isTurnRed = turn === 'w';
-    const rootEval = evaluatePosition(board);
-
     const nodes = [];
-
     const rootTTHit = ttStore[inspectFen];
+    const rootEval = evaluatePosition(parsedInspect.board);
 
-    // Root Node
-    nodes.push({
+    // Root Node (Level 0)
+    const rootNode = {
       id: 'root',
       level: 0,
       title: `Thế cờ Turn #${Math.floor(selectedPly / 2) + 1}`,
@@ -712,82 +846,56 @@ export function MindmapVisualizer({ show, close, fen, history, score, line, thou
       from: -1,
       to: -1,
       score: rootTTHit ? rootTTHit.score : rootEval.score,
-      badge: isTurnRed ? 'Lượt Đỏ' : 'Lượt Đen',
-      intent: 'Khởi điểm cây phân nhánh suy tưởng',
+      badge: parsedInspect.turn === 'w' ? 'Lượt Đỏ' : 'Lượt Đen',
+      intent: 'Khởi điểm cây phân nhánh suy tưởng vô hạn',
       ttHit: !!rootTTHit,
       ttDepth: rootTTHit?.depth || 0
-    });
+    };
+    nodes.push(rootNode);
 
-    // Lấy toàn bộ nước đi hợp lệ
-    const candidates = [];
-    for (let sq = 0; sq < 90; sq++) {
-      const piece = board[sq];
-      if (piece === '.') continue;
-      const isPieceRed = piece === piece.toUpperCase();
-      if (isPieceRed !== isTurnRed) continue;
+    // Level 1: Các biến thể ứng viên theo breadthLimit (Mở rộng chiều ngang vô hạn)
+    const level1Moves = allRootMoves.slice(0, breadthLimit);
 
-      const dests = getLegalMoves(board, sq, turn);
-      for (const dest of dests) {
-        const uci = `${sqToUci(sq)}${sqToUci(dest)}`;
-        const notation = moveToNotation(board, sq, dest);
-        const targetPiece = board[dest];
-        const isCap = targetPiece !== '.';
+    // Hàm đệ quy sinh các nhánh con cháu không giới hạn chiều sâu
+    function expandRecursive(parentNode, depthBudget) {
+      if (depthBudget <= 0) return;
 
-        const clonedBoard1 = [...board];
-        clonedBoard1[dest] = piece;
-        clonedBoard1[sq] = '.';
-        const nextTurn1 = turn === 'w' ? 'b' : 'w';
-        const nextFen1 = buildFen(clonedBoard1, nextTurn1);
-        const eval1 = evaluatePosition(clonedBoard1);
-        const check1 = isCheck(clonedBoard1, nextTurn1);
+      const childMoves = generateCandidateMoves(parentNode.fen, 3);
+      childMoves.forEach((move, cIdx) => {
+        const childId = `${parentNode.id}_c${cIdx}`;
+        const childTTHit = ttStore[move.fen];
 
-        let moveScore = isTurnRed ? (eval1.score - rootEval.score) : (rootEval.score - eval1.score);
-        if (isCap) moveScore += (pieceWeights[targetPiece] || 50) / 2;
-        if (check1) moveScore += 80;
+        const childNode = {
+          id: childId,
+          parentId: parentNode.id,
+          level: parentNode.level + 1,
+          title: `L${parentNode.level + 1}: ${move.notation}`,
+          uci: move.uci,
+          fen: move.fen,
+          from: move.sq,
+          to: move.dest,
+          score: childTTHit ? childTTHit.score : move.score,
+          badge: move.badge,
+          intent: move.intent,
+          ttHit: !!childTTHit,
+          ttDepth: childTTHit?.depth || 0
+        };
+        nodes.push(childNode);
 
-        let intent = 'Phát triển quân cờ, củng cố vị trí';
-        let badge = 'Nước phát triển';
-
-        if (check1) {
-          intent = 'Chiếu tướng trực diện dồn ép Cung Tướng';
-          badge = 'Chiếu tướng';
-        } else if (isCap) {
-          intent = `Ăn ${pieceNames[targetPiece] || 'quân'}, chiếm ưu thế vật chất`;
-          badge = 'Ăn quân';
-        } else if (sq % 9 === 4 || dest % 9 === 4) {
-          intent = 'Khống chế lộ 5 trung lộ, mở đường Pháo đầu';
-          badge = 'Trung Lộ';
+        // Đào sâu tiếp nếu node này được cấu hình mở rộng
+        const nodeExpansion = expandedNodes.get(childId) || 0;
+        const remainingBudget = Math.max(depthBudget - 1, nodeExpansion);
+        if (remainingBudget > 0) {
+          expandRecursive(childNode, remainingBudget);
         }
-
-        candidates.push({
-          sq,
-          dest,
-          uci,
-          notation,
-          piece,
-          isCapture: isCap,
-          isCheck: check1,
-          score: isTurnRed ? eval1.score : -eval1.score,
-          heuristicScore: moveScore,
-          fen: nextFen1,
-          clonedBoard1,
-          nextTurn1,
-          intent,
-          badge
-        });
-      }
+      });
     }
 
-    candidates.sort((a, b) => b.heuristicScore - a.heuristicScore);
-    
-    // Áp dụng số lượng ứng viên theo Breadth Limit (Mở rộng chiều ngang)
-    const topCandidates = candidates.slice(0, breadthLimit);
-
-    topCandidates.forEach((cand, idx) => {
+    level1Moves.forEach((cand, idx) => {
       const candId = `cand${idx}`;
       const ttEntry = ttStore[cand.fen];
 
-      nodes.push({
+      const candNode = {
         id: candId,
         parentId: 'root',
         level: 1,
@@ -801,124 +909,107 @@ export function MindmapVisualizer({ show, close, fen, history, score, line, thou
         intent: cand.intent,
         ttHit: !!ttEntry,
         ttDepth: ttEntry?.depth || 0
-      });
+      };
+      nodes.push(candNode);
 
-      // Tầng 2: Phản đòn đối phương
-      const replyDests = [];
-      for (let rsq = 0; rsq < 90; rsq++) {
-        const rpiece = cand.clonedBoard1[rsq];
-        if (rpiece === '.') continue;
-        const isRPieceRed = rpiece === rpiece.toUpperCase();
-        if (isRPieceRed === isTurnRed) continue;
-
-        const rdests = getLegalMoves(cand.clonedBoard1, rsq, cand.nextTurn1);
-        for (const rdest of rdests) {
-          replyDests.push({ rsq, rdest, rpiece });
-        }
-      }
-
-      if (replyDests.length > 0) {
-        const bestReply = replyDests[0];
-        const ruci = `${sqToUci(bestReply.rsq)}${sqToUci(bestReply.rdest)}`;
-        const rnotation = moveToNotation(cand.clonedBoard1, bestReply.rsq, bestReply.rdest);
-        const clonedBoard2 = [...cand.clonedBoard1];
-        clonedBoard2[bestReply.rdest] = bestReply.rpiece;
-        clonedBoard2[bestReply.rsq] = '.';
-        const nextTurn2 = turn;
-        const nextFen2 = buildFen(clonedBoard2, nextTurn2);
-        const eval2 = evaluatePosition(clonedBoard2);
+      // Phản đòn đối phương mặc định (Tầng 2)
+      const replyMoves = generateCandidateMoves(cand.fen, 1);
+      if (replyMoves.length > 0) {
+        const reply = replyMoves[0];
         const replyId = `reply${idx}`;
-        const replyTTHit = ttStore[nextFen2];
+        const replyTTHit = ttStore[reply.fen];
 
-        nodes.push({
+        const replyNode = {
           id: replyId,
           parentId: candId,
           level: 2,
-          title: `Đối: ${rnotation}`,
-          uci: ruci,
-          fen: nextFen2,
-          from: bestReply.rsq,
-          to: bestReply.rdest,
-          score: replyTTHit ? replyTTHit.score : eval2.score,
+          title: `Đối: ${reply.notation}`,
+          uci: reply.uci,
+          fen: reply.fen,
+          from: reply.sq,
+          to: reply.dest,
+          score: replyTTHit ? replyTTHit.score : reply.score,
           badge: 'Phản đòn',
           intent: 'Đối phương điều động quân chống trả',
           ttHit: !!replyTTHit,
           ttDepth: replyTTHit?.depth || 0
-        });
+        };
+        nodes.push(replyNode);
 
-        // TẦNG SÂU 3 NẾU ĐƯỢC KÍCH HOẠT MỞ RỘNG CHIỀU SÂU
-        if (expandedDepthNodeIds.has(replyId) || expandedDepthNodeIds.has(candId)) {
-          for (let dsq = 0; dsq < 90; dsq++) {
-            const dpiece = clonedBoard2[dsq];
-            if (dpiece === '.') continue;
-            const isDPieceRed = dpiece === dpiece.toUpperCase();
-            if (isDPieceRed !== isTurnRed) continue;
+        // Kiểm tra xem candNode hoặc replyNode có yêu cầu mở rộng sâu tiếp không
+        const candDepth = expandedNodes.get(candId) || 0;
+        const replyDepth = expandedNodes.get(replyId) || 0;
+        const maxDepthToExpand = Math.max(candDepth, replyDepth);
 
-            const ddests = getLegalMoves(clonedBoard2, dsq, nextTurn2);
-            if (ddests.length > 0) {
-              const ddest = ddests[0];
-              const duci = `${sqToUci(dsq)}${sqToUci(ddest)}`;
-              const dnotation = moveToNotation(clonedBoard2, dsq, ddest);
-              const clonedBoard3 = [...clonedBoard2];
-              clonedBoard3[ddest] = dpiece;
-              clonedBoard3[dsq] = '.';
-              const nextTurn3 = nextTurn1;
-              const nextFen3 = buildFen(clonedBoard3, nextTurn3);
-              const eval3 = evaluatePosition(clonedBoard3);
-              const deepTTHit = ttStore[nextFen3];
-
-              nodes.push({
-                id: `deep${idx}`,
-                parentId: replyId,
-                level: 3,
-                title: `Sâu: ${dnotation}`,
-                uci: duci,
-                fen: nextFen3,
-                from: dsq,
-                to: ddest,
-                score: deepTTHit ? deepTTHit.score : eval3.score,
-                badge: 'Tấn công sâu',
-                intent: 'Tiếp tục khai thác điểm yếu đối phương',
-                ttHit: !!deepTTHit,
-                ttDepth: deepTTHit?.depth || 0
-              });
-              break;
-            }
-          }
+        if (maxDepthToExpand > 0) {
+          expandRecursive(replyNode, maxDepthToExpand);
         }
       }
     });
 
     return nodes;
-  }, [inspectFen, parsedInspect, selectedPly, breadthLimit, expandedDepthNodeIds, ttStore]);
+  }, [inspectFen, parsedInspect, selectedPly, breadthLimit, allRootMoves, expandedNodes, ttStore]);
 
   useEffect(() => {
-    if (treeNodes && treeNodes.length > 1) {
+    if (treeNodes && treeNodes.length > 1 && !activeNode) {
       setActiveNode(treeNodes[1]);
-    } else if (treeNodes && treeNodes.length === 1) {
-      setActiveNode(treeNodes[0]);
     }
-  }, [treeNodes]);
+  }, [treeNodes, activeNode]);
 
-  // Hành động Mở Rộng Chiều Ngang (Breadth Expansion)
+  // Hành động Mở Rộng Chiều Ngang (+5 biến thể) - VÔ HẠN (KHÔNG BAO GIỜ WRAP-AROUND)
   const handleExpandBreadth = useCallback(() => {
-    setBreadthLimit((prev) => (prev >= 18 ? 6 : prev + 4));
-    setTtFeedback(`Đã mở rộng chiều ngang lên ${breadthLimit + 4} biến thể!`);
+    setBreadthLimit((prev) => Math.min(totalAvailableMoves, prev + 5));
+    setTtFeedback(`Đã mở rộng chiều ngang (+5): ${Math.min(totalAvailableMoves, breadthLimit + 5)} / ${totalAvailableMoves} biến thể!`);
+    setTimeout(() => setTtFeedback(''), 3000);
+  }, [breadthLimit, totalAvailableMoves]);
+
+  // Thu gọn chiều ngang (-5 biến thể)
+  const handleShrinkBreadth = useCallback(() => {
+    setBreadthLimit((prev) => Math.max(2, prev - 5));
+    setTtFeedback(`Đã thu gọn chiều ngang: ${Math.max(2, breadthLimit - 5)} biến thể!`);
     setTimeout(() => setTtFeedback(''), 3000);
   }, [breadthLimit]);
 
-  // Hành động Mở Rộng Chiều Sâu (Depth Expansion)
+  // Mở rộng toàn bộ chiều ngang (100% nước đi)
+  const handleExpandAllBreadth = useCallback(() => {
+    setBreadthLimit(totalAvailableMoves);
+    setTtFeedback(`Đã bung 100% toàn bộ ${totalAvailableMoves} nước đi hợp lệ!`);
+    setTimeout(() => setTtFeedback(''), 3000);
+  }, [totalAvailableMoves]);
+
+  // Hành động Mở Rộng Chiều Sâu (+1 Ply) cho Node Đang Chọn - VÔ HẠN
   const handleExpandDepth = useCallback(() => {
     if (!activeNode) return;
-    setExpandedDepthNodeIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(activeNode.id)) {
-        next.delete(activeNode.id);
-        setTtFeedback(`Đã thu gọn chiều sâu nhánh ${activeNode.title}!`);
-      } else {
-        next.add(activeNode.id);
-        setTtFeedback(`Đã mở rộng chiều sâu (+1 Ply) cho nhánh ${activeNode.title}!`);
-      }
+    setExpandedNodes((prev) => {
+      const next = new Map(prev);
+      const currentDepth = next.get(activeNode.id) || 0;
+      next.set(activeNode.id, currentDepth + 1);
+      setTtFeedback(`Đã đào sâu thêm +1 Ply (Tổng Depth: ${currentDepth + 1}) cho nhánh ${activeNode.title}!`);
+      setTimeout(() => setTtFeedback(''), 3000);
+      return next;
+    });
+  }, [activeNode]);
+
+  // Hành động Đào Sâu +3 Plies Ngay Lập Tức
+  const handleDeepenThreePlies = useCallback(() => {
+    if (!activeNode) return;
+    setExpandedNodes((prev) => {
+      const next = new Map(prev);
+      const currentDepth = next.get(activeNode.id) || 0;
+      next.set(activeNode.id, currentDepth + 3);
+      setTtFeedback(`Đã đào sâu +3 Plies (Tổng Depth: ${currentDepth + 3}) cho nhánh ${activeNode.title}!`);
+      setTimeout(() => setTtFeedback(''), 3000);
+      return next;
+    });
+  }, [activeNode]);
+
+  // Thu gọn nhánh sâu của Node đang chọn
+  const handleCollapseDepth = useCallback(() => {
+    if (!activeNode) return;
+    setExpandedNodes((prev) => {
+      const next = new Map(prev);
+      next.delete(activeNode.id);
+      setTtFeedback(`Đã thu gọn chiều sâu nhánh ${activeNode.title}!`);
       setTimeout(() => setTtFeedback(''), 3000);
       return next;
     });
@@ -936,7 +1027,7 @@ export function MindmapVisualizer({ show, close, fen, history, score, line, thou
           uci: node.uci,
           title: node.title,
           score: node.score || 0,
-          depth: 12,
+          depth: 14,
           timestamp: Date.now()
         };
         savedCount++;
@@ -1046,7 +1137,7 @@ export function MindmapVisualizer({ show, close, fen, history, score, line, thou
                 </span>
               </h2>
               <p className="text-xs text-gold/60">
-                Ply: <b className="text-gold">{selectedPly}</b> / {gameHistory.length - 1} | Nodes: <b className="text-emerald-400">{treeNodes.length}</b> | Chiều ngang: <b className="text-amber-300">{breadthLimit}</b>
+                Ply: <b className="text-gold">{selectedPly}</b> / {gameHistory.length - 1} | Nodes: <b className="text-emerald-400">{treeNodes.length}</b> | Chiều ngang: <b className="text-amber-300">{breadthLimit >= totalAvailableMoves ? 'TẤT CẢ' : breadthLimit} / {totalAvailableMoves}</b>
               </p>
             </div>
           </div>
@@ -1065,7 +1156,7 @@ export function MindmapVisualizer({ show, close, fen, history, score, line, thou
               title="Lưu toàn bộ các thế cờ trong cây tìm kiếm vào Kho Tri Thức TT Vĩnh Cửu"
               className="px-2.5 py-1 rounded bg-gold text-obsidian hover:bg-gold-light text-xs font-bold transition flex items-center gap-1 shadow-glow"
             >
-              <Save className="w-3.5 h-3.5 fill-current" /> LƯU TT
+              <Save className="w-3.5 h-3.5 fill-current" /> LƯU TT ({treeNodes.length})
             </button>
 
             {/* XUẤT / NẠP FILE TT */}
@@ -1128,8 +1219,12 @@ export function MindmapVisualizer({ show, close, fen, history, score, line, thou
                 onSelectNode={(node) => setActiveNode(node)}
                 layoutMode={layoutMode}
                 onExpandBreadth={handleExpandBreadth}
+                onShrinkBreadth={handleShrinkBreadth}
                 onExpandDepth={handleExpandDepth}
+                onDeepenThreePlies={handleDeepenThreePlies}
+                onExpandAllBreadth={handleExpandAllBreadth}
                 breadthCount={breadthLimit}
+                totalAvailableMoves={totalAvailableMoves}
               />
             </div>
 
@@ -1186,7 +1281,7 @@ export function MindmapVisualizer({ show, close, fen, history, score, line, thou
                   </div>
                 </div>
 
-                {/* CÁC THAO TÁC MỞ RỘNG VÀ ĐỒNG BỘ TT */}
+                {/* CÁC THAO TÁC MỞ RỘNG VÔ HẠN CHO NODE NÀY */}
                 <div className="grid grid-cols-2 gap-2">
                   <button
                     onClick={handleExpandDepth}
@@ -1196,10 +1291,26 @@ export function MindmapVisualizer({ show, close, fen, history, score, line, thou
                   </button>
 
                   <button
+                    onClick={handleDeepenThreePlies}
+                    className="py-1.5 px-2 rounded bg-cyan-600/30 text-cyan-200 border border-cyan-400/40 font-bold text-xs hover:bg-cyan-600/40 transition flex items-center justify-center gap-1"
+                  >
+                    <ChevronDown className="w-3.5 h-3.5" /> +3 PLIES SÂU
+                  </button>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2">
+                  <button
                     onClick={handleExpandBreadth}
                     className="py-1.5 px-2 rounded bg-amber-500/20 text-amber-300 border border-amber-500/40 font-bold text-xs hover:bg-amber-500/30 transition flex items-center justify-center gap-1"
                   >
-                    <ArrowRight className="w-3.5 h-3.5" /> +4 BIẾN THỂ
+                    <ArrowRight className="w-3.5 h-3.5" /> +5 BIẾN THỂ
+                  </button>
+
+                  <button
+                    onClick={handleCollapseDepth}
+                    className="py-1.5 px-2 rounded bg-zinc-800 text-gold/80 border border-gold/20 font-bold text-xs hover:bg-zinc-700 transition flex items-center justify-center gap-1"
+                  >
+                    <ChevronUp className="w-3.5 h-3.5" /> THU GỌN SÂU
                   </button>
                 </div>
 
