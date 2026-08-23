@@ -41,7 +41,7 @@ export default function Panel({
     nps: '1,635.1 FEN/s'
   });
 
-  // Tự động thăm dò thông số phần cứng & trạng thái 1,024 Shards NVMe
+  // Tự động thăm dò thông số phần cứng & trạng thái 1,024 Shards NVMe thời gian thực
   useEffect(() => {
     const fetchHw = async () => {
       try {
@@ -58,6 +58,8 @@ export default function Panel({
       } catch (_) {}
     };
     fetchHw();
+    const timer = setInterval(fetchHw, 3000);
+    return () => clearInterval(timer);
   }, []);
 
   // Xử lý nạp nóng Governor mode (Eco, Balanced, Turbo) không gián đoạn

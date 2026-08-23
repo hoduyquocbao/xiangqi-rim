@@ -1101,7 +1101,7 @@ export function MindmapVisualizer({ show, close, fen, history, score, line, thou
 
   // Tự động kiểm tra thống kê 1,024 phân mảnh Backend NVMe Shards
   useEffect(() => {
-    fetch('http://127.0.0.1:8888/api/v1/shards/stats')
+    fetch('/api/v1/shards/stats')
       .then((r) => r.json())
       .then((data) => {
         if (data.status === 'ok') {
@@ -1372,7 +1372,7 @@ export function MindmapVisualizer({ show, close, fen, history, score, line, thou
     setTtStore(updatedStore);
 
     // GỌI BATCH REST API ĐỂ LƯU VĨNH CỬU TRỰC TIẾP VÀO data/shards/ TRÊN ĐĨA CỨNG
-    fetch('http://127.0.0.1:8888/api/v1/shards/batch', {
+    fetch('/api/v1/shards/batch', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ items: batchItems })
