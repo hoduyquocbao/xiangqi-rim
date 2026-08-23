@@ -419,7 +419,8 @@ impl Server {
                 let mut op_mates = 0usize;
 
                 for (b_idx, &branch_move) in top_branches.iter().enumerate() {
-                    thread::sleep(Duration::from_millis(300));
+                    // Nhường nhịp CPU tương hỗ (Cooperative Yield) cho các kết nối HTTP / WebSocket
+                    thread::yield_now();
 
                     let mut branch_pos = root_pos;
                     branch_pos.apply(branch_move.from, branch_move.to);
@@ -534,19 +535,29 @@ impl Server {
                         }
                     }
 
-                    let mb = self.hash.load(Ordering::Relaxed);
-                    let mut search = Search::new(mb);
-                    let mut limit = Limits::new();
-                    limit.depth = 3;
-
+                    // ĐÁNH GIÁ THẾ CỜ SONG SONG BẰNG RAYON TRÊN TOÀN BỘ 4 NHÂN VẬT LÝ CPU
+                    use rayon::prelude::*;
                     let nodes_count = nodes.len();
-                    let mut mates_count = 0usize;
+                    let eval_results: Vec<(i32, crate::movegen::types::Move)> = nodes
+                        .par_iter()
+                        .map(|node| {
+                            if node.mate {
+                                (0, crate::movegen::types::Move::none())
+                            } else {
+                                let mut local_search = Search::new(4);
+                                let mut limit = Limits::new();
+                                limit.depth = 3;
+                                let res = local_search.go(&node.pos, &limit);
+                                (res.score, res.best)
+                            }
+                        })
+                        .collect();
 
-                    for i in 0..nodes_count {
+                    let mut mates_count = 0usize;
+                    for (i, (score, best)) in eval_results.into_iter().enumerate() {
                         if !nodes[i].mate {
-                            let res = search.go(&nodes[i].pos, &limit);
-                            nodes[i].score = res.score;
-                            nodes[i].best = res.best;
+                            nodes[i].score = score;
+                            nodes[i].best = best;
                         } else {
                             mates_count += 1;
                         }
@@ -587,12 +598,15 @@ impl Server {
                         }
                     }
 
+                    // GHI NHẬN HÀNG LOẠT VÀO 1,024 SHARDS BẰNG BATCH FLUSH (GIẢM 99% I/O)
+                    let mut batch_records: Vec<(u64, u16, i16)> = Vec::with_capacity(nodes.len());
                     for node in &nodes {
                         if node.best.valid() {
                             let score_clamped = node.score.max(-30000).min(30000) as i16;
-                            let _ = shard.save(node.hash, node.best.raw(), score_clamped);
+                            batch_records.push((node.hash, node.best.raw(), score_clamped));
                         }
                     }
+                    shard.batch(&batch_records);
 
                     op_nodes += nodes_count;
                     op_mates += mates_count;
