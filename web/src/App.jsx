@@ -836,6 +836,13 @@ export default function App() {
       <MindmapVisualizer
         show={game.mindmapShow}
         close={() => update((prev) => ({ ...prev, mindmapShow: false }))}
+        fen={game.fen}
+        history={game.history}
+        score={game.score}
+        line={game.line}
+        thought={game.thought}
+        status={game.status}
+        onApplyFen={(newFen) => apply('fen', newFen)}
       />
 
       {/* Interactive Studio Board Setup Studio Modal */}

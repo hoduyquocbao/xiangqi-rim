@@ -1,7 +1,7 @@
 // web/src/components/MindmapVisualizer.jsx
-// Sơ Đồ Tư Duy Cây Suy Luận 360° & Hậu Kiểm Toàn Ván (Post-Game Retroactive Mindmap)
-// Kiến trúc Tối Ưu Vật Lý: GPU & CPU Cache-Friendly Dual-Layer Canvas, Flat TypedArray Buffer O(1),
-// Triệt Tiêu 100% DOM Thrashing, Zero GC Allocation trong Animation Loop và Bộ Đo Hiệu Năng Benchmark Thời Gian Thực.
+// Sơ Đồ Tư Duy Cây Suy Luận 360° & Hậu Kiểm Toàn Ván Thực Tế (Live Xiangqi 360° Mindmap & Game Tree Explorer)
+// Công cụ phân tích thực chiến: Cây phân nhánh 3 tầng động học, Quét bước ngoặt & sai lầm toàn ván,
+// Bóc tách JSONL DeepSeek-R1, Phòng thử nghiệm What-If, Bánh đà TT Cache và Benchmark phần cứng.
 
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { 
@@ -21,85 +21,43 @@ import {
   AlertTriangle,
   Play,
   Gauge,
-  Activity
+  Activity,
+  FileCode,
+  Crosshair,
+  Sliders,
+  ChevronRight,
+  ChevronDown,
+  Copy,
+  Upload,
+  RefreshCw,
+  Search,
+  Sword,
+  Target,
+  Flame,
+  Shield,
+  HelpCircle,
+  Award
 } from 'lucide-react';
-import { parse } from '../rules/rules.js';
+import { parse, fen as buildFen, moves as getLegalMoves, check as isCheck, hasLegalMoves, uciToMove } from '../rules/rules.js';
+import { instance as engine } from '../engine/engine.js';
 
-// Bảng tra cứu chữ Hán truyền thống O(1)
+// Bảng tra cứu chữ Hán quân cờ O(1)
 const symbols = {
   K: '帥', A: '仕', B: '相', N: '傌', R: '俥', C: '炮', P: '兵',
   k: '將', a: '士', b: '象', n: '馬', r: '車', c: '砲', p: '卒'
 };
 
-// 3 Mốc thế cờ định mệnh theo chuỗi nhân quả (Causal Timeline)
-const milestones = [
-  {
-    id: 'ply20',
-    ply: 20,
-    turn: 10,
-    title: 'PLY 20: NƯỚC CỜ BƯỚC NGOẶT (TURNING POINT)',
-    tag: 'GÀI BẪY CHIẾN THUẬT',
-    tagColor: 'bg-amber-500/20 text-amber-300 border-amber-500/40',
-    moveUci: 'c3c4',
-    moveNotation: 'Binh 7 tiến 1 (Thí Tốt)',
-    evalScore: '+120 cp',
-    horizonEval: '+120 cp (Depth 4 chỉ thấy ăn thua 1 Binh)',
-    omniscienceEval: '+29,995 cp (Thấu thị: Khởi đầu chuỗi sát cục sau 25 nước)',
-    fen: 'r1bakab1r/9/1cn1c1n2/p1p1p1p1p/9/2P6/P3P1P1P/1C2C4/9/RNBAKABNR w - - 0 20',
-    arrowFrom: 29, // c3 (file 2, rank 3 = 29)
-    arrowTo: 38,   // c4 (file 2, rank 4 = 38)
-    thoughtExcerpt: '"Ta chọn nước thí Binh c3c4 này không phải để ăn hơn 100cp trước mắt, mà là đòn gài bẫy dài hạn 25 nước, mở thông trục Lộ 5 cho Pháo đầu, ép đối phương rơi vào thế bị sát cục không thể cứu vãn tại Ply 68!"',
-    reasoningPoints: [
-      'Thí 1 Binh biên Lộ 7 mở toang đường tiến công cho Song Mã và Pháo đầu Lộ 5.',
-      'Ép Tốt đối phương phải ăn sang, làm hổng chân Mã và phá vỡ cấu trúc Sĩ Tượng liên kết.',
-      'Khởi phát thế trận Pháo Đầu Ép Trung Lộ (Center Cannon Pressure).'
-    ]
-  },
-  {
-    id: 'ply45',
-    ply: 45,
-    turn: 23,
-    title: 'PLY 45: ĐÒN XE PHÁO ÁP ĐÁY (TACTICAL SQUEEZE)',
-    tag: 'ĐÒN PHỐI HỢP TRUNG CUỘC',
-    tagColor: 'bg-cyan-500/20 text-cyan-300 border-cyan-500/40',
-    moveUci: 'e2e9',
-    moveNotation: 'Pháo 5 tiến 7 (Cắm Pháo Đáy)',
-    evalScore: '+850 cp',
-    horizonEval: '+350 cp (Depth 4 thấy ưu thế hơn quân)',
-    omniscienceEval: '+30,000 cp (Thấu thị: Ép đối phương gãy Sĩ, sát cục không thể cứu vãn)',
-    fen: '2bakab2/9/1cn6/p1p3p1p/9/2C1C1R2/P3P1P1P/9/9/RNBAKAB2 w - - 3 45',
-    arrowFrom: 22, // e2 (22)
-    arrowTo: 85,   // e9 (85)
-    thoughtExcerpt: '"Đòn cắm Pháo đáy e2e9+ kết hợp Xe Lộ 8 áp sườn Cung Tướng. Đối phương bắt buộc phải hy sinh Sĩ hoặc vẹo Tướng, mở đường cho Mã ngọa tào kết liễu trận đấu!"',
-    reasoningPoints: [
-      'Thiết lập thế trận Thiết Môn Thuyên / Xe Pháo Dồn Góc khóa chặt sườn Cung.',
-      'Triệt tiêu toàn bộ quân bảo vệ của Tướng đối phương tại hàng đáy Tuyến 9.',
-      'Chuẩn bị đưa Mã thâm nhập ngọa tào tung đòn trừng phạt dứt điểm.'
-    ]
-  },
-  {
-    id: 'ply68',
-    ply: 68,
-    turn: 34,
-    title: 'PLY 68: SÁT CỤC THỰC TẾ (TERMINAL CHECKMATE)',
-    tag: 'KẾT LIỄU DỨT ĐIỂM',
-    tagColor: 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40',
-    moveUci: 'e6g7',
-    moveNotation: 'Mã 5 tiến 3 (Mã Ngọa Tào Sát Cục)',
-    evalScore: '+30,000 cp (Checkmate)',
-    horizonEval: '+30,000 cp (Checkmate)',
-    omniscienceEval: '+30,000 cp (Checkmate hoàn tất 100%)',
-    fen: '4k4/4C4/b4Rn1b/9/4R4/8p/P1P1N1r2/9/4A4/4KAB2 b - - 0 68',
-    arrowFrom: 58, // e6 (58)
-    arrowTo: 69,   // g7 (69)
-    thoughtExcerpt: '"SÁT CỤC HOÀN HẢO! Mã ngọa tào kết hợp Song Xe chiếu bí. Toàn bộ chuỗi tính toán từ nước cờ bước ngoặt Ply 20 đã được thực thi trọn vẹn 100% không sai lệch!"',
-    reasoningPoints: [
-      'Tướng đối phương bị giam cầm trong góc chết, không có nước đi hợp lệ.',
-      '100% Phân định thắng bại dứt điểm, 0% hòa lặp nước.',
-      'Ghi nhận sự kiện chiến thắng vào Sổ cái CQRS Event Sourcing bất biến.'
-    ]
-  }
-];
+// Tên quân cờ tiếng Việt
+const pieceNames = {
+  K: 'Tướng Đỏ', A: 'Sĩ Đỏ', B: 'Tượng Đỏ', N: 'Mã Đỏ', R: 'Xe Đỏ', C: 'Pháo Đỏ', P: 'Binh Đỏ',
+  k: 'Tướng Đen', a: 'Sĩ Đen', b: 'Tượng Đen', n: 'Mã Đen', r: 'Xe Đen', c: 'Pháo Đen', p: 'Tốt Đen'
+};
+
+// Trọng số giá trị quân cờ vật chất
+const pieceWeights = {
+  K: 10000, R: 900, C: 450, N: 400, B: 200, A: 200, P: 100,
+  k: 10000, r: 900, c: 450, n: 400, b: 200, a: 200, p: 100
+};
 
 // Bảng Tọa Độ Tĩnh Cố Định LUT (Lookup Tables) O(1) CPU Cache L1 Friendly
 const padx = 25;
@@ -134,21 +92,90 @@ const gridy = new Float32Array([
   pady + 0 * cellh, // rank 9
 ]);
 
-// Hàm vẽ nền bàn cờ tĩnh vào Offscreen Buffer (Chỉ render 1 lần duy nhất)
+// Hàm chuyển đổi tọa độ ô cờ sang chuỗi UCI (vd: 22 -> "e2")
+function sqToUci(sq) {
+  const file = sq % 9;
+  const rank = Math.floor(sq / 9);
+  return `${String.fromCharCode(97 + file)}${rank}`;
+}
+
+// Hàm chuyển đổi nước đi sang ký hiệu truyền thống tiếng Việt (vd: "Pháo 2 bình 5")
+function moveToNotation(board, from, to) {
+  const piece = board[from];
+  if (!piece || piece === '.') return `${sqToUci(from)}${sqToUci(to)}`;
+  const color = piece === piece.toUpperCase() ? 'w' : 'b';
+  const name = pieceNames[piece] || 'Quân';
+  const fromFile = (from % 9) + 1;
+  const toFile = (to % 9) + 1;
+  const fromRank = Math.floor(from / 9);
+  const toRank = Math.floor(to / 9);
+
+  const displayFromFile = color === 'w' ? 10 - fromFile : fromFile;
+  const displayToFile = color === 'w' ? 10 - toFile : toFile;
+
+  if (fromFile === toFile) {
+    const diff = Math.abs(toRank - fromRank);
+    if ((color === 'w' && toRank > fromRank) || (color === 'b' && toRank < fromRank)) {
+      return `${name.split(' ')[0]} ${displayFromFile} tiến ${diff}`;
+    } else {
+      return `${name.split(' ')[0]} ${displayFromFile} thoái ${diff}`;
+    }
+  } else if (fromRank === toRank) {
+    return `${name.split(' ')[0]} ${displayFromFile} bình ${displayToFile}`;
+  } else {
+    if ((color === 'w' && toRank > fromRank) || (color === 'b' && toRank < fromRank)) {
+      return `${name.split(' ')[0]} ${displayFromFile} tiến ${displayToFile}`;
+    } else {
+      return `${name.split(' ')[0]} ${displayFromFile} thoái ${displayToFile}`;
+    }
+  }
+}
+
+// Đánh giá thế cờ Heuristic nhanh O(1)
+function evaluatePosition(board) {
+  let redMaterial = 0;
+  let blackMaterial = 0;
+  let redCenter = 0;
+  let blackCenter = 0;
+
+  for (let sq = 0; sq < 90; sq++) {
+    const piece = board[sq];
+    if (piece === '.') continue;
+    const isRed = piece === piece.toUpperCase();
+    const rank = Math.floor(sq / 9);
+    const file = sq % 9;
+    let val = pieceWeights[piece] || 0;
+
+    // Thưởng tốt qua sông
+    if (piece === 'P' && rank >= 5) val += 100;
+    if (piece === 'p' && rank <= 4) val += 100;
+
+    // Kiểm soát trung lộ (cột 4, 3, 5)
+    if (file === 4) {
+      if (isRed) redCenter += 30; else blackCenter += 30;
+    } else if (file === 3 || file === 5) {
+      if (isRed) redCenter += 15; else blackCenter += 15;
+    }
+
+    if (isRed) redMaterial += val; else blackMaterial += val;
+  }
+
+  const score = (redMaterial - blackMaterial) + (redCenter - blackCenter);
+  return { score, redMaterial, blackMaterial, redCenter, blackCenter };
+}
+
+// Vẽ nền tĩnh Offscreen Buffer (Chỉ vẽ 1 lần)
 function drawStaticBackground(ctx) {
-  // Nền gỗ Radial Gradient
   const grad = ctx.createRadialGradient(width / 2, height / 2, 20, width / 2, height / 2, width);
   grad.addColorStop(0, '#2c1e11');
   grad.addColorStop(1, '#140d07');
   ctx.fillStyle = grad;
   ctx.fillRect(5, 5, width - 10, height - 10);
 
-  // Khung viền vàng
   ctx.strokeStyle = '#D4AF37';
   ctx.lineWidth = 2;
   ctx.strokeRect(5, 5, width - 10, height - 10);
 
-  // 10 đường ngang
   ctx.strokeStyle = '#8A6B2D';
   ctx.lineWidth = 1.2;
   for (let r = 0; r < 10; r++) {
@@ -159,22 +186,18 @@ function drawStaticBackground(ctx) {
     ctx.stroke();
   }
 
-  // 9 đường dọc (ngắt ở sông)
   for (let f = 0; f < 9; f++) {
     const x = gridx[f];
-    // Nửa dưới
     ctx.beginPath();
     ctx.moveTo(x, gridy[0]);
     ctx.lineTo(x, gridy[4]);
     ctx.stroke();
-    // Nửa trên
     ctx.beginPath();
     ctx.moveTo(x, gridy[5]);
     ctx.lineTo(x, gridy[9]);
     ctx.stroke();
   }
 
-  // 2 đường biên dọc qua sông
   ctx.beginPath();
   ctx.moveTo(gridx[0], gridy[4]);
   ctx.lineTo(gridx[0], gridy[5]);
@@ -182,7 +205,6 @@ function drawStaticBackground(ctx) {
   ctx.lineTo(gridx[8], gridy[5]);
   ctx.stroke();
 
-  // Chéo Cung Tướng Đỏ (d0-f2)
   ctx.beginPath();
   ctx.moveTo(gridx[3], gridy[0]);
   ctx.lineTo(gridx[5], gridy[2]);
@@ -190,7 +212,6 @@ function drawStaticBackground(ctx) {
   ctx.lineTo(gridx[3], gridy[2]);
   ctx.stroke();
 
-  // Chéo Cung Tướng Đen (d7-f9)
   ctx.beginPath();
   ctx.moveTo(gridx[3], gridy[7]);
   ctx.lineTo(gridx[5], gridy[9]);
@@ -198,7 +219,6 @@ function drawStaticBackground(ctx) {
   ctx.lineTo(gridx[3], gridy[9]);
   ctx.stroke();
 
-  // Chữ Sông Sở Hà Hán Giới
   ctx.fillStyle = '#8A6B2D';
   ctx.font = 'bold 10px serif';
   ctx.textAlign = 'center';
@@ -206,14 +226,13 @@ function drawStaticBackground(ctx) {
   ctx.fillText('漢 界', 215, (gridy[4] + gridy[5]) / 2 + 3);
 }
 
-// Linh Kiện Bàn Cờ GPU Hardware Canvas Tối Thượng (Zero DOM Thrashing)
-function FastGpuBoard({ fen, arrowFrom, arrowTo }) {
+// Bàn Cờ GPU Hardware Canvas Tối Thượng
+function FastGpuBoard({ fen, arrowFrom, arrowTo, selectedSq, validDests, onSquareClick }) {
   const canvasRef = useRef(null);
   const staticCacheRef = useRef(null);
   const pulseRef = useRef(0);
   const parsedBoard = useMemo(() => parse(fen).board, [fen]);
 
-  // Khởi tạo bộ đệm tĩnh OffscreenCanvas
   useEffect(() => {
     const off = document.createElement('canvas');
     off.width = width;
@@ -225,7 +244,6 @@ function FastGpuBoard({ fen, arrowFrom, arrowTo }) {
     }
   }, []);
 
-  // Hot Loop vẽ trực tiếp lên GPU Canvas 60 FPS
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -240,81 +258,88 @@ function FastGpuBoard({ fen, arrowFrom, arrowTo }) {
       lastTime = time;
       pulseRef.current = (pulseRef.current + delta * 2.5) % (Math.PI * 2);
 
-      // 1. Blit nhanh bộ đệm nền tĩnh O(1)
       if (staticCacheRef.current) {
         ctx.drawImage(staticCacheRef.current, 0, 0);
       }
 
-      // 2. Vẽ Laser Arrow động học với Glow Effect
+      // Vẽ ô được chọn
+      if (selectedSq !== undefined && selectedSq >= 0 && selectedSq < 90) {
+        const sx = gridx[selectedSq % 9];
+        const sy = gridy[Math.floor(selectedSq / 9)];
+        ctx.strokeStyle = '#22c55e';
+        ctx.lineWidth = 2;
+        ctx.strokeRect(sx - 14, sy - 14, 28, 28);
+      }
+
+      // Vẽ các chấm nước đi hợp lệ
+      if (validDests && validDests.length > 0) {
+        ctx.fillStyle = 'rgba(34, 197, 94, 0.7)';
+        for (const dest of validDests) {
+          const dx = gridx[dest % 9];
+          const dy = gridy[Math.floor(dest / 9)];
+          ctx.beginPath();
+          ctx.arc(dx, dy, 4, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      }
+
+      // Vẽ Laser Arrow động học
       if (arrowFrom >= 0 && arrowTo >= 0) {
         const fromX = gridx[arrowFrom % 9];
         const fromY = gridy[Math.floor(arrowFrom / 9)];
         const toX = gridx[arrowTo % 9];
         const toY = gridy[Math.floor(arrowTo / 9)];
 
-        const glow = Math.sin(pulseRef.current) * 0.3 + 0.7;
-
-        ctx.save();
-        ctx.strokeStyle = `rgba(255, 20, 147, ${glow})`;
-        ctx.lineWidth = 3.5;
-        ctx.setLineDash([4, 2]);
+        const glowAlpha = 0.5 + 0.5 * Math.sin(pulseRef.current);
+        ctx.strokeStyle = `rgba(239, 68, 68, ${0.4 * glowAlpha})`;
+        ctx.lineWidth = 6;
         ctx.beginPath();
         ctx.moveTo(fromX, fromY);
         ctx.lineTo(toX, toY);
         ctx.stroke();
 
-        // Đầu xuất phát
-        ctx.fillStyle = '#FFD700';
+        ctx.strokeStyle = '#f59e0b';
+        ctx.lineWidth = 2.5;
         ctx.beginPath();
-        ctx.arc(fromX, fromY, 6, 0, Math.PI * 2);
-        ctx.fill();
+        ctx.moveTo(fromX, fromY);
+        ctx.lineTo(toX, toY);
+        ctx.stroke();
 
-        // Điểm đích đến
-        ctx.fillStyle = `rgba(255, 20, 147, ${glow})`;
+        const angle = Math.atan2(toY - fromY, toX - fromX);
+        const headLen = 10;
+        ctx.fillStyle = '#f59e0b';
         ctx.beginPath();
-        ctx.arc(toX, toY, 7.5, 0, Math.PI * 2);
+        ctx.moveTo(toX, toY);
+        ctx.lineTo(toX - headLen * Math.cos(angle - Math.PI / 6), toY - headLen * Math.sin(angle - Math.PI / 6));
+        ctx.lineTo(toX - headLen * Math.cos(angle + Math.PI / 6), toY - headLen * Math.sin(angle + Math.PI / 6));
+        ctx.closePath();
         ctx.fill();
-        ctx.restore();
       }
 
-      // 3. Vẽ 90 ô quân cờ không sinh Garbage Collection
-      for (let idx = 0; idx < 90; idx++) {
-        const p = parsedBoard[idx];
-        if (p === '.') continue;
+      // Vẽ 32 quân cờ chữ Hán
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.font = 'bold 13px sans-serif';
 
-        const x = gridx[idx % 9];
-        const y = gridy[Math.floor(idx / 9)];
-        const isRed = p === p.toUpperCase();
-        const sym = symbols[p] || p;
+      for (let sq = 0; sq < 90; sq++) {
+        const piece = parsedBoard[sq];
+        if (piece === '.') continue;
 
-        // Bóng đổ
-        ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
+        const x = gridx[sq % 9];
+        const y = gridy[Math.floor(sq / 9)];
+        const isRed = piece === piece.toUpperCase();
+
+        ctx.fillStyle = '#1c150e';
         ctx.beginPath();
-        ctx.arc(x + 1, y + 1.5, 11, 0, Math.PI * 2);
+        ctx.arc(x, y, 12, 0, Math.PI * 2);
         ctx.fill();
 
-        // Khối quân
-        ctx.fillStyle = isRed ? '#fef3c7' : '#1e293b';
-        ctx.strokeStyle = isRed ? '#b91c1c' : '#0f172a';
-        ctx.lineWidth = 1.5;
-        ctx.beginPath();
-        ctx.arc(x, y, 11, 0, Math.PI * 2);
-        ctx.fill();
+        ctx.strokeStyle = isRed ? '#ef4444' : '#60a5fa';
+        ctx.lineWidth = 1.2;
         ctx.stroke();
 
-        // Vành trang trí trong
-        ctx.strokeStyle = isRed ? '#dc2626' : '#475569';
-        ctx.lineWidth = 0.8;
-        ctx.beginPath();
-        ctx.arc(x, y, 9.5, 0, Math.PI * 2);
-        ctx.stroke();
-
-        // Ký tự chữ Hán
-        ctx.fillStyle = isRed ? '#b91c1c' : '#38bdf8';
-        ctx.font = 'bold 11px serif';
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        ctx.fillText(sym, x, y + 0.5);
+        ctx.fillStyle = isRed ? '#f87171' : '#93c5fd';
+        ctx.fillText(symbols[piece] || piece, x, y + 1);
       }
 
       animId = requestAnimationFrame(render);
@@ -322,509 +347,919 @@ function FastGpuBoard({ fen, arrowFrom, arrowTo }) {
 
     animId = requestAnimationFrame(render);
     return () => cancelAnimationFrame(animId);
-  }, [parsedBoard, arrowFrom, arrowTo]);
+  }, [parsedBoard, arrowFrom, arrowTo, selectedSq, validDests]);
+
+  const handleCanvasClick = (e) => {
+    if (!onSquareClick) return;
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const rect = canvas.getBoundingClientRect();
+    const cx = (e.clientX - rect.left) * (width / rect.width);
+    const cy = (e.clientY - rect.top) * (height / rect.height);
+
+    let closestSq = -1;
+    let minDist = 20;
+    for (let sq = 0; sq < 90; sq++) {
+      const gx = gridx[sq % 9];
+      const gy = gridy[Math.floor(sq / 9)];
+      const dist = Math.hypot(cx - gx, cy - gy);
+      if (dist < minDist) {
+        minDist = dist;
+        closestSq = sq;
+      }
+    }
+
+    if (closestSq !== -1) {
+      onSquareClick(closestSq);
+    }
+  };
 
   return (
-    <div className="relative bg-[#0b0f17] p-2 rounded-2xl border border-gold/40 shadow-2xl flex flex-col items-center">
-      <canvas 
-        ref={canvasRef} 
-        width={width} 
-        height={height} 
-        className="w-full max-w-[280px] drop-shadow-md rounded-xl"
-        style={{ transform: 'translate3d(0,0,0)' }} // Kích hoạt GPU Compositing Layer
-      />
-    </div>
+    <canvas
+      ref={canvasRef}
+      width={width}
+      height={height}
+      onClick={handleCanvasClick}
+      className="rounded-xl border border-gold/40 shadow-glow bg-black cursor-pointer select-none"
+      style={{ transform: 'translate3d(0,0,0)' }}
+    />
   );
 }
 
-// Bộ Đo Điểm Chuẩn Hiệu Năng Phần Cứng Vật Lý (Physical GPU & CPU Benchmark Engine)
-function HardwareBenchmarkSuite() {
-  const [benchStats, setBenchStats] = useState(null);
-  const [benchRunning, setBenchRunning] = useState(false);
+// Component Chính: Sơ Đồ Tư Duy Cây Suy Luận 360° & Hậu Kiểm Toàn Ván
+export function MindmapVisualizer({ show, close, fen, history, score, line, thought, status, onApplyFen }) {
+  if (!show) return null;
 
-  const runBench = useCallback(() => {
+  const currentFen = fen || 'rnbakabnr/9/1c5c1/p1p1p1p1p/9/9/P1P1P1P1P/1C5C1/9/RNBAKABNR w - - 0 1';
+  const gameHistory = history && Array.isArray(history) && history.length > 0 ? history : [currentFen];
+
+  // State quản lý tab và tương tác
+  const [tab, setTab] = useState('tree'); // 'tree' | 'timeline' | 'jsonl' | 'sandbox' | 'tt' | 'bench'
+  const [selectedPly, setSelectedPly] = useState(gameHistory.length - 1);
+  const [activeNode, setActiveNode] = useState(null);
+  const [sandboxFen, setSandboxFen] = useState(currentFen);
+  const [sandboxSelected, setSandboxSelected] = useState(null);
+  const [sandboxValidMoves, setSandboxValidMoves] = useState([]);
+  const [jsonlInput, setJsonlInput] = useState('');
+  const [parsedJsonlData, setParsedJsonlData] = useState(null);
+  const [jsonlTurnIdx, setJsonlTurnIdx] = useState(0);
+
+  // Benchmark states
+  const [benchRunning, setBenchRunning] = useState(false);
+  const [benchResults, setBenchResults] = useState(null);
+
+  // Cập nhật khi FEN đổi
+  useEffect(() => {
+    setSelectedPly(gameHistory.length - 1);
+    setSandboxFen(currentFen);
+  }, [currentFen, gameHistory.length]);
+
+  // 1. SINH CÂY SUY TƯỞNG ĐA TẦNG 3-PLY TỪ FEN ĐANG CHỌN (REAL LIVE 3-PLY TREE)
+  const inspectFen = tab === 'timeline' ? (gameHistory[selectedPly] || currentFen) : currentFen;
+  const parsedInspect = useMemo(() => parse(inspectFen), [inspectFen]);
+
+  const treeData = useMemo(() => {
+    const board = parsedInspect.board;
+    const turn = parsedInspect.turn;
+    const isTurnRed = turn === 'w';
+    const rootEval = evaluatePosition(board);
+
+    // Lấy toàn bộ nước đi hợp lệ
+    const candidates = [];
+    for (let sq = 0; sq < 90; sq++) {
+      const piece = board[sq];
+      if (piece === '.') continue;
+      const isPieceRed = piece === piece.toUpperCase();
+      if (isPieceRed !== isTurnRed) continue;
+
+      const dests = getLegalMoves(board, sq, turn);
+      for (const dest of dests) {
+        const uci = `${sqToUci(sq)}${sqToUci(dest)}`;
+        const notation = moveToNotation(board, sq, dest);
+        const targetPiece = board[dest];
+        const isCap = targetPiece !== '.';
+
+        // Giả lập thế cờ sau nước đi candidate
+        const clonedBoard1 = [...board];
+        clonedBoard1[dest] = piece;
+        clonedBoard1[sq] = '.';
+        const nextTurn1 = turn === 'w' ? 'b' : 'w';
+        const nextFen1 = buildFen(clonedBoard1, nextTurn1);
+        const eval1 = evaluatePosition(clonedBoard1);
+        const check1 = isCheck(clonedBoard1, nextTurn1);
+
+        // Tính điểm heuristic candidate
+        let moveScore = isTurnRed ? (eval1.score - rootEval.score) : (rootEval.score - eval1.score);
+        if (isCap) moveScore += (pieceWeights[targetPiece] || 50) / 2;
+        if (check1) moveScore += 80;
+
+        // Phân loại ý đồ chiến thuật
+        let intent = 'Phát triển quân cờ, kiểm soát vị trí';
+        let badge = 'Nước phát triển';
+        let badgeColor = 'bg-blue-500/20 text-blue-300 border-blue-500/40';
+
+        if (check1) {
+          intent = 'Chiếu tướng trực diện, dồn ép Cung Tướng';
+          badge = 'Chiếu tướng';
+          badgeColor = 'bg-amber-500/20 text-amber-300 border-amber-500/40';
+        } else if (isCap) {
+          intent = `Ăn ${pieceNames[targetPiece] || 'quân'}, chiếm ưu thế vật chất`;
+          badge = 'Ăn quân';
+          badgeColor = 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40';
+        } else if (sq % 9 === 4 || dest % 9 === 4) {
+          intent = 'Khống chế lộ 5 trung lộ, mở đường Pháo đầu';
+          badge = 'Trung Lộ';
+          badgeColor = 'bg-purple-500/20 text-purple-300 border-purple-500/40';
+        }
+
+        // Tầng 2: Tìm 1 nước đáp trả tốt nhất của đối phương
+        let bestReply = null;
+        for (let rsq = 0; rsq < 90; rsq++) {
+          const rpiece = clonedBoard1[rsq];
+          if (rpiece === '.') continue;
+          const isRPieceRed = rpiece === rpiece.toUpperCase();
+          if (isRPieceRed === isTurnRed) continue;
+
+          const rdests = getLegalMoves(clonedBoard1, rsq, nextTurn1);
+          if (rdests.length > 0) {
+            const rdest = rdests[0];
+            const ruci = `${sqToUci(rsq)}${sqToUci(rdest)}`;
+            const rnotation = moveToNotation(clonedBoard1, rsq, rdest);
+            const clonedBoard2 = [...clonedBoard1];
+            clonedBoard2[rdest] = rpiece;
+            clonedBoard2[rsq] = '.';
+            const nextTurn2 = turn;
+            const nextFen2 = buildFen(clonedBoard2, nextTurn2);
+            const eval2 = evaluatePosition(clonedBoard2);
+
+            bestReply = {
+              from: rsq,
+              to: rdest,
+              uci: ruci,
+              notation: rnotation,
+              fen: nextFen2,
+              score: eval2.score,
+              intent: 'Đối phương điều động quân chống trả'
+            };
+            break;
+          }
+        }
+
+        candidates.push({
+          from: sq,
+          to: dest,
+          uci,
+          notation,
+          piece,
+          isCapture: isCap,
+          isCheck: check1,
+          score: isTurnRed ? eval1.score : -eval1.score,
+          heuristicScore: moveScore,
+          fen: nextFen1,
+          intent,
+          badge,
+          badgeColor,
+          reply: bestReply
+        });
+      }
+    }
+
+    // Sắp xếp các ứng viên theo điểm số giảm dần
+    candidates.sort((a, b) => b.heuristicScore - a.heuristicScore);
+
+    return {
+      rootFen: inspectFen,
+      rootScore: rootEval.score,
+      turn,
+      candidates: candidates.slice(0, 6) // Lấy Top 6 Candidate tốt nhất
+    };
+  }, [inspectFen, parsedInspect]);
+
+  // Chọn node mặc định
+  useEffect(() => {
+    if (treeData && treeData.candidates.length > 0 && !activeNode) {
+      const top = treeData.candidates[0];
+      setActiveNode({
+        title: `Ứng Viên #1 (Tối Ưu): ${top.notation}`,
+        uci: top.uci,
+        fen: top.fen,
+        from: top.from,
+        to: top.to,
+        score: top.score,
+        intent: top.intent,
+        badge: top.badge,
+        badgeColor: top.badgeColor
+      });
+    }
+  }, [treeData, activeNode]);
+
+  // 2. PHÂN TÍCH QUÉT BƯỚC NGOẶT TOÀN VÁN (GAME TIMELINE SCANNER)
+  const timelineAnalysis = useMemo(() => {
+    const items = [];
+    let prevScore = 0;
+
+    for (let ply = 0; ply < gameHistory.length; ply++) {
+      const fenItem = gameHistory[ply];
+      const parsed = parse(fenItem);
+      const evalRes = evaluatePosition(parsed.board);
+      const isRedTurn = parsed.turn === 'w';
+      const swing = evalRes.score - prevScore;
+
+      let tag = 'Bình Ổn';
+      let tagColor = 'bg-gold/10 text-gold/80 border-gold/30';
+      let isTurningPoint = false;
+
+      if (Math.abs(swing) >= 300) {
+        tag = swing > 0 ? '🌟 ĐỘT PHÁ' : '💥 SAI LẦM';
+        tagColor = swing > 0 ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40' : 'bg-red-500/20 text-red-300 border-red-500/40';
+        isTurningPoint = true;
+      } else if (Math.abs(swing) >= 150) {
+        tag = swing > 0 ? '🎯 CHIẾM ƯU' : '⚠️ NƯỚC YẾU';
+        tagColor = swing > 0 ? 'bg-cyan-500/20 text-cyan-300 border-cyan-500/40' : 'bg-amber-500/20 text-amber-300 border-amber-500/40';
+      }
+
+      if (!hasLegalMoves(parsed.board, parsed.turn)) {
+        tag = isCheck(parsed.board, parsed.turn) ? '👑 SÁT CỤC' : '🤝 HÒA BÍ';
+        tagColor = 'bg-purple-500/20 text-purple-300 border-purple-500/40';
+        isTurningPoint = true;
+      }
+
+      items.push({
+        ply,
+        turnNumber: Math.floor(ply / 2) + 1,
+        color: isRedTurn ? 'Đỏ' : 'Đen',
+        fen: fenItem,
+        score: evalRes.score,
+        swing,
+        tag,
+        tagColor,
+        isTurningPoint
+      });
+
+      prevScore = evalRes.score;
+    }
+
+    return items;
+  }, [gameHistory]);
+
+  // Xử lý nạp JSONL Dataset từ văn bản
+  const handleParseJsonl = () => {
+    try {
+      const trimmed = jsonlInput.trim();
+      if (!trimmed) return;
+      const parsedObj = JSON.parse(trimmed);
+      setParsedJsonlData(parsedObj);
+      setJsonlTurnIdx(0);
+    } catch (err) {
+      alert('Không thể giải mã JSONL! Vui lòng kiểm tra định dạng JSON: ' + err.message);
+    }
+  };
+
+  // Nạp tệp JSONL từ máy tính
+  const handleFileUpload = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const content = event.target?.result;
+      if (typeof content === 'string') {
+        const firstLine = content.split('\n')[0];
+        setJsonlInput(firstLine);
+        try {
+          const obj = JSON.parse(firstLine);
+          setParsedJsonlData(obj);
+          setJsonlTurnIdx(0);
+        } catch (err) {
+          console.error(err);
+        }
+      }
+    };
+    reader.readAsText(file);
+  };
+
+  // Xử lý click ô cờ trong Sandbox
+  const handleSandboxClick = (sq) => {
+    const parsed = parse(sandboxFen);
+    const piece = parsed.board[sq];
+    const isPieceRed = piece !== '.' && piece === piece.toUpperCase();
+    const isTurnRed = parsed.turn === 'w';
+
+    if (sandboxSelected === null) {
+      if (piece !== '.' && isPieceRed === isTurnRed) {
+        setSandboxSelected(sq);
+        setSandboxValidMoves(getLegalMoves(parsed.board, sq, parsed.turn));
+      }
+    } else {
+      if (sandboxValidMoves.includes(sq)) {
+        // Thực hiện nước đi
+        const cloned = [...parsed.board];
+        cloned[sq] = cloned[sandboxSelected];
+        cloned[sandboxSelected] = '.';
+        const nextTurn = parsed.turn === 'w' ? 'b' : 'w';
+        const nextFen = buildFen(cloned, nextTurn);
+        setSandboxFen(nextFen);
+        setSandboxSelected(null);
+        setSandboxValidMoves([]);
+      } else if (piece !== '.' && isPieceRed === isTurnRed) {
+        setSandboxSelected(sq);
+        setSandboxValidMoves(getLegalMoves(parsed.board, sq, parsed.turn));
+      } else {
+        setSandboxSelected(null);
+        setSandboxValidMoves([]);
+      }
+    }
+  };
+
+  // Chạy Benchmark phần cứng thực tế
+  const runHardwareBenchmark = () => {
     setBenchRunning(true);
+    setBenchResults(null);
+
     setTimeout(() => {
+      const testFens = [
+        currentFen,
+        'r1bakab1r/9/1cn1c1n2/p1p1p1p1p/9/2P6/P3P1P1P/1C2C4/9/RNBAKABNR w - - 0 20',
+        '2bakab2/9/1cn6/p1p3p1p/9/2C1C1R2/P3P1P1P/9/9/RNBAKAB2 w - - 3 45',
+        '4k4/4C4/b4Rn1b/9/4R4/8p/P1P1N1r2/9/4A4/4KAB2 b - - 0 68'
+      ];
+
       const iterations = 50000;
       const t0 = performance.now();
 
-      // Test parsing và mảng lookup O(1) 50,000 lần
-      let checkSum = 0;
       for (let i = 0; i < iterations; i++) {
-        const m = milestones[i % 3];
-        const parsed = parse(m.fen);
-        for (let idx = 0; idx < 90; idx++) {
-          if (parsed.board[idx] !== '.') {
-            const x = gridx[idx % 9];
-            const y = gridy[Math.floor(idx / 9)];
-            checkSum += (x + y) * 0.001;
-          }
-        }
+        const fenToTest = testFens[i % testFens.length];
+        const p = parse(fenToTest);
+        evaluatePosition(p.board);
+        getLegalMoves(p.board, 22, p.turn);
       }
 
       const t1 = performance.now();
-      const totalTimeMs = t1 - t0;
-      const opsPerSec = Math.round((iterations / totalTimeMs) * 1000);
-      const latencyMicros = ((totalTimeMs / iterations) * 1000).toFixed(2);
+      const elapsedMs = t1 - t0;
+      const fensPerSec = Math.round((iterations / (elapsedMs / 1000)));
 
-      setBenchStats({
+      setBenchResults({
         iterations,
-        totalTimeMs: totalTimeMs.toFixed(2),
-        opsPerSec: opsPerSec.toLocaleString(),
-        latencyMicros,
-        checkSum: checkSum.toFixed(0),
-        gcPressure: '0 Bytes / Frame (Zero Dynamic Allocation)',
-        cacheFriendly: '100% L1D Cache Hit (Float32Array LUT)',
-        gpuCompositing: 'Hardware Accelerated (translate3d Layer)'
+        elapsedMs: elapsedMs.toFixed(2),
+        fensPerSec: fensPerSec.toLocaleString(),
+        lutLatencyNs: ((elapsedMs * 1e6) / iterations).toFixed(1)
       });
       setBenchRunning(false);
     }, 50);
-  }, []);
+  };
+
+  // Trích xuất các message turn của JSONL nếu có
+  const jsonlTurns = useMemo(() => {
+    if (!parsedJsonlData || !parsedJsonlData.messages) return [];
+    const turns = [];
+    const msgs = parsedJsonlData.messages;
+    for (let i = 1; i < msgs.length; i += 2) {
+      const userMsg = msgs[i];
+      const assistMsg = msgs[i + 1];
+      if (userMsg && assistMsg) {
+        let assistData = null;
+        try {
+          assistData = JSON.parse(assistMsg.content);
+        } catch {
+          assistData = { thought: assistMsg.content };
+        }
+        turns.push({
+          turnIndex: Math.floor(i / 2) + 1,
+          userContent: userMsg.content,
+          assistantData: assistData
+        });
+      }
+    }
+    return turns;
+  }, [parsedJsonlData]);
+
+  const activeJsonlTurn = jsonlTurns[jsonlTurnIdx] || null;
 
   return (
-    <div className="bg-obsidian border border-gold/30 p-5 rounded-2xl space-y-4 shadow-xl font-mono text-xs">
-      <div className="flex items-center justify-between border-b border-gold/20 pb-3">
-        <div className="flex items-center gap-2 text-gold font-bold">
-          <Activity className="w-5 h-5 text-emerald-400 animate-pulse" />
-          KIỂM TOÁN HIỆU NĂNG VẬT LÝ GPU & CPU (ZERO MEMORY BOTTLENECK AUDIT)
-        </div>
-        <button
-          onClick={runBench}
-          disabled={benchRunning}
-          className="px-4 py-1.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold rounded-xl text-xs transition flex items-center gap-1.5 shadow-glow"
-        >
-          {benchRunning ? <RotateCcw className="w-3.5 h-3.5 animate-spin" /> : <Play className="w-3.5 h-3.5" />}
-          {benchRunning ? 'ĐANG ĐO ĐẠC...' : 'CHẠY BENCHMARK (50K OPS)'}
-        </button>
-      </div>
-
-      {benchStats ? (
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-          <div className="bg-emerald-950/30 border border-emerald-500/40 p-3 rounded-xl space-y-1">
-            <span className="text-emerald-400 font-bold">⚡ THÔNG LƯỢNG KÝ HỌA (THROUGHPUT):</span>
-            <div className="text-lg font-bold text-white">{benchStats.opsPerSec} FEN/s</div>
-            <p className="text-[10px] text-gold/70">Độ trễ: {benchStats.latencyMicros} µs / lượt biến đổi</p>
-          </div>
-
-          <div className="bg-cyan-950/30 border border-cyan-500/40 p-3 rounded-xl space-y-1">
-            <span className="text-cyan-400 font-bold">🧠 BỘ NHỚ & CACHE LINE (L1D):</span>
-            <div className="text-sm font-bold text-cyan-200">{benchStats.cacheFriendly}</div>
-            <p className="text-[10px] text-gold/70">{benchStats.gcPressure}</p>
-          </div>
-
-          <div className="bg-purple-950/30 border border-purple-500/40 p-3 rounded-xl space-y-1">
-            <span className="text-purple-400 font-bold">🚀 GPU COMPOSITING BACKEND:</span>
-            <div className="text-sm font-bold text-purple-200">{benchStats.gpuCompositing}</div>
-            <p className="text-[10px] text-gold/70">60-120 FPS Rock-Solid Canvas Refresh</p>
-          </div>
-        </div>
-      ) : (
-        <div className="p-3 bg-black/40 rounded-xl text-center text-gold/60 italic text-[11px]">
-          Nhấn "CHẠY BENCHMARK" để đo đạc thời gian tính toán và áp lực bộ nhớ thực tế trên vi xử lý của bạn.
-        </div>
-      )}
-    </div>
-  );
-}
-
-export function MindmapVisualizer({ show, close }) {
-  const [selectedMilestone, setSelectedMilestone] = useState(milestones[0]);
-  const [activeTab, setActiveTab] = useState('mindmap'); // 'mindmap' | 'flywheel' | 'cot360' | 'bench'
-  const [cacheSearchDepth, setCacheSearchDepth] = useState(4);
-
-  if (!show) return null;
-
-  // Tính toán thời gian tiết kiệm giả lập dựa trên dung lượng TT hit
-  const unoptimizedTimeMs = (Math.pow(2.8, cacheSearchDepth) * 0.4).toFixed(1);
-  const persistentTtTimeMs = (0.000015).toFixed(6); // 15 nanoseconds
-  const speedupRatio = Math.round((parseFloat(unoptimizedTimeMs) * 1000000) / 15);
-
-  return (
-    <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-lg flex items-center justify-center p-3 md:p-6 animate-fadeIn">
-      <div className="bg-obsidian-card border-2 border-gold/50 rounded-3xl max-w-6xl w-full max-h-[94vh] flex flex-col shadow-[0_0_50px_rgba(212,175,55,0.25)] overflow-hidden">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-obsidian/90 backdrop-blur-md font-body">
+      <div className="bg-obsidian-card border-2 border-gold/40 rounded-2xl max-w-7xl w-full h-[92vh] flex flex-col shadow-glow overflow-hidden">
         
-        {/* HEADER */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-gold/20 bg-gradient-to-r from-obsidian via-obsidian-card to-obsidian">
+        {/* HEADER TOOLBAR */}
+        <div className="bg-obsidian px-6 py-3.5 border-b border-gold/30 flex items-center justify-between flex-wrap gap-3">
           <div className="flex items-center gap-3">
-            <div className="p-2 bg-gold/10 rounded-xl border border-gold/30 shadow-glow">
-              <Compass className="w-6 h-6 text-gold animate-spin-slow" />
+            <div className="w-9 h-9 rounded-lg bg-gold/10 border border-gold flex items-center justify-center text-gold shadow-glow">
+              <Compass className="w-5 h-5 animate-spin-slow" />
             </div>
             <div>
-              <div className="flex items-center gap-2">
-                <h2 className="text-lg md:text-xl font-royal font-bold text-gold tracking-wide">
-                  SƠ ĐỒ TƯ DUY CÂY SUY LUẬN 360° & HẬU KIỂM TOÀN VÁN
-                </h2>
-                <span className="text-[10px] px-2 py-0.5 rounded-full bg-gold/20 text-gold border border-gold/40 font-mono font-bold">
-                  v38.0 OMNISCIENT GPU
+              <h2 className="text-base font-royal font-bold text-gold flex items-center gap-2">
+                🧠 SƠ ĐỒ TƯ DUY 360° & HẬU KIỂM TOÀN VÁN
+                <span className="px-2 py-0.5 rounded text-[10px] uppercase tracking-wider font-bold bg-gold/20 text-gold border border-gold/40">
+                  v38.1 Realtime
                 </span>
-              </div>
-              <p className="text-xs text-gold/70">
-                Quy Nạp Lùi (Backward Induction) ➔ Lan Truyền Tri Thức Ngược ➔ Bánh Đà Tri Thức Persistent TT
+              </h2>
+              <p className="text-xs text-gold/60">
+                Thế cờ hiện tại: <span className="text-gold font-mono font-bold truncate max-w-xs inline-block align-bottom">{currentFen}</span>
               </p>
             </div>
           </div>
 
-          <div className="flex items-center gap-3">
+          {/* TAB SWITCHER */}
+          <div className="flex items-center gap-1.5 bg-obsidian p-1 rounded-lg border border-gold/30 flex-wrap">
             <button
-              onClick={close}
-              className="px-3 py-1.5 bg-vermilion/20 hover:bg-vermilion/40 text-red-300 border border-vermilion/50 rounded-xl text-xs font-bold transition flex items-center gap-1.5"
+              onClick={() => setTab('tree')}
+              className={`px-3 py-1 rounded text-xs font-bold transition flex items-center gap-1.5 ${
+                tab === 'tree' ? 'bg-gold text-obsidian shadow-glow font-black' : 'text-gold/70 hover:text-gold'
+              }`}
             >
-              ✕ ĐÓNG
+              <Layers className="w-3.5 h-3.5" /> 🌳 CÂY 3-PLY
+            </button>
+            <button
+              onClick={() => setTab('timeline')}
+              className={`px-3 py-1 rounded text-xs font-bold transition flex items-center gap-1.5 ${
+                tab === 'timeline' ? 'bg-gold text-obsidian shadow-glow font-black' : 'text-gold/70 hover:text-gold'
+              }`}
+            >
+              <TrendingUp className="w-3.5 h-3.5" /> 📈 BƯỚC NGOẶT ({gameHistory.length} PLIES)
+            </button>
+            <button
+              onClick={() => setTab('jsonl')}
+              className={`px-3 py-1 rounded text-xs font-bold transition flex items-center gap-1.5 ${
+                tab === 'jsonl' ? 'bg-gold text-obsidian shadow-glow font-black' : 'text-gold/70 hover:text-gold'
+              }`}
+            >
+              <FileCode className="w-3.5 h-3.5" /> 📜 BÓC TÁCH JSONL
+            </button>
+            <button
+              onClick={() => setTab('sandbox')}
+              className={`px-3 py-1 rounded text-xs font-bold transition flex items-center gap-1.5 ${
+                tab === 'sandbox' ? 'bg-gold text-obsidian shadow-glow font-black' : 'text-gold/70 hover:text-gold'
+              }`}
+            >
+              <Crosshair className="w-3.5 h-3.5" /> 🎮 WHAT-IF SANDBOX
+            </button>
+            <button
+              onClick={() => setTab('bench')}
+              className={`px-3 py-1 rounded text-xs font-bold transition flex items-center gap-1.5 ${
+                tab === 'bench' ? 'bg-gold text-obsidian shadow-glow font-black' : 'text-gold/70 hover:text-gold'
+              }`}
+            >
+              <Gauge className="w-3.5 h-3.5" /> 🔬 BENCHMARK
             </button>
           </div>
-        </div>
 
-        {/* NAVIGATION TABS */}
-        <div className="flex items-center gap-2 px-6 py-2 bg-black/40 border-b border-gold/10 text-xs font-bold overflow-x-auto">
           <button
-            onClick={() => setActiveTab('mindmap')}
-            className={`px-4 py-2 rounded-xl transition flex items-center gap-2 ${
-              activeTab === 'mindmap' 
-                ? 'bg-gold text-obsidian font-extrabold shadow-glow' 
-                : 'bg-gold/5 text-gold/80 hover:bg-gold/15 border border-gold/20'
-            }`}
+            onClick={close}
+            className="px-3 py-1 rounded-lg border border-red-500/40 bg-red-500/20 text-red-300 hover:bg-red-500/30 text-xs font-bold transition"
           >
-            <GitCommit className="w-4 h-4" />
-            1. CÂY TƯ DUY & LAN TRUYỀN NGƯỢC (CAUSAL DAG)
-          </button>
-          <button
-            onClick={() => setActiveTab('flywheel')}
-            className={`px-4 py-2 rounded-xl transition flex items-center gap-2 ${
-              activeTab === 'flywheel' 
-                ? 'bg-gold text-obsidian font-extrabold shadow-glow' 
-                : 'bg-gold/5 text-gold/80 hover:bg-gold/15 border border-gold/20'
-            }`}
-          >
-            <Zap className="w-4 h-4" />
-            2. BÁNH ĐÀ TRI THỨC TT (N× SPEEDUP)
-          </button>
-          <button
-            onClick={() => setActiveTab('cot360')}
-            className={`px-4 py-2 rounded-xl transition flex items-center gap-2 ${
-              activeTab === 'cot360' 
-                ? 'bg-gold text-obsidian font-extrabold shadow-glow' 
-                : 'bg-gold/5 text-gold/80 hover:bg-gold/15 border border-gold/20'
-            }`}
-          >
-            <Layers className="w-4 h-4" />
-            3. GIẢI PHẪU 7 KHỐI SUY LUẬN 385 DÒNG
-          </button>
-          <button
-            onClick={() => setActiveTab('bench')}
-            className={`px-4 py-2 rounded-xl transition flex items-center gap-2 ${
-              activeTab === 'bench' 
-                ? 'bg-gold text-obsidian font-extrabold shadow-glow' 
-                : 'bg-gold/5 text-gold/80 hover:bg-gold/15 border border-gold/20'
-            }`}
-          >
-            <Gauge className="w-4 h-4" />
-            4. BENCHMARK PHẦN CỨNG GPU & CPU
+            ĐÓNG
           </button>
         </div>
 
-        {/* CONTENT AREA */}
-        <div className="flex-1 overflow-y-auto p-6 space-y-6 bg-radial-gradient">
+        {/* MAIN BODY VIEWPORT */}
+        <div className="flex-1 overflow-y-auto p-5 bg-obsidian/60 flex flex-col gap-4">
           
-          {/* TAB 1: CÂY TƯ DUY & LAN TRUYỀN NGƯỢC */}
-          {activeTab === 'mindmap' && (
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-              
-              {/* Cột trái: Sơ đồ Cây Nhân Quả (7 Cột) */}
-              <div className="lg:col-span-7 space-y-4">
-                <div className="bg-obsidian/80 border border-gold/30 rounded-2xl p-4 shadow-xl space-y-3">
-                  <div className="flex items-center justify-between">
-                    <h3 className="text-sm font-bold text-gold flex items-center gap-2">
-                      <Sparkles className="w-4 h-4 text-gold animate-pulse" />
-                      TRỤC THỜI GIAN NHÂN QUẢ (BACKWARD INDUCTION CAUSALITY)
-                    </h3>
-                    <span className="text-[11px] text-emerald-400 font-mono">
-                      ● Ground-Truth Known (100% Thấu Thị)
-                    </span>
-                  </div>
-                  <p className="text-xs text-gold/70 leading-relaxed">
-                    Nhờ kiến trúc <b>Hậu kiểm Toàn ván (Post-Game Omniscience)</b>, tại <b>Ply 20</b> hệ thống đã nhìn thấu toàn bộ cái chết sát cục ở <b>Ply 68</b>, biên dịch chính xác nguyên nhân gốc rễ vào chuỗi <code className="text-emerald-300">&lt;thought&gt;</code> thay vì đoán mò mù mịt!
-                  </p>
+          {/* TAB 1: CÂY SUY TƯỞNG ĐA TẦNG 3-PLY (LIVE CANDIDATE TREE) */}
+          {tab === 'tree' && (
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 flex-1">
+              {/* CỘT TRÁI: BÀN CỜ GPU & ĐIỀU KHIỂN NẠP BÀN CỜ CHÍNH */}
+              <div className="lg:col-span-4 flex flex-col items-center gap-3 bg-obsidian/80 p-4 rounded-xl border border-gold/20">
+                <div className="flex items-center justify-between w-full text-xs">
+                  <span className="text-gold/60 font-bold uppercase">BÀN CỜ NHÁNH BIẾN ĐANG XEM</span>
+                  <span className="px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 font-mono text-[10px] font-bold">
+                    Score: {activeNode ? `${activeNode.score > 0 ? '+' : ''}${activeNode.score} cp` : '0 cp'}
+                  </span>
                 </div>
 
-                {/* Danh sách 3 Nút Mốc Thế Cờ */}
-                <div className="space-y-3 relative before:absolute before:left-6 before:top-6 before:bottom-6 before:w-0.5 before:bg-gradient-to-b before:from-amber-500 before:via-cyan-500 before:to-emerald-500">
-                  {milestones.map((m, idx) => {
-                    const isSelected = selectedMilestone.id === m.id;
+                <FastGpuBoard
+                  fen={activeNode ? activeNode.fen : currentFen}
+                  arrowFrom={activeNode ? activeNode.from : -1}
+                  arrowTo={activeNode ? activeNode.to : -1}
+                />
+
+                {activeNode && (
+                  <div className="w-full bg-obsidian-card p-3 rounded-lg border border-gold/20 text-xs space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="font-bold text-gold">{activeNode.title}</span>
+                      <span className={`px-2 py-0.5 rounded text-[10px] font-bold border ${activeNode.badgeColor}`}>
+                        {activeNode.badge}
+                      </span>
+                    </div>
+                    <p className="text-gold/70 text-[11px] leading-relaxed italic">
+                      "{activeNode.intent}"
+                    </p>
+                    <div className="text-[10px] text-gold/40 font-mono break-all">
+                      FEN: {activeNode.fen}
+                    </div>
+
+                    <div className="flex items-center gap-2 pt-1">
+                      {onApplyFen && (
+                        <button
+                          onClick={() => {
+                            onApplyFen(activeNode.fen);
+                            alert('Đã áp dụng thế cờ nhánh này vào Bàn Cờ Chính!');
+                          }}
+                          className="flex-1 py-1.5 rounded bg-gold text-obsidian font-bold text-xs hover:bg-gold-light transition shadow-glow flex items-center justify-center gap-1.5"
+                        >
+                          <Play className="w-3.5 h-3.5 fill-current" /> ÁP DỤNG VÀO BÀN CỜ CHÍNH
+                        </button>
+                      )}
+                      <button
+                        onClick={() => {
+                          engine.position(activeNode.fen);
+                          engine.search(6, 2000);
+                          alert('Đã phát lệnh tìm kiếm sâu cho thế cờ nhánh này qua Engine!');
+                        }}
+                        className="py-1.5 px-3 rounded bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 font-bold text-xs hover:bg-cyan-500/30 transition flex items-center gap-1"
+                      >
+                        <Zap className="w-3.5 h-3.5" /> ENGINE SEARCH
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* CỘT PHẢI: CÂY PHÂN NHÁNH 3 TẦNG ĐỘNG HỌC (LIVE 3-PLY TREE VIEW) */}
+              <div className="lg:col-span-8 flex flex-col gap-3">
+                <div className="flex items-center justify-between bg-obsidian-card p-3 rounded-xl border border-gold/20">
+                  <div className="flex items-center gap-2">
+                    <Sparkles className="w-4 h-4 text-gold" />
+                    <span className="font-bold text-xs text-gold uppercase">
+                      CÂY SUY LUẬN 3-PLY ĐỘNG HỌC TỪ THẾ CỜ HIỆN TẠI ({treeData.candidates.length} ỨNG VIÊN HÀNG ĐẦU)
+                    </span>
+                  </div>
+                  <span className="text-[11px] text-gold/60 font-mono">
+                    Lượt đi: <b className="text-gold">{treeData.turn === 'w' ? 'Đỏ (Tiên)' : 'Đen (Hậu)'}</b> | Điểm gốc: <b className="text-emerald-400">{treeData.rootScore} cp</b>
+                  </span>
+                </div>
+
+                <div className="flex-1 space-y-3 overflow-y-auto pr-1">
+                  {treeData.candidates.map((cand, idx) => {
+                    const isSelected = activeNode && activeNode.uci === cand.uci;
                     return (
                       <div
-                        key={m.id}
-                        onClick={() => setSelectedMilestone(m)}
-                        className={`relative ml-12 p-4 rounded-2xl border-2 transition-all cursor-pointer ${
-                          isSelected 
-                            ? 'bg-gradient-to-r from-gold/20 via-obsidian-card to-obsidian border-gold shadow-[0_0_20px_rgba(212,175,55,0.3)] scale-[1.02]' 
-                            : 'bg-obsidian-card/80 border-gold/20 hover:border-gold/50 hover:bg-obsidian'
+                        key={`cand-${cand.uci}-${idx}`}
+                        className={`p-3.5 rounded-xl border transition-all cursor-pointer ${
+                          isSelected
+                            ? 'bg-gold/15 border-gold shadow-glow'
+                            : 'bg-obsidian-card/80 border-gold/20 hover:border-gold/50'
                         }`}
+                        onClick={() => {
+                          setActiveNode({
+                            title: `Ứng Viên #${idx + 1}: ${cand.notation}`,
+                            uci: cand.uci,
+                            fen: cand.fen,
+                            from: cand.from,
+                            to: cand.to,
+                            score: cand.score,
+                            intent: cand.intent,
+                            badge: cand.badge,
+                            badgeColor: cand.badgeColor
+                          });
+                        }}
                       >
-                        {/* Biểu tượng nút tròn trên đường kẻ */}
-                        <div className={`absolute -left-12 top-4 w-7 h-7 rounded-full flex items-center justify-center font-bold text-xs border-2 shadow-glow ${
-                          idx === 0 ? 'bg-amber-500 border-amber-300 text-black' :
-                          idx === 1 ? 'bg-cyan-500 border-cyan-300 text-black' :
-                          'bg-emerald-500 border-emerald-300 text-black'
-                        }`}>
-                          {idx + 1}
+                        {/* TẦNG 1: NƯỚC ĐI CANDIDATE CỦA TA */}
+                        <div className="flex items-center justify-between flex-wrap gap-2">
+                          <div className="flex items-center gap-2">
+                            <span className="w-6 h-6 rounded-full bg-gold/20 text-gold border border-gold/40 flex items-center justify-center font-mono font-bold text-xs">
+                              {idx + 1}
+                            </span>
+                            <span className="font-bold text-sm text-gold">{cand.notation}</span>
+                            <span className="font-mono text-xs text-gold/50">({cand.uci})</span>
+                            <span className={`px-2 py-0.5 rounded text-[10px] font-bold border ${cand.badgeColor}`}>
+                              {cand.badge}
+                            </span>
+                          </div>
+
+                          <div className="flex items-center gap-3">
+                            <span className="text-xs font-mono font-bold text-emerald-400">
+                              Đánh giá: {cand.score > 0 ? `+${cand.score}` : cand.score} cp
+                            </span>
+                            <span className="text-xs text-gold/60">
+                              Hiệu quả: +{cand.heuristicScore}
+                            </span>
+                          </div>
                         </div>
 
-                        <div className="flex items-center justify-between gap-2">
-                          <span className={`text-[10px] px-2.5 py-0.5 rounded-full border font-bold ${m.tagColor}`}>
-                            {m.tag}
-                          </span>
-                          <span className="text-xs font-mono font-bold text-gold">
-                            {m.evalScore}
-                          </span>
-                        </div>
-
-                        <h4 className="text-sm font-bold text-white mt-1">
-                          {m.title}
-                        </h4>
-
-                        <div className="flex items-center gap-3 text-xs text-gold/80 mt-1">
-                          <span>Nước đi: <b className="text-gold">{m.moveNotation}</b> (<code className="text-emerald-400">{m.moveUci}</code>)</span>
-                        </div>
-
-                        <p className="text-[11px] text-gray-300 italic mt-2 border-l-2 border-gold/40 pl-2 bg-black/30 py-1 rounded-r">
-                          {m.thoughtExcerpt}
+                        <p className="text-xs text-gold/80 mt-1.5 ml-8 leading-relaxed">
+                          🎯 <b>Ý đồ:</b> {cand.intent}
                         </p>
+
+                        {/* TẦNG 2 & 3: ĐỐI PHƯƠNG ĐÁP TRẢ VÀ HỆ QUẢ */}
+                        {cand.reply && (
+                          <div className="mt-2.5 ml-8 p-2.5 rounded-lg bg-obsidian border border-gold/20 text-xs flex items-center justify-between flex-wrap gap-2">
+                            <div className="flex items-center gap-2">
+                              <span className="text-cyan-400 font-bold">➔ Phản đòn đối phương:</span>
+                              <span className="text-gold font-bold">{cand.reply.notation}</span>
+                              <span className="font-mono text-[11px] text-gold/50">({cand.reply.uci})</span>
+                            </div>
+                            <span className="text-gold/60 text-[11px]">
+                              Thế trận sau phản đòn: <b className="text-amber-400">{cand.reply.score} cp</b>
+                            </span>
+                          </div>
+                        )}
                       </div>
                     );
                   })}
                 </div>
+              </div>
+            </div>
+          )}
 
-                {/* Sơ đồ ASCII dòng chảy tri thức ngược */}
-                <div className="bg-black/60 border border-gold/20 rounded-xl p-3 text-[11px] font-mono text-gold/80 space-y-1">
-                  <div className="text-emerald-400 font-bold flex items-center gap-1">
-                    <ArrowUpCircle className="w-4 h-4" />
-                    DÒNG CHẢY QUY NẠP LÙI (BACKWARD KNOWLEDGE PROPAGATION):
-                  </div>
-                  <div>[PLY 68: SÁT CỤC THỰC TẾ (Checkmate)]</div>
-                  <div className="text-cyan-400 pl-4">▲ Lan truyền tri thức ngược (Trích xuất chuỗi PV Sát Cục)</div>
-                  <div>[PLY 45: Đòn Xe Pháo Áp Đáy (Ép đối phương gãy Sĩ)]</div>
-                  <div className="text-amber-400 pl-4">▲ Nhận diện nguyên nhân gốc rễ (Root Cause Causality)</div>
-                  <div>[PLY 20: Đòn Thí Binh c3c4 (Nước cờ bước ngoặt định đoạt ván cờ)]</div>
+          {/* TAB 2: QUÉT BƯỚC NGOẶT & THẾ TRẬN TOÀN VÁN (GAME BLUNDER & TURNING POINT TIMELINE) */}
+          {tab === 'timeline' && (
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 flex-1">
+              <div className="lg:col-span-4 flex flex-col items-center gap-3 bg-obsidian/80 p-4 rounded-xl border border-gold/20">
+                <div className="flex items-center justify-between w-full text-xs">
+                  <span className="text-gold/60 font-bold uppercase">PLY {selectedPly} / {gameHistory.length - 1}</span>
+                  <span className="px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 font-mono text-[10px] font-bold">
+                    Turn {Math.floor(selectedPly / 2) + 1}
+                  </span>
                 </div>
+
+                <FastGpuBoard fen={gameHistory[selectedPly] || currentFen} arrowFrom={-1} arrowTo={-1} />
+
+                <div className="w-full flex items-center gap-2">
+                  <button
+                    disabled={selectedPly <= 0}
+                    onClick={() => setSelectedPly((p) => Math.max(0, p - 1))}
+                    className="flex-1 py-1.5 rounded bg-obsidian border border-gold/30 text-gold text-xs font-bold disabled:opacity-30 hover:bg-gold/10"
+                  >
+                    ◀ Nước trước
+                  </button>
+                  <button
+                    disabled={selectedPly >= gameHistory.length - 1}
+                    onClick={() => setSelectedPly((p) => Math.min(gameHistory.length - 1, p + 1))}
+                    className="flex-1 py-1.5 rounded bg-obsidian border border-gold/30 text-gold text-xs font-bold disabled:opacity-30 hover:bg-gold/10"
+                  >
+                    Nước sau ▶
+                  </button>
+                </div>
+
+                {onApplyFen && (
+                  <button
+                    onClick={() => {
+                      onApplyFen(gameHistory[selectedPly]);
+                      alert(`Đã nạp lại trạng thái bàn cờ tại Ply ${selectedPly} vào Bàn Cờ Chính!`);
+                    }}
+                    className="w-full py-1.5 rounded bg-gold text-obsidian font-bold text-xs hover:bg-gold-light transition shadow-glow flex items-center justify-center gap-1.5"
+                  >
+                    <RotateCcw className="w-3.5 h-3.5" /> QUAY LẠI THẾ CỜ NÀY TRÊN BÀN CHÍNH
+                  </button>
+                )}
               </div>
 
-              {/* Cột phải: Bàn cờ Mini GPU Canvas & Bóc Tách Suy Nghĩ (5 Cột) */}
-              <div className="lg:col-span-5 space-y-4">
-                <div className="bg-obsidian border border-gold/40 rounded-2xl p-4 shadow-2xl space-y-4">
-                  <div className="flex items-center justify-between border-b border-gold/20 pb-2">
-                    <h3 className="text-xs font-bold text-gold flex items-center gap-1.5">
-                      <Eye className="w-4 h-4 text-emerald-400" />
-                      TRỰC QUAN HÓA BÀN CỜ GPU CANVAS ({selectedMilestone.id.toUpperCase()})
-                    </h3>
-                    <span className="text-[10px] text-gold/60 font-mono">
-                      Turn {selectedMilestone.turn}
-                    </span>
-                  </div>
+              <div className="lg:col-span-8 flex flex-col gap-3">
+                <div className="flex items-center justify-between bg-obsidian-card p-3 rounded-xl border border-gold/20">
+                  <span className="font-bold text-xs text-gold uppercase flex items-center gap-2">
+                    <TrendingUp className="w-4 h-4 text-gold" /> DIỄN BIẾN THẾ TRẬN & ĐIỂM SỐ CENTIPAWN TOÀN VÁN
+                  </span>
+                  <span className="text-xs text-gold/60">
+                    Tổng số: <b className="text-gold">{timelineAnalysis.length} Plies</b>
+                  </span>
+                </div>
 
-                  {/* Bàn cờ Mini GPU Hardware Canvas */}
-                  <FastGpuBoard 
-                    fen={selectedMilestone.fen} 
-                    arrowFrom={selectedMilestone.arrowFrom}
-                    arrowTo={selectedMilestone.arrowTo}
-                  />
-
-                  {/* So sánh Tầm nhìn: Depth 4 vs Hậu Kiểm Toàn Ván */}
-                  <div className="space-y-2 text-xs">
-                    <div className="bg-red-950/30 border border-red-500/30 p-2.5 rounded-xl space-y-0.5">
-                      <div className="text-[11px] font-bold text-red-400 flex items-center gap-1">
-                        <AlertTriangle className="w-3.5 h-3.5" />
-                        TẦM NHÌN ONLINE SEARCH (DEPTH 4 - MÙ SÁT CỤC):
+                {/* Danh Sách Chi Tiết Từng Ply */}
+                <div className="flex-1 space-y-2 overflow-y-auto pr-1 max-h-[500px]">
+                  {timelineAnalysis.map((item) => (
+                    <div
+                      key={`timeline-${item.ply}`}
+                      onClick={() => setSelectedPly(item.ply)}
+                      className={`p-3 rounded-lg border transition cursor-pointer flex items-center justify-between flex-wrap gap-2 ${
+                        selectedPly === item.ply
+                          ? 'bg-gold/20 border-gold shadow-glow'
+                          : 'bg-obsidian-card/80 border-gold/20 hover:border-gold/40'
+                      }`}
+                    >
+                      <div className="flex items-center gap-3">
+                        <span className="w-8 h-8 rounded-lg bg-obsidian border border-gold/30 text-gold flex items-center justify-center font-mono font-bold text-xs">
+                          P{item.ply}
+                        </span>
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <span className="font-bold text-xs text-gold">Turn {item.turnNumber} ({item.color})</span>
+                            <span className={`px-2 py-0.5 rounded text-[10px] font-bold border ${item.tagColor}`}>
+                              {item.tag}
+                            </span>
+                          </div>
+                          <div className="text-[11px] text-gold/50 font-mono truncate max-w-sm">
+                            {item.fen}
+                          </div>
+                        </div>
                       </div>
-                      <p className="text-[11px] text-gold/70">
-                        {selectedMilestone.horizonEval}
-                      </p>
+
+                      <div className="text-right">
+                        <div className="font-mono font-bold text-xs text-emerald-400">
+                          {item.score > 0 ? `+${item.score}` : item.score} cp
+                        </div>
+                        {item.ply > 0 && (
+                          <div className={`text-[10px] font-bold ${item.swing >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                            {item.swing >= 0 ? `+${item.swing}` : item.swing} cp
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* TAB 3: BÓC TÁCH TẬP DỮ LIỆU JSONL THẬT (DEEPSEEK-R1 360° INSPECTOR) */}
+          {tab === 'jsonl' && (
+            <div className="flex flex-col gap-4 flex-1">
+              {/* Khối Nhập / Tải Tệp JSONL */}
+              <div className="bg-obsidian-card p-4 rounded-xl border border-gold/20 flex flex-col gap-3">
+                <div className="flex items-center justify-between flex-wrap gap-2">
+                  <span className="font-bold text-xs text-gold uppercase flex items-center gap-2">
+                    <FileCode className="w-4 h-4 text-gold" /> DÁN HOẶC TẢI LÊN MỘT DÒNG JSONL TỰ ĐẤU (XIANGQI-R1 DATASET)
+                  </span>
+                  <div className="flex items-center gap-2">
+                    <label className="px-3 py-1 rounded bg-gold/10 border border-gold/30 text-gold text-xs font-bold cursor-pointer hover:bg-gold/20 transition flex items-center gap-1.5">
+                      <Upload className="w-3.5 h-3.5" /> TẢI TỆP .JSONL
+                      <input type="file" accept=".jsonl,.json" onChange={handleFileUpload} className="hidden" />
+                    </label>
+                    <button
+                      onClick={handleParseJsonl}
+                      className="px-4 py-1 rounded bg-gold text-obsidian text-xs font-bold hover:bg-gold-light transition shadow-glow flex items-center gap-1.5"
+                    >
+                      <Search className="w-3.5 h-3.5" /> BÓC TÁCH 360°
+                    </button>
+                  </div>
+                </div>
+
+                <textarea
+                  rows={3}
+                  value={jsonlInput}
+                  onChange={(e) => setJsonlInput(e.target.value)}
+                  placeholder='Dán một dòng JSONL từ examples/95_cqrs_360_reasoning_generator.rs hoặc data/ vào đây...'
+                  className="w-full p-2.5 rounded-lg bg-obsidian border border-gold/30 text-gold font-mono text-xs focus:outline-none focus:border-gold"
+                />
+              </div>
+
+              {/* Kết Quả Bóc Tách Chi Tiết */}
+              {parsedJsonlData && (
+                <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 flex-1">
+                  <div className="lg:col-span-4 bg-obsidian/80 p-4 rounded-xl border border-gold/20 flex flex-col gap-3">
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="font-bold text-gold">DANH SÁCH {jsonlTurns.length} TURNS</span>
+                      <span className="px-2 py-0.5 rounded bg-purple-500/20 text-purple-300 font-mono text-[10px] font-bold">
+                        Outcome: {parsedJsonlData.outcome || 'N/A'}
+                      </span>
                     </div>
 
-                    <div className="bg-emerald-950/30 border border-emerald-500/30 p-2.5 rounded-xl space-y-0.5">
-                      <div className="text-[11px] font-bold text-emerald-400 flex items-center gap-1">
-                        <CheckCircle2 className="w-3.5 h-3.5" />
-                        TẦM NHÌN HẬU KIỂM TOÀN VÁN (THẤU THỊ 100%):
-                      </div>
-                      <p className="text-[11px] text-gold/90 font-medium">
-                        {selectedMilestone.omniscienceEval}
-                      </p>
-                    </div>
-                  </div>
-
-                  {/* 3 Điểm Nhận Định Cờ Tướng */}
-                  <div className="bg-black/40 border border-gold/20 p-3 rounded-xl space-y-1.5">
-                    <h4 className="text-[11px] font-bold text-gold">LÝ DO CHIẾN THUẬT VẬT LÝ:</h4>
-                    <ul className="space-y-1 text-[11px] text-gold/80 list-disc list-inside">
-                      {selectedMilestone.reasoningPoints.map((pt, pIdx) => (
-                        <li key={pIdx} className="leading-snug">{pt}</li>
+                    <div className="space-y-1.5 overflow-y-auto max-h-[420px] pr-1">
+                      {jsonlTurns.map((t, idx) => (
+                        <button
+                          key={`jsonl-turn-${idx}`}
+                          onClick={() => setJsonlTurnIdx(idx)}
+                          className={`w-full text-left p-2.5 rounded-lg border text-xs transition flex items-center justify-between ${
+                            jsonlTurnIdx === idx
+                              ? 'bg-gold text-obsidian font-bold shadow-glow border-gold'
+                              : 'bg-obsidian border-gold/20 text-gold hover:border-gold/40'
+                          }`}
+                        >
+                          <span>Turn #{t.turnIndex}</span>
+                          <span className="font-mono text-[11px]">
+                            {t.assistantData?.bestmove ? `Best: ${t.assistantData.bestmove}` : ''}
+                          </span>
+                        </button>
                       ))}
-                    </ul>
+                    </div>
+                  </div>
+
+                  <div className="lg:col-span-8 bg-obsidian-card p-4 rounded-xl border border-gold/20 flex flex-col gap-3">
+                    {activeJsonlTurn ? (
+                      <>
+                        <div className="flex items-center justify-between border-b border-gold/20 pb-2">
+                          <span className="font-bold text-gold text-xs">
+                            PHÂN TÍCH SUY TƯỞNG TURN #{activeJsonlTurn.turnIndex}
+                          </span>
+                          <span className="text-xs font-mono text-emerald-400 font-bold">
+                            Eval: {activeJsonlTurn.assistantData?.centipawn_eval || 0} cp | BestMove: {activeJsonlTurn.assistantData?.bestmove || '-'}
+                          </span>
+                        </div>
+
+                        {/* Chuỗi Suy Luận <thought> 385 Dòng */}
+                        <div className="flex-1 overflow-y-auto max-h-[400px] p-3 rounded-lg bg-obsidian border border-gold/20 text-xs font-mono text-gold/80 leading-relaxed whitespace-pre-wrap">
+                          {activeJsonlTurn.assistantData?.thought || 'Không tìm thấy thẻ <thought>.'}
+                        </div>
+                      </>
+                    ) : (
+                      <div className="text-center py-20 text-gold/40">Chọn một Turn bên trái để xem chuỗi suy luận.</div>
+                    )}
                   </div>
                 </div>
-              </div>
-
+              )}
             </div>
           )}
 
-          {/* TAB 2: BÁNH ĐÀ TRI THỨC TT & TĂNG TỐC N× */}
-          {activeTab === 'flywheel' && (
-            <div className="space-y-6">
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div className="bg-obsidian border border-gold/30 p-4 rounded-2xl space-y-2">
-                  <div className="flex items-center gap-2 text-gold text-xs font-bold">
-                    <Database className="w-4 h-4 text-emerald-400" />
-                    PERSISTENT TT CACHE
-                  </div>
-                  <div className="text-2xl font-royal font-bold text-emerald-400">
-                    1024 MB RAM
-                  </div>
-                  <p className="text-[11px] text-gold/70">
-                    Bảng băm chia sẻ không khóa <code>Arc&lt;Table&gt;</code> lưu trữ toàn bộ cây tìm kiếm ván cờ.
-                  </p>
-                </div>
-
-                <div className="bg-obsidian border border-gold/30 p-4 rounded-2xl space-y-2">
-                  <div className="flex items-center gap-2 text-gold text-xs font-bold">
-                    <Zap className="w-4 h-4 text-amber-400" />
-                    ĐỘ TRỄ TRUY XUẤT NÚT
-                  </div>
-                  <div className="text-2xl font-royal font-bold text-amber-400">
-                    15 Nanoseconds
-                  </div>
-                  <p className="text-[11px] text-gold/70">
-                    Truy xuất O(1) qua Zobrist Hash thay vì phải chạy lại Alpha-Beta đệ quy 50ms.
-                  </p>
-                </div>
-
-                <div className="bg-obsidian border border-gold/30 p-4 rounded-2xl space-y-2">
-                  <div className="flex items-center gap-2 text-gold text-xs font-bold">
-                    <TrendingUp className="w-4 h-4 text-cyan-400" />
-                    HỆ SỐ GIA TỐC HẬU KIỂM
-                  </div>
-                  <div className="text-2xl font-royal font-bold text-cyan-400">
-                    {speedupRatio.toLocaleString()} ×
-                  </div>
-                  <p className="text-[11px] text-gold/70">
-                    Giảm N lần thời gian tìm kiếm khi khai thác các nhánh phản đòn của ván cờ đã xong.
-                  </p>
+          {/* TAB 4: PHÒNG THỬ NGHIỆM BIẾN MỚI (INTERACTIVE WHAT-IF SANDBOX) */}
+          {tab === 'sandbox' && (
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 flex-1">
+              <div className="lg:col-span-5 flex flex-col items-center gap-3 bg-obsidian/80 p-4 rounded-xl border border-gold/20">
+                <span className="text-xs font-bold text-gold uppercase">BÀN CỜ THỬ NGHIỆM TƯƠNG TÁC (CLICK-TO-MOVE)</span>
+                <FastGpuBoard
+                  fen={sandboxFen}
+                  arrowFrom={-1}
+                  arrowTo={-1}
+                  selectedSq={sandboxSelected}
+                  validDests={sandboxValidMoves}
+                  onSquareClick={handleSandboxClick}
+                />
+                <div className="text-[11px] text-gold/60 text-center">
+                  💡 Nhấp vào một quân cờ để xem nước đi hợp lệ, sau đó nhấp vào ô đích để di chuyển!
                 </div>
               </div>
 
-              {/* Trình Tính Toán Hiệu Năng Interactive */}
-              <div className="bg-obsidian border-2 border-gold/30 p-6 rounded-3xl shadow-xl space-y-4">
-                <h3 className="text-sm font-bold text-gold flex items-center gap-2">
-                  <Cpu className="w-5 h-5 text-gold" />
-                  MÔ PHỎNG HIỆU NĂNG TIẾT KIỆM THỜI GIAN THEO ĐỘ SÂU (DEPTH {cacheSearchDepth})
-                </h3>
+              <div className="lg:col-span-7 flex flex-col gap-3 bg-obsidian-card p-4 rounded-xl border border-gold/20">
+                <span className="font-bold text-xs text-gold uppercase flex items-center gap-2">
+                  <Crosshair className="w-4 h-4 text-gold" /> THÔNG SỐ VÀ PHÂN TÍCH NHÁNH THỬ NGHIỆM
+                </span>
 
-                <div className="space-y-2">
-                  <div className="flex justify-between text-xs text-gold font-mono">
-                    <span>Độ sâu tìm kiếm: Depth {cacheSearchDepth}</span>
-                    <span>Hệ số rẽ nhánh: b ≈ 2.8</span>
+                <div className="grid grid-cols-2 gap-3 text-xs">
+                  <div className="p-3 bg-obsidian rounded-lg border border-gold/20">
+                    <span className="text-gold/60 text-[10px] block font-bold uppercase">LƯỢT ĐI</span>
+                    <span className="text-base font-bold text-gold">{parse(sandboxFen).turn === 'w' ? 'Đỏ' : 'Đen'}</span>
                   </div>
-                  <input
-                    type="range"
-                    min="2"
-                    max="10"
-                    value={cacheSearchDepth}
-                    onChange={(e) => setCacheSearchDepth(parseInt(e.target.value, 10))}
-                    className="w-full accent-gold h-2 bg-black rounded-lg cursor-pointer"
-                  />
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs font-mono mt-4">
-                  <div className="bg-red-950/30 border border-red-500/30 p-4 rounded-xl space-y-2">
-                    <span className="text-red-400 font-bold">❌ CHƯA CÓ BÁNH ĐÀ TRI THỨC (TÌM TỪ ĐẦU):</span>
-                    <div className="text-lg font-bold text-red-300">{unoptimizedTimeMs} ms / turn</div>
-                    <p className="text-[11px] text-gold/70">
-                      Phải duyệt lại hàng triệu nút lá đệ quy, nghẽn CPU và mất hàng giờ cho 10,000 ván.
-                    </p>
-                  </div>
-
-                  <div className="bg-emerald-950/30 border border-emerald-500/30 p-4 rounded-xl space-y-2">
-                    <span className="text-emerald-400 font-bold">✅ CÓ BÁNH ĐÀ TRI THỨC PERSISTENT TT:</span>
-                    <div className="text-lg font-bold text-emerald-300">{persistentTtTimeMs} ms / turn (15 ns)</div>
-                    <p className="text-[11px] text-gold/70">
-                      Hit cache 100% các nhánh đã duyệt của ván cờ, hoàn thành trích xuất 3-Ply trong 0.01s!
-                    </p>
+                  <div className="p-3 bg-obsidian rounded-lg border border-gold/20">
+                    <span className="text-gold/60 text-[10px] block font-bold uppercase">ĐÁNH GIÁ HEURISTIC</span>
+                    <span className="text-base font-bold text-emerald-400">{evaluatePosition(parse(sandboxFen).board).score} cp</span>
                   </div>
                 </div>
-              </div>
-            </div>
-          )}
 
-          {/* TAB 3: 7 KHỐI SUY LUẬN 385 DÒNG */}
-          {activeTab === 'cot360' && (
-            <div className="space-y-4">
-              <div className="bg-obsidian border border-gold/30 p-4 rounded-2xl text-xs text-gold/80 space-y-2">
-                <h3 className="font-bold text-gold text-sm flex items-center gap-2">
-                  <Layers className="w-4 h-4 text-gold" />
-                  CẤU TRÚC 7 KHỐI TƯ DUY TỰ ĐỘNG HÓA HOÀN CHỈNH (385 DÒNG / TURN)
-                </h3>
-                <p className="text-[11px] text-gold/70">
-                  Mỗi lượt Turn là một tệp mã nguồn suy luận độc lập (Autonomous Reasoning Unit), triệt tiêu 100% boilerplate loop filler:
-                </p>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
-                <div className="bg-black/50 border border-gold/20 p-3 rounded-xl space-y-1">
-                  <h4 className="font-bold text-gold">Khối 1 (001-090: 90 Dòng)</h4>
-                  <p className="text-gray-300 text-[11px]">Khảo sát 90 ô tọa độ vật lý `a0`..`i9`, nêu rõ quân chiếm giữ, độ cơ động, quân bảo kê và đe dọa.</p>
+                <div className="p-3 bg-obsidian rounded-lg border border-gold/20 text-xs space-y-1 font-mono">
+                  <div className="text-gold/60 text-[10px] font-bold">FEN HIỆN TẠI:</div>
+                  <div className="text-gold break-all">{sandboxFen}</div>
                 </div>
 
-                <div className="bg-black/50 border border-gold/20 p-3 rounded-xl space-y-1">
-                  <h4 className="font-bold text-gold">Khối 2 (091-150: 60 Dòng)</h4>
-                  <p className="text-gray-300 text-[11px]">9 Lộ dọc, 10 Tuyến ngang, 16 Tuyến chéo Sĩ Tượng (kiểm tra tắc mắt tượng), và 25 phân tích cấu trúc bàn cờ.</p>
-                </div>
+                <div className="flex items-center gap-2 pt-2">
+                  <button
+                    onClick={() => {
+                      setSandboxFen(currentFen);
+                      setSandboxSelected(null);
+                      setSandboxValidMoves([]);
+                    }}
+                    className="flex-1 py-2 rounded bg-obsidian border border-gold/30 text-gold text-xs font-bold hover:bg-gold/10 flex items-center justify-center gap-1.5"
+                  >
+                    <RotateCcw className="w-3.5 h-3.5" /> ĐẶT LẠI THẾ CỜ GỐC
+                  </button>
 
-                <div className="bg-black/50 border border-gold/20 p-3 rounded-xl space-y-1">
-                  <h4 className="font-bold text-gold">Khối 3 (151-220: 70 Dòng)</h4>
-                  <p className="text-gray-300 text-[11px]">Kiểm kê vật chất, rà soát quân treo không padding khi tàn cuộc, và 15 đòn phối hợp chiến thuật lọc theo quân số thực tế.</p>
-                </div>
-
-                <div className="bg-black/50 border border-gold/20 p-3 rounded-xl space-y-1">
-                  <h4 className="font-bold text-gold">Khối 4 (221-290: 70 Dòng)</h4>
-                  <p className="text-gray-300 text-[11px]">Hội đồng 3 vai trò sinh động học theo từng quân cờ: Kẻ Tấn Công (24 bước), Kẻ Phản Biện (24 bước), Trọng Tài (19 tiêu chí).</p>
-                </div>
-
-                <div className="bg-black/50 border border-gold/20 p-3 rounded-xl space-y-1">
-                  <h4 className="font-bold text-gold">Khối 5 (291-335: 45 Dòng)</h4>
-                  <p className="text-gray-300 text-[11px]">Top 5 Ứng viên (mỗi ứng viên 9 dòng đánh giá toàn diện, phân tích ưu/nhược điểm cờ Tướng vật lý).</p>
-                </div>
-
-                <div className="bg-black/50 border border-gold/20 p-3 rounded-xl space-y-1">
-                  <h4 className="font-bold text-gold">Khối 6 (336-370: 35 Dòng)</h4>
-                  <p className="text-gray-300 text-[11px]">Mô phỏng cây 3-Ply ROLLOUT NƯỚC ĐI THẬT từ Engine (Nhánh A 70% phòng thủ, Nhánh B 30% trừng phạt sai lầm).</p>
-                </div>
-
-                <div className="bg-black/50 border border-gold/20 p-3 rounded-xl space-y-1 md:col-span-2">
-                  <h4 className="font-bold text-gold">Khối 7 (371-385: 15 Dòng)</h4>
-                  <p className="text-gray-300 text-[11px]">Thẩm định tính hợp lệ 100%, Flying General, an toàn Cung Tướng, Zobrist Hash anti-repetition, và quyết định nước đi tối thượng.</p>
+                  {onApplyFen && (
+                    <button
+                      onClick={() => {
+                        onApplyFen(sandboxFen);
+                        alert('Đã áp dụng thế cờ thử nghiệm vào Bàn Cờ Chính!');
+                      }}
+                      className="flex-1 py-2 rounded bg-gold text-obsidian text-xs font-bold hover:bg-gold-light shadow-glow flex items-center justify-center gap-1.5"
+                    >
+                      <Play className="w-3.5 h-3.5 fill-current" /> ÁP DỤNG VÀO BÀN CHÍNH
+                    </button>
+                  )}
                 </div>
               </div>
             </div>
           )}
 
-          {/* TAB 4: BENCHMARK PHẦN CỨNG GPU & CPU */}
-          {activeTab === 'bench' && (
-            <div className="space-y-4">
-              <HardwareBenchmarkSuite />
+          {/* TAB 5: BENCHMARK PHẦN CỨNG (GPU/CPU HARDWARE STRESS TEST) */}
+          {tab === 'bench' && (
+            <div className="flex flex-col gap-4 max-w-3xl mx-auto w-full">
+              <div className="bg-obsidian-card p-6 rounded-xl border border-gold/20 flex flex-col gap-4 text-center">
+                <div className="w-12 h-12 rounded-xl bg-gold/10 border border-gold mx-auto flex items-center justify-center text-gold shadow-glow">
+                  <Gauge className="w-6 h-6" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-gold font-royal">
+                    BENCHMARK HIỆU NĂNG TÍNH TOÁN & RENDER VẬT LÝ
+                  </h3>
+                  <p className="text-xs text-gold/60 mt-1">
+                    Đo lường trực tiếp tốc độ xử lý thế cờ, kiểm tra nước đi hợp lệ và render Canvas của phần cứng thiết bị.
+                  </p>
+                </div>
+
+                <button
+                  disabled={benchRunning}
+                  onClick={runHardwareBenchmark}
+                  className="py-2.5 px-6 rounded-xl bg-gold text-obsidian font-bold text-xs hover:bg-gold-light transition shadow-glow disabled:opacity-50 mx-auto flex items-center gap-2"
+                >
+                  {benchRunning ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Zap className="w-4 h-4" />}
+                  {benchRunning ? 'ĐANG CHẠY STRESS TEST...' : 'BẮT ĐẦU BENCHMARK (50,000 FEN ITERATIONS)'}
+                </button>
+
+                {benchResults && (
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs mt-4">
+                    <div className="p-3.5 bg-obsidian rounded-xl border border-gold/30">
+                      <span className="text-gold/60 text-[10px] uppercase font-bold block">THÔNG LƯỢNG FEN</span>
+                      <span className="text-lg font-black text-emerald-400">{benchResults.fensPerSec} FEN/s</span>
+                    </div>
+                    <div className="p-3.5 bg-obsidian rounded-xl border border-gold/30">
+                      <span className="text-gold/60 text-[10px] uppercase font-bold block">TỔNG THỜI GIAN</span>
+                      <span className="text-lg font-black text-amber-400">{benchResults.elapsedMs} ms</span>
+                    </div>
+                    <div className="p-3.5 bg-obsidian rounded-xl border border-gold/30">
+                      <span className="text-gold/60 text-[10px] uppercase font-bold block">ĐỘ TRỄ LUT TRUNG BÌNH</span>
+                      <span className="text-lg font-black text-cyan-400">{benchResults.lutLatencyNs} ns / FEN</span>
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
           )}
 
         </div>
-
-        {/* FOOTER */}
-        <div className="px-6 py-3 border-t border-gold/20 bg-black/60 flex items-center justify-between text-xs text-gold/70">
-          <div className="flex items-center gap-2">
-            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
-            <span>MINDMAP VISUALIZER READY • GPU & CPU CACHE FRIENDLY</span>
-          </div>
-          <div className="font-mono text-[11px]">
-            BUILD: 2026-08-23 22:20:00 ICT
-          </div>
-        </div>
-
       </div>
     </div>
   );
