@@ -75,10 +75,6 @@ impl Quiesce {
         // 4. Duyệt đệ quy danh sách các nước ăn quân theo thứ tự MVV-LVA giảm dần (0-closure Selection Sort)
         let mut i = 0;
         while i < list.count {
-            if timer.check(*nodes) {
-                return 0;
-            }
-
             // Selection Sort bước đơn: Tìm nước ăn quân có điểm MVV-LVA cao nhất trực tiếp 0-closure
             if !check {
                 let mut best = i;
@@ -148,10 +144,6 @@ impl Quiesce {
             pos.revert(mv.from, mv.to, &state);
             if active {
                 eval.revert(pos, mv.from, mv.to, moving, captured);
-            }
-
-            if timer.check(*nodes) {
-                return 0;
             }
 
             if score >= beta {

@@ -17,9 +17,9 @@ use std::time::Duration;
 use xiangrust::server::{Base64, Frame, Opcode, Server, Sha1};
 
 /// Hằng số phiên bản ứng dụng APP_VERSION
-pub const APP_VERSION: &str = "v9.6.0-hardware-diagnostics-server";
+pub const APP_VERSION: &str = "v9.7.0-zero-alloc-parallel-server";
 /// Hằng số dấu thời gian đóng gói APP_BUILD_STAMP
-pub const APP_BUILD_STAMP: &str = "2026-08-24 01:09:00 ICT";
+pub const APP_BUILD_STAMP: &str = "2026-08-24 01:23:00 ICT";
 
 fn main() {
     // Nạp cấu hình độ sâu mặc định DEPTH 60 từ biến môi trường OS (Rule 8.11 / 7.11)

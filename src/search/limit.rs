@@ -188,7 +188,7 @@ impl Timer {
                 return true;
             }
         }
-        if (nodes & 255) == 0 {
+        if (nodes & 1023) == 0 {
             if self.limit.nodes > 0 && nodes >= self.limit.nodes {
                 self.abort.store(true, Ordering::Relaxed);
                 return true;

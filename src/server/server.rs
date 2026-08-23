@@ -574,22 +574,24 @@ impl Server {
                         }
                     }
 
-                    // ĐÁNH GIÁ THẾ CỜ SONG SONG BẰNG RAYON TRÊN TOÀN BỘ 4 NHÂN VẬT LÝ CPU
+                    // ĐÁNH GIÁ THẾ CỜ SONG SONG BẰNG RAYON TRÊN TOÀN BỘ 4 NHÂN VẬT LÝ CPU (TÁI SỬ DỤNG SEARCH ENGINE)
                     use rayon::prelude::*;
                     let nodes_count = nodes.len();
                     let eval_results: Vec<(i32, crate::movegen::types::Move)> = nodes
                         .par_iter()
-                        .map(|node| {
-                            if node.mate {
-                                (0, crate::movegen::types::Move::none())
-                            } else {
-                                let mut local_search = Search::new(4);
-                                let mut limit = Limits::new();
-                                limit.depth = 3;
-                                let res = local_search.go(&node.pos, &limit);
-                                (res.score, res.best)
-                            }
-                        })
+                        .map_init(
+                            || Search::new(4),
+                            |local_search, node| {
+                                if node.mate {
+                                    (0, crate::movegen::types::Move::none())
+                                } else {
+                                    let mut limit = Limits::new();
+                                    limit.depth = 3;
+                                    let res = local_search.go(&node.pos, &limit);
+                                    (res.score, res.best)
+                                }
+                            },
+                        )
                         .collect();
 
                     let mut mates_count = 0usize;
