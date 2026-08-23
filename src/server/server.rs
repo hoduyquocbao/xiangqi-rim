@@ -879,13 +879,22 @@ impl Server {
                     }
                 }
 
-                let mut queue = Vec::new();
-                queue.push(root_pos);
+                let mut queue: std::collections::VecDeque<(crate::board::Position, u8)> = std::collections::VecDeque::with_capacity(4096);
+                let mut seen: std::collections::HashSet<u64> = std::collections::HashSet::with_capacity(4096);
+                queue.push_back((root_pos, 0));
+                seen.insert(root_pos.hash);
 
-                while let Some(pos) = queue.pop() {
+                let mut tree_nodes = Vec::with_capacity(4096);
+
+                while let Some((pos, ply)) = queue.pop_front() {
                     let current_mode = self.governor.get_mode();
                     if current_mode == crate::server::campaign::Mode::Eco {
-                        thread::sleep(Duration::from_millis(10));
+                        thread::sleep(Duration::from_millis(5));
+                    }
+
+                    if ply >= 4 {
+                        tree_nodes.push(pos);
+                        continue;
                     }
 
                     let mut list = crate::movegen::types::List::new();
@@ -893,61 +902,74 @@ impl Server {
                     crate::movegen::legal::legal(&mut p_mut, &mut list);
                     let valid_count = list.count;
 
+                    if valid_count == 0 {
+                        tree_nodes.push(pos);
+                        continue;
+                    }
+
                     let mut scored_moves = Vec::with_capacity(valid_count);
                     for i in 0..valid_count {
                         let mv = list.items[i];
                         let mut p_copy = pos;
                         p_copy.apply(mv.from, mv.to);
                         let in_check = crate::movegen::legal::check(&p_copy, p_copy.side as usize);
+                        let is_capturing = pos.grid[mv.to as usize] < 14;
 
                         let score = if in_check {
-                            30000
+                            3000
+                        } else if is_capturing {
+                            2000 + (14 - pos.grid[mv.to as usize] as i32) * 10
                         } else {
-                            mv.from as i32 + mv.to as i32
+                            100
                         };
-                        scored_moves.push((mv, score, in_check));
+                        scored_moves.push((mv, score));
                     }
 
                     scored_moves.sort_by(|a, b| b.1.cmp(&a.1));
                     let top_k = breadth_limit.min(scored_moves.len());
 
-                    let mut nodes = Vec::new();
-                    for &(mv, score, is_mate) in scored_moves.iter().take(top_k) {
+                    for &(mv, _) in scored_moves.iter().take(top_k) {
                         let mut next_pos = pos;
                         next_pos.apply(mv.from, mv.to);
-                        nodes.push((next_pos, mv, score, is_mate));
+                        if !seen.contains(&next_pos.hash) {
+                            seen.insert(next_pos.hash);
+                            queue.push_back((next_pos, ply + 1));
+                            tree_nodes.push(next_pos);
+                        }
                     }
+                }
 
-                    use rayon::prelude::*;
-                    let analyzed: Vec<(u64, u16, i16, bool)> = nodes
-                        .into_par_iter()
-                        .map_init(
-                            || Search::new(4),
-                            |local_search: &mut Search, (next_pos, mv, _raw_score, is_mate): (crate::board::Position, crate::movegen::types::Move, i32, bool)| {
-                                let mut limits = Limits::new();
-                                limits.depth = depth_limit;
-                                let res = local_search.go(&next_pos, &limits);
-                                let best_val = if res.best.valid() { res.best.raw() } else { mv.raw() };
-                                let score_val = if is_mate { 30000 } else { res.score };
-                                (next_pos.hash, best_val, score_val as i16, is_mate)
-                            },
-                        )
-                        .collect();
+                use rayon::prelude::*;
+                let analyzed: Vec<(u64, u16, i16, bool)> = tree_nodes
+                    .into_par_iter()
+                    .map_init(
+                        || Search::new(4),
+                        |local_search: &mut Search, next_pos: crate::board::Position| {
+                            let mut limits = Limits::new();
+                            limits.depth = depth_limit;
+                            let res = local_search.go(&next_pos, &limits);
+                            let best_val = if res.best.valid() { res.best.raw() } else { 0 };
+                            let is_mate = res.score.abs() > 29000;
+                            (next_pos.hash, best_val, res.score as i16, is_mate)
+                        },
+                    )
+                    .collect();
 
-                    let mut shard_batch = Vec::new();
-                    let mut newly_mined_nodes = 0usize;
-                    let mut newly_mined_mates = 0usize;
+                let mut shard_batch = Vec::new();
+                let mut newly_mined_nodes = 0usize;
+                let mut newly_mined_mates = 0usize;
 
-                    for (hash_val, best_mv_raw, score_i16, is_mate) in analyzed {
+                for (hash_val, best_mv_raw, score_i16, is_mate) in analyzed {
+                    if best_mv_raw != 0 {
                         newly_mined_nodes += 1;
                         if is_mate { newly_mined_mates += 1; }
                         shard_batch.push((hash_val, best_mv_raw, score_i16));
                     }
-
-                    shard.batch(&shard_batch);
-                    stage_nodes += newly_mined_nodes;
-                    stage_mates += newly_mined_mates;
                 }
+
+                shard.batch(&shard_batch);
+                stage_nodes += newly_mined_nodes;
+                stage_mates += newly_mined_mates;
 
                 let final_shards = shard.count();
                 {
