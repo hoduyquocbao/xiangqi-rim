@@ -1630,13 +1630,14 @@ export function MindmapVisualizer({ show, close, fen, history, score, line, thou
               </div>
             </div>
 
-            {/* Bàn Cờ Thật Tái Sử Dụng Linh Kiện Board.jsx Với Giới Hạn Tỷ Lệ Vàng */}
-            <div className="w-full max-w-[240px] max-h-[260px] mx-auto aspect-[9/10] overflow-hidden flex items-center justify-center shrink-0">
+            {/* Bàn Cờ Thật Tái Sử Dụng Linh Kiện Board.jsx Với Giới Hạn Tỷ Lệ Vàng & Chế Độ Compact Thuần SVG */}
+            <div className="w-full max-w-[250px] mx-auto aspect-[9/10] rounded-xl overflow-hidden border border-gold/30 shadow-inner bg-black flex items-center justify-center shrink-0">
               <Board
                 fen={activeNode ? activeNode.fen : inspectFen}
                 lastMove={activeNode && activeNode.from >= 0 ? { from: activeNode.from, to: activeNode.to } : null}
                 disabled={true}
                 rulers={true}
+                compact={true}
               />
             </div>
 
