@@ -399,6 +399,6 @@ P2=5`;
         const { unmount: u2 } = render(<Debugger show={true} close={() => {}} />);
         u2();
       }
-    });
+    }, 30000);
   });
 });

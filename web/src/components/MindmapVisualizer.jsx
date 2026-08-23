@@ -1,11 +1,8 @@
 // web/src/components/MindmapVisualizer.jsx
 // Sơ Đồ Tư Duy Cây Suy Luận 360° & Hậu Kiểm Toàn Ván Hiệu Năng Cao
-// Kiến Trúc Tối Ưu Nhiệt Độ & Chống Lag:
-// 1. Render-On-Demand: 0% CPU khi đứng yên, không chạy vòng lặp hoạt ảnh vô tận gây nóng máy.
-// 2. Snapshot Cache (Ảnh chụp nhanh bàn cờ): Render Offscreen Bitmap 1 lần duy nhất, Blit O(1) qua GPU.
-// 3. View Frustum Culling: Chỉ vẽ các Node trong vùng nhìn Viewport, hỗ trợ cây 10,000+ Nodes mượt mà.
-// 4. Level Of Detail (LOD): Tự động giảm tải hình học khi thu nhỏ xa.
-// 5. Timeline thế trận phẳng, mượt, phản hồi tức thì 0ms.
+// Sao Chép Trực Quan Bàn Cờ Thật 100% (Hoàng Gia Ngọc Bích, Cửu Cung, Sở Hà Hán Giới)
+// Tích hợp Zero-Copy Snapshot Caching & Trực Quan Hóa Nước Vừa Đi (Laser Arrow, Origin & Target Ring)
+// Render-On-Demand: 0% CPU khi đứng yên, chống nóng máy và hỗ trợ 10,000+ Nodes mượt mà.
 
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { 
@@ -26,8 +23,8 @@ import {
 import { parse, fen as buildFen, moves as getLegalMoves, check as isCheck, hasLegalMoves } from '../rules/rules.js';
 import { instance as engine } from '../engine/engine.js';
 
-// Ký hiệu quân cờ chữ Hán
-const symbols = {
+// Bảng tra cứu chữ Hán Hoàng Gia chuẩn cho quân cờ
+const labels = {
   K: '帥', A: '仕', B: '相', N: '傌', R: '俥', C: '炮', P: '兵',
   k: '將', a: '士', b: '象', n: '馬', r: '車', c: '砲', p: '卒'
 };
@@ -45,28 +42,51 @@ const pieceWeights = {
 };
 
 // Kích thước chuẩn Thumbnail Snapshot
-const snapW = 80;
-const snapH = 90;
-const snapPadX = 6;
-const snapPadY = 6;
+const snapW = 100;
+const snapH = 112;
+const snapPadX = 8;
+const snapPadY = 8;
 const snapCellW = (snapW - snapPadX * 2) / 8;
 const snapCellH = (snapH - snapPadY * 2) / 9;
 
 // Kích thước Bàn cờ Mini Chi Tiết
-const miniW = 280;
-const miniH = 310;
-const miniPadX = 20;
-const miniPadY = 20;
+const miniW = 300;
+const miniH = 336;
+const miniPadX = 24;
+const miniPadY = 24;
 const miniCellW = (miniW - miniPadX * 2) / 8;
 const miniCellH = (miniH - miniPadY * 2) / 9;
 
 // Bộ đệm LRU Cache lưu trữ ảnh chụp nhanh Bitmap của các thế cờ FEN (Zero Duplicate Rasterization)
 const snapshotCache = new Map();
 
-// Sinh ảnh chụp nhanh Snapshot Offscreen cho một thế cờ FEN (Chỉ vẽ 1 lần duy nhất)
-function getBoardSnapshot(fenStr) {
-  if (snapshotCache.has(fenStr)) {
-    return snapshotCache.get(fenStr);
+// Vẽ dấu chữ thập vị trí Pháo và Tốt (Cannon & Soldier Markers)
+function drawCrossMark(ctx, cx, cy, size, pad) {
+  ctx.beginPath();
+  // Góc trên trái
+  ctx.moveTo(cx - pad - size, cy - pad);
+  ctx.lineTo(cx - pad, cy - pad);
+  ctx.lineTo(cx - pad, cy - pad - size);
+  // Góc trên phải
+  ctx.moveTo(cx + pad + size, cy - pad);
+  ctx.lineTo(cx + pad, cy - pad);
+  ctx.lineTo(cx + pad, cy - pad - size);
+  // Góc dưới trái
+  ctx.moveTo(cx - pad - size, cy + pad);
+  ctx.lineTo(cx - pad, cy + pad);
+  ctx.lineTo(cx - pad, cy + pad + size);
+  // Góc dưới phải
+  ctx.moveTo(cx + pad + size, cy + pad);
+  ctx.lineTo(cx + pad, cy + pad);
+  ctx.lineTo(cx + pad, cy + pad + size);
+  ctx.stroke();
+}
+
+// Sinh ảnh chụp nhanh Snapshot Offscreen chuẩn xác 100% hình ảnh bàn cờ thật
+function getBoardSnapshot(fenStr, moveFrom, moveTo) {
+  const cacheKey = `${fenStr}_${moveFrom}_${moveTo}`;
+  if (snapshotCache.has(cacheKey)) {
+    return snapshotCache.get(cacheKey);
   }
 
   const canvas = document.createElement('canvas');
@@ -75,17 +95,24 @@ function getBoardSnapshot(fenStr) {
   const ctx = canvas.getContext('2d', { alpha: false });
   if (!ctx) return canvas;
 
-  // 1. Nền gỗ tối phẳng
-  ctx.fillStyle = '#1c150e';
+  // 1. Nền Gỗ Hoàng Gia Gradient Tối
+  const grad = ctx.createRadialGradient(snapW / 2, snapH / 2, 10, snapW / 2, snapH / 2, snapW);
+  grad.addColorStop(0, '#26190e');
+  grad.addColorStop(1, '#110b06');
+  ctx.fillStyle = grad;
   ctx.fillRect(0, 0, snapW, snapH);
 
-  // 2. Viền bàn cờ
-  ctx.strokeStyle = '#8A6B2D';
-  ctx.lineWidth = 1;
+  // Viền vàng Hoàng Gia
+  ctx.strokeStyle = '#D4AF37';
+  ctx.lineWidth = 1.2;
   ctx.strokeRect(snapPadX, snapPadY, snapW - snapPadX * 2, snapH - snapPadY * 2);
 
-  // 3. Đường ngang & dọc đơn giản
-  for (let r = 1; r < 9; r++) {
+  // 2. Lưới đường kẻ bàn cờ (10 ngang, 9 dọc)
+  ctx.strokeStyle = '#8A6B2D';
+  ctx.lineWidth = 0.8;
+
+  // Đường ngang
+  for (let r = 0; r < 10; r++) {
     const y = snapPadY + r * snapCellH;
     ctx.beginPath();
     ctx.moveTo(snapPadX, y);
@@ -93,27 +120,95 @@ function getBoardSnapshot(fenStr) {
     ctx.stroke();
   }
 
+  // Đường dọc (ngắt ở sông)
   for (let f = 1; f < 8; f++) {
     const x = snapPadX + f * snapCellW;
-    // Nửa dưới
     ctx.beginPath();
     ctx.moveTo(x, snapPadY);
     ctx.lineTo(x, snapPadY + 4 * snapCellH);
     ctx.stroke();
-    // Nửa trên
     ctx.beginPath();
     ctx.moveTo(x, snapPadY + 5 * snapCellH);
     ctx.lineTo(x, snapH - snapPadY);
     ctx.stroke();
   }
 
-  // 4. Vẽ quân cờ dạng chấm / ký hiệu nhỏ
+  // Cửu Cung Đỏ & Đen (Đường chéo X)
+  ctx.beginPath();
+  ctx.moveTo(snapPadX + 3 * snapCellW, snapPadY);
+  ctx.lineTo(snapPadX + 5 * snapCellW, snapPadY + 2 * snapCellH);
+  ctx.moveTo(snapPadX + 5 * snapCellW, snapPadY);
+  ctx.lineTo(snapPadX + 3 * snapCellW, snapPadY + 2 * snapCellH);
+  ctx.stroke();
+
+  ctx.beginPath();
+  ctx.moveTo(snapPadX + 3 * snapCellW, snapPadY + 7 * snapCellH);
+  ctx.lineTo(snapPadX + 5 * snapCellW, snapPadY + 9 * snapCellH);
+  ctx.moveTo(snapPadX + 5 * snapCellW, snapPadY + 7 * snapCellH);
+  ctx.lineTo(snapPadX + 3 * snapCellW, snapPadY + 9 * snapCellH);
+  ctx.stroke();
+
+  // Chữ Sở Hà Hán Giới mờ
+  ctx.fillStyle = 'rgba(212, 175, 55, 0.4)';
+  ctx.font = 'bold 7px serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText('楚河', snapPadX + 2 * snapCellW, (snapPadY + 4.5 * snapCellH));
+  ctx.fillText('漢界', snapPadX + 6 * snapCellW, (snapPadY + 4.5 * snapCellH));
+
+  // 3. Trực quan hóa nước vừa đi (Laser Arrow, Origin & Target Ring)
+  if (moveFrom !== undefined && moveTo !== undefined && moveFrom >= 0 && moveTo >= 0) {
+    const f1 = moveFrom % 9;
+    const r1 = Math.floor(moveFrom / 9);
+    const f2 = moveTo % 9;
+    const r2 = Math.floor(moveTo / 9);
+    const x1 = snapPadX + f1 * snapCellW;
+    const y1 = snapPadY + (9 - r1) * snapCellH;
+    const x2 = snapPadX + f2 * snapCellW;
+    const y2 = snapPadY + (9 - r2) * snapCellH;
+
+    // Vòng định vị vị trí cũ (Origin Ring)
+    ctx.strokeStyle = 'rgba(255, 0, 85, 0.8)';
+    ctx.lineWidth = 1;
+    ctx.setLineDash([2, 2]);
+    ctx.beginPath();
+    ctx.arc(x1, y1, 5, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    // Đường Laser Neon nối
+    ctx.strokeStyle = '#FF0055';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(x1, y1);
+    ctx.lineTo(x2, y2);
+    ctx.stroke();
+
+    // Mũi tên chỉ hướng
+    const angle = Math.atan2(y2 - y1, x2 - x1);
+    ctx.fillStyle = '#FF0055';
+    ctx.beginPath();
+    ctx.moveTo(x2, y2);
+    ctx.lineTo(x2 - 5 * Math.cos(angle - Math.PI / 6), y2 - 5 * Math.sin(angle - Math.PI / 6));
+    ctx.lineTo(x2 - 5 * Math.cos(angle + Math.PI / 6), y2 - 5 * Math.sin(angle + Math.PI / 6));
+    ctx.closePath();
+    ctx.fill();
+
+    // Vòng định vị vị trí mới (Arrival Target Ring)
+    ctx.strokeStyle = '#FFD700';
+    ctx.lineWidth = 1.2;
+    ctx.beginPath();
+    ctx.arc(x2, y2, 6, 0, Math.PI * 2);
+    ctx.stroke();
+  }
+
+  // 4. Vẽ 32 Quân Cờ Ngọc Bích Hoàng Gia
   const parsed = parse(fenStr);
   const board = parsed.board;
 
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  ctx.font = 'bold 7px sans-serif';
+  ctx.font = 'bold 7px serif';
 
   for (let sq = 0; sq < 90; sq++) {
     const piece = board[sq];
@@ -125,19 +220,29 @@ function getBoardSnapshot(fenStr) {
     const y = snapPadY + (9 - r) * snapCellH;
     const isRed = piece === piece.toUpperCase();
 
-    ctx.fillStyle = isRed ? '#ef4444' : '#60a5fa';
+    // Thân quân cờ tròn
+    ctx.fillStyle = isRed ? '#2A0808' : '#0F1318';
     ctx.beginPath();
-    ctx.arc(x, y, 3.5, 0, Math.PI * 2);
+    ctx.arc(x, y, 4.8, 0, Math.PI * 2);
     ctx.fill();
+
+    // Viền vàng quân cờ
+    ctx.strokeStyle = isRed ? '#ef4444' : '#60a5fa';
+    ctx.lineWidth = 0.8;
+    ctx.stroke();
+
+    // Ký tự chữ Hán
+    ctx.fillStyle = isRed ? '#ff4d4d' : '#00f0ff';
+    ctx.fillText(labels[piece] || piece, x, y + 0.5);
   }
 
-  // Giới hạn dung lượng cache tối đa 2,000 snapshots để tiết kiệm RAM
+  // Giới hạn bộ đệm cache tối đa 2,000 snapshots
   if (snapshotCache.size > 2000) {
     const firstKey = snapshotCache.keys().next().value;
     snapshotCache.delete(firstKey);
   }
 
-  snapshotCache.set(fenStr, canvas);
+  snapshotCache.set(cacheKey, canvas);
   return canvas;
 }
 
@@ -211,8 +316,8 @@ function evaluatePosition(board) {
   return { score, redMaterial, blackMaterial, redCenter, blackCenter };
 }
 
-// Bàn Cờ GPU Mini Chi Tiết Render Tĩnh Phẳng
-function StaticMiniBoard({ fen, arrowFrom, arrowTo }) {
+// Bàn Cờ GPU Mini Chi Tiết Render Tĩnh Phẳng Đầy Đủ Chi Tiết
+function FullFidelityMiniBoard({ fen, arrowFrom, arrowTo }) {
   const canvasRef = useRef(null);
   const parsedBoard = useMemo(() => parse(fen).board, [fen]);
 
@@ -222,17 +327,20 @@ function StaticMiniBoard({ fen, arrowFrom, arrowTo }) {
     const ctx = canvas.getContext('2d', { alpha: false });
     if (!ctx) return;
 
-    // Nền phẳng
-    ctx.fillStyle = '#140d07';
+    // Nền Gỗ Hoàng Gia
+    const grad = ctx.createRadialGradient(miniW / 2, miniH / 2, 20, miniW / 2, miniH / 2, miniW);
+    grad.addColorStop(0, '#26190e');
+    grad.addColorStop(1, '#0e0804');
+    ctx.fillStyle = grad;
     ctx.fillRect(0, 0, miniW, miniH);
 
     ctx.strokeStyle = '#D4AF37';
-    ctx.lineWidth = 1.5;
-    ctx.strokeRect(5, 5, miniW - 10, miniH - 10);
+    ctx.lineWidth = 2;
+    ctx.strokeRect(miniPadX, miniPadY, miniW - miniPadX * 2, miniH - miniPadY * 2);
 
     // Đường lưới
     ctx.strokeStyle = '#8A6B2D';
-    ctx.lineWidth = 1;
+    ctx.lineWidth = 1.2;
     for (let r = 0; r < 10; r++) {
       const y = miniPadY + r * miniCellH;
       ctx.beginPath();
@@ -241,7 +349,7 @@ function StaticMiniBoard({ fen, arrowFrom, arrowTo }) {
       ctx.stroke();
     }
 
-    for (let f = 0; f < 9; f++) {
+    for (let f = 1; f < 8; f++) {
       const x = miniPadX + f * miniCellW;
       ctx.beginPath();
       ctx.moveTo(x, miniPadY);
@@ -253,14 +361,30 @@ function StaticMiniBoard({ fen, arrowFrom, arrowTo }) {
       ctx.stroke();
     }
 
+    // Cửu Cung
     ctx.beginPath();
-    ctx.moveTo(miniPadX, miniPadY + 4 * miniCellH);
-    ctx.lineTo(miniPadX, miniPadY + 5 * miniCellH);
-    ctx.moveTo(miniW - miniPadX, miniPadY + 4 * miniCellH);
-    ctx.lineTo(miniW - miniPadX, miniPadY + 5 * miniCellH);
+    ctx.moveTo(miniPadX + 3 * miniCellW, miniPadY);
+    ctx.lineTo(miniPadX + 5 * miniCellW, miniPadY + 2 * miniCellH);
+    ctx.moveTo(miniPadX + 5 * miniCellW, miniPadY);
+    ctx.lineTo(miniPadX + 3 * miniCellW, miniPadY + 2 * miniCellH);
     ctx.stroke();
 
-    // Mũi tên nước đi tĩnh
+    ctx.beginPath();
+    ctx.moveTo(miniPadX + 3 * miniCellW, miniPadY + 7 * miniCellH);
+    ctx.lineTo(miniPadX + 5 * miniCellW, miniPadY + 9 * miniCellH);
+    ctx.moveTo(miniPadX + 5 * miniCellW, miniPadY + 7 * miniCellH);
+    ctx.lineTo(miniPadX + 3 * miniCellW, miniPadY + 9 * miniCellH);
+    ctx.stroke();
+
+    // Sông Sở Hà Hán Giới
+    ctx.fillStyle = 'rgba(212, 175, 55, 0.6)';
+    ctx.font = 'bold 12px serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('楚 河', miniPadX + 2 * miniCellW, miniPadY + 4.5 * miniCellH);
+    ctx.fillText('漢 界', miniPadX + 6 * miniCellW, miniPadY + 4.5 * miniCellH);
+
+    // Mũi tên nước đi Laser
     if (arrowFrom >= 0 && arrowTo >= 0) {
       const f1 = arrowFrom % 9;
       const r1 = Math.floor(arrowFrom / 9);
@@ -271,27 +395,44 @@ function StaticMiniBoard({ fen, arrowFrom, arrowTo }) {
       const x2 = miniPadX + f2 * miniCellW;
       const y2 = miniPadY + (9 - r2) * miniCellH;
 
-      ctx.strokeStyle = '#f59e0b';
-      ctx.lineWidth = 3;
+      // Vòng định vị vị trí cũ
+      ctx.strokeStyle = '#FF0055';
+      ctx.lineWidth = 1.8;
+      ctx.setLineDash([3, 2]);
+      ctx.beginPath();
+      ctx.arc(x1, y1, 14, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.setLineDash([]);
+
+      // Tia Laser
+      ctx.strokeStyle = '#FF0055';
+      ctx.lineWidth = 3.5;
       ctx.beginPath();
       ctx.moveTo(x1, y1);
       ctx.lineTo(x2, y2);
       ctx.stroke();
 
       const angle = Math.atan2(y2 - y1, x2 - x1);
-      ctx.fillStyle = '#f59e0b';
+      ctx.fillStyle = '#FF0055';
       ctx.beginPath();
       ctx.moveTo(x2, y2);
       ctx.lineTo(x2 - 10 * Math.cos(angle - Math.PI / 6), y2 - 10 * Math.sin(angle - Math.PI / 6));
       ctx.lineTo(x2 - 10 * Math.cos(angle + Math.PI / 6), y2 - 10 * Math.sin(angle + Math.PI / 6));
       ctx.closePath();
       ctx.fill();
+
+      // Vòng vị trí mới
+      ctx.strokeStyle = '#FFD700';
+      ctx.lineWidth = 2.5;
+      ctx.beginPath();
+      ctx.arc(x2, y2, 16, 0, Math.PI * 2);
+      ctx.stroke();
     }
 
-    // Quân cờ chữ Hán
+    // Quân cờ
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.font = 'bold 12px sans-serif';
+    ctx.font = 'bold 13px serif';
 
     for (let sq = 0; sq < 90; sq++) {
       const piece = parsedBoard[sq];
@@ -302,17 +443,20 @@ function StaticMiniBoard({ fen, arrowFrom, arrowTo }) {
       const y = miniPadY + (9 - r) * miniCellH;
       const isRed = piece === piece.toUpperCase();
 
-      ctx.fillStyle = '#1c150e';
+      // Thân quân
+      ctx.fillStyle = isRed ? '#2A0808' : '#0F1318';
       ctx.beginPath();
-      ctx.arc(x, y, 11, 0, Math.PI * 2);
+      ctx.arc(x, y, 13, 0, Math.PI * 2);
       ctx.fill();
 
+      // Viền quân
       ctx.strokeStyle = isRed ? '#ef4444' : '#60a5fa';
-      ctx.lineWidth = 1;
+      ctx.lineWidth = 1.5;
       ctx.stroke();
 
-      ctx.fillStyle = isRed ? '#f87171' : '#93c5fd';
-      ctx.fillText(symbols[piece] || piece, x, y + 1);
+      // Ký tự
+      ctx.fillStyle = isRed ? '#ff4d4d' : '#00f0ff';
+      ctx.fillText(labels[piece] || piece, x, y + 1);
     }
   }, [parsedBoard, arrowFrom, arrowTo]);
 
@@ -354,8 +498,8 @@ function MindmapCanvasViewport({ treeNodes, activeNodeId, onSelectNode, layoutMo
     const count = candidates.length;
 
     if (layoutMode === 'radial') {
-      const radius1 = 280;
-      const radius2 = 520;
+      const radius1 = 300;
+      const radius2 = 560;
 
       candidates.forEach((cand, idx) => {
         const angle = -Math.PI / 2 + (idx * 2 * Math.PI) / Math.max(1, count);
@@ -371,17 +515,17 @@ function MindmapCanvasViewport({ treeNodes, activeNodeId, onSelectNode, layoutMo
         });
       });
     } else {
-      const spacingY = 140;
+      const spacingY = 160;
       const totalH = (count - 1) * spacingY;
 
       candidates.forEach((cand, idx) => {
-        cand.x = 340;
+        cand.x = 380;
         cand.y = -totalH / 2 + idx * spacingY;
 
         const replies = nodes.filter((n) => n.parentId === cand.id);
         replies.forEach((rep, rIdx) => {
-          rep.x = 680;
-          rep.y = cand.y + (rIdx - (replies.length - 1) / 2) * 80;
+          rep.x = 760;
+          rep.y = cand.y + (rIdx - (replies.length - 1) / 2) * 90;
         });
       });
     }
@@ -406,10 +550,10 @@ function MindmapCanvasViewport({ treeNodes, activeNodeId, onSelectNode, layoutMo
     ctx.fillRect(0, 0, w, h);
 
     // Tính toán khung nhìn thế giới (View Frustum Culling Bounds)
-    const viewLeft = (-w / 2) / cam.scale - cam.x - 120;
-    const viewRight = (w / 2) / cam.scale - cam.x + 120;
-    const viewTop = (-h / 2) / cam.scale - cam.y - 120;
-    const viewBottom = (h / 2) / cam.scale - cam.y + 120;
+    const viewLeft = (-w / 2) / cam.scale - cam.x - 140;
+    const viewRight = (w / 2) / cam.scale - cam.x + 140;
+    const viewTop = (-h / 2) / cam.scale - cam.y - 140;
+    const viewBottom = (h / 2) / cam.scale - cam.y + 140;
 
     // Áp dụng Ma trận Camera
     ctx.setTransform(cam.scale, 0, 0, cam.scale, cam.x * cam.scale + w / 2, cam.y * cam.scale + h / 2);
@@ -444,33 +588,32 @@ function MindmapCanvasViewport({ treeNodes, activeNodeId, onSelectNode, layoutMo
     const isFarZoom = cam.scale < 0.45;
 
     layoutedNodes.forEach((node) => {
-      // Frustum Culling: Bỏ qua 100% các node nằm ngoài màn hình
       if (
-        node.x + 100 < viewLeft ||
-        node.x - 100 > viewRight ||
-        node.y + 80 < viewTop ||
-        node.y - 80 > viewBottom
+        node.x + 120 < viewLeft ||
+        node.x - 120 > viewRight ||
+        node.y + 90 < viewTop ||
+        node.y - 90 > viewBottom
       ) {
         return;
       }
 
       const isSelected = activeNodeId === node.id;
-      const nodeW = 160;
-      const nodeH = 110;
+      const nodeW = 190;
+      const nodeH = 126;
       const rx = node.x - nodeW / 2;
       const ry = node.y - nodeH / 2;
 
-      // Nếu zoom quá xa -> vẽ điểm tròn đơn giản để đạt tốc độ tối đa
+      // Nếu zoom quá xa -> vẽ điểm tròn đơn giản
       if (isFarZoom) {
         ctx.fillStyle = isSelected ? '#f59e0b' : node.score >= 0 ? '#10b981' : '#ef4444';
         ctx.beginPath();
-        ctx.arc(node.x, node.y, isSelected ? 12 : 8, 0, Math.PI * 2);
+        ctx.arc(node.x, node.y, isSelected ? 14 : 9, 0, Math.PI * 2);
         ctx.fill();
         return;
       }
 
-      // Khung Node Card phẳng
-      ctx.fillStyle = isSelected ? '#261b11' : '#140e09';
+      // Khung Node Card
+      ctx.fillStyle = isSelected ? '#2a1a0f' : '#140e09';
       ctx.strokeStyle = isSelected ? '#f59e0b' : 'rgba(212, 175, 55, 0.35)';
       ctx.lineWidth = isSelected ? 2 : 1;
 
@@ -479,10 +622,10 @@ function MindmapCanvasViewport({ treeNodes, activeNodeId, onSelectNode, layoutMo
       ctx.fill();
       ctx.stroke();
 
-      // Blit Ảnh Chụp Nhanh Bàn Cờ Bitmap Snapshot O(1)
+      // Blit Ảnh Chụp Nhanh Bàn Cờ Bitmap Snapshot O(1) Đầy Đủ Laser Arrow
       if (node.fen) {
-        const snap = getBoardSnapshot(node.fen);
-        ctx.drawImage(snap, rx + 8, ry + 10, 60, 68);
+        const snap = getBoardSnapshot(node.fen, node.from, node.to);
+        ctx.drawImage(snap, rx + 8, ry + 8, 80, 90);
       }
 
       // Văn bản tiêu đề & Ký hiệu nước đi
@@ -490,31 +633,30 @@ function MindmapCanvasViewport({ treeNodes, activeNodeId, onSelectNode, layoutMo
       ctx.textBaseline = 'top';
       ctx.font = 'bold 11px sans-serif';
       ctx.fillStyle = isSelected ? '#fbbf24' : '#d4af37';
-      ctx.fillText(node.title.slice(0, 14), rx + 74, ry + 12);
+      ctx.fillText(node.title.slice(0, 13), rx + 94, ry + 12);
 
       // Điểm số Centipawn
       ctx.font = 'bold 10px monospace';
       ctx.fillStyle = node.score >= 0 ? '#34d399' : '#f87171';
       const scoreStr = node.score !== undefined ? `${node.score > 0 ? '+' : ''}${node.score} cp` : '';
-      ctx.fillText(scoreStr, rx + 74, ry + 32);
+      ctx.fillText(scoreStr, rx + 94, ry + 34);
 
       // Mã nước đi UCI
       ctx.font = '10px monospace';
       ctx.fillStyle = '#93c5fd';
-      ctx.fillText(node.uci || '', rx + 74, ry + 50);
+      ctx.fillText(node.uci || '', rx + 94, ry + 54);
 
       // Huy hiệu
       if (node.badge) {
         ctx.font = '9px sans-serif';
         ctx.fillStyle = '#a78bfa';
-        ctx.fillText(node.badge, rx + 8, ry + 88);
+        ctx.fillText(node.badge, rx + 8, ry + 104);
       }
     });
 
     needsRenderRef.current = false;
   }, [layoutedNodes, activeNodeId]);
 
-  // Chỉ trigger render khi layout hoặc active node thay đổi
   useEffect(() => {
     drawScene();
   }, [drawScene]);
@@ -534,7 +676,7 @@ function MindmapCanvasViewport({ treeNodes, activeNodeId, onSelectNode, layoutMo
     return () => window.removeEventListener('resize', handleResize);
   }, [drawScene]);
 
-  // Tương tác chuột: Pan & Zoom không chạy rAF liên tục
+  // Tương tác chuột: Pan & Zoom
   const handleMouseDown = (e) => {
     isDraggingRef.current = true;
     dragStartRef.current = { x: e.clientX, y: e.clientY };
@@ -565,8 +707,8 @@ function MindmapCanvasViewport({ treeNodes, activeNodeId, onSelectNode, layoutMo
 
     // Hit test click chọn Node
     for (const node of layoutedNodes) {
-      const nodeW = 160;
-      const nodeH = 110;
+      const nodeW = 190;
+      const nodeH = 126;
       if (
         worldX >= node.x - nodeW / 2 &&
         worldX <= node.x + nodeW / 2 &&
@@ -629,7 +771,7 @@ function MindmapCanvasViewport({ treeNodes, activeNodeId, onSelectNode, layoutMo
       </div>
 
       <div className="absolute bottom-3 left-3 text-[11px] text-gold/60 bg-obsidian/90 px-2.5 py-1 rounded border border-gold/20 pointer-events-none">
-        ⚡ Render-On-Demand (0% CPU khi đứng yên) • {layoutedNodes.length} Nodes Snapshot Caching O(1)
+        ⚡ Zero-Copy Snapshot Caching O(1) • Laser Arrow & Laser Rings • 0% CPU Idle
       </div>
     </div>
   );
@@ -972,7 +1114,7 @@ export function MindmapVisualizer({ show, close, fen, history, score, line, thou
               <h2 className="text-base font-royal font-bold text-gold flex items-center gap-2">
                 🧠 SƠ ĐỒ TƯ DUY 360° CANVAS VIEWPORT
                 <span className="px-2 py-0.5 rounded text-[10px] uppercase tracking-wider font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/40">
-                  0% CPU Idle • Snapshot Caching
+                  Bàn Cờ Thật 100% • Zero-Copy Snapshot
                 </span>
               </h2>
               <p className="text-xs text-gold/60">
@@ -1044,7 +1186,7 @@ export function MindmapVisualizer({ show, close, fen, history, score, line, thou
 
             {/* Bàn Cờ Mini Đồng Bộ */}
             <div className="flex justify-center py-1">
-              <StaticMiniBoard
+              <FullFidelityMiniBoard
                 fen={activeNode ? activeNode.fen : inspectFen}
                 arrowFrom={activeNode ? activeNode.from : -1}
                 arrowTo={activeNode ? activeNode.to : -1}
