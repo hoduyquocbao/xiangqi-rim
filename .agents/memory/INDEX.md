@@ -6,6 +6,7 @@
 
 ## 1. Danh Sách Bài Học Xương Máu & Lịch Sử Thất Bại
 
+- [`pain_points_20260824_0020_tactical_waterfall_flood.md`](file://.agents/memory/pain_points_20260824_0020_tactical_waterfall_flood.md) — **Động cơ v39.9.0 Nước Lũ Tràn Nhánh Hàng Đợi Săn Sát Cục**: Vét cạn 26,227 Unique FENs, 343 thế Sát Cục dứt điểm (1,486 FEN/s), tích lũy 29,437 bản ghi trong 1,024 Shards NVMe phục vụ truy xuất 0ms ở Depth 256.
 - [`pain_points_20260822_1930_cqrs_360_reasoning.md`](file://.agents/memory/pain_points_20260822_1930_cqrs_360_reasoning.md) — Bài học về triệt tiêu lặp nước và hoàn thiện 360 đường suy luận CQRS-ES (100% ván cờ phân định dứt điểm).
 - [`pain_points_20260822_1945_tri_tier_pipeline.md`](file://.agents/memory/pain_points_20260822_1945_tri_tier_pipeline.md) — Bài học về kiến trúc Pipeline 3 Tầng Decoupled triệt tiêu điểm nghẽn cổ chai vật lý, tăng tốc thông lượng lên 471.74 Turns/s.
 - [`pain_points_20260822_1955_rolling_chunks.md`](file://.agents/memory/pain_points_20260822_1955_rolling_chunks.md) — Bài học về cơ chế cuốn chiếu Rolling Chunks (< 100MB/chunk) và tự động đồng bộ HuggingFace Hub cho 1.000.000 ván cờ.

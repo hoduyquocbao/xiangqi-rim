@@ -5,6 +5,7 @@
 
 ## 1. Nhật Ký Phiên Đang Hoạt Động & Lịch Sử Phiên
 
+- [`session_active_20260823_v66_breadth_depth_persistent_tt.md`](file://.agents/logs/session_active_20260823_v66_breadth_depth_persistent_tt.md) — **Web v39.0.0: Breadth Expansion, Depth Expansion & Persistent TT Knowledge Store**: Mở rộng chiều ngang (+4 biến thể), mở rộng chiều sâu (+1 Ply), lưu trữ và xuất nạp tri thức Transposition Table vĩnh cửu $O(1)$ JSON/localStorage, pass 18/18 test suites web (142/142 tests).
 - [`session_active_20260823_v65_gpu_mindmap_retroactive.md`](file://.agents/logs/session_active_20260823_v65_gpu_mindmap_retroactive.md) — **Web v38.1.0: GPU & CPU Friendly Mindmap Visualizer & 100% Web Unit Tests Green (142/142 Tests)**: Tối ưu Dual-Layer Canvas, Flat Float32Array LUT, Zero GC allocations, khắc phục 100% vi phạm và pass 18/18 test files.
 - [`session_active_20260823_v64_autonomous_360_engine.md`](file://.agents/logs/session_active_20260823_v64_autonomous_360_engine.md) — **Engine v37.0.0: True Autonomous Dynamic Plans & Real 3-Ply Search Rollout**: Giải quyết triệt để 5 vùng xám kỹ thuật, sinh động học 24 kế hoạch theo từng quân cờ và trích xuất chuỗi nước đi thật 100% cho cây 3-Ply.
 - [`session_active_20260823_v63_dynamic_360_engine.md`](file://.agents/logs/session_active_20260823_v63_dynamic_360_engine.md) — **Engine v36.0.0: True Dynamic 385-Line Reasoning Unit per Turn**: Triệt tiêu 100% dòng lặp boilerplate filler, động cơ tính toán động học bàn cờ thực tế cho toàn bộ 385 dòng suy luận/turn.
