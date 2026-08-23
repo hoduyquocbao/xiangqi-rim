@@ -17,9 +17,9 @@ use std::time::Duration;
 use xiangrust::server::{Base64, Frame, Opcode, Server, Sha1};
 
 /// Hằng số phiên bản ứng dụng APP_VERSION
-pub const APP_VERSION: &str = "v9.4.0-persistent-checkpoint-campaign-server";
+pub const APP_VERSION: &str = "v9.5.0-zero-downtime-hot-reload-server";
 /// Hằng số dấu thời gian đóng gói APP_BUILD_STAMP
-pub const APP_BUILD_STAMP: &str = "2026-08-24 00:58:00 ICT";
+pub const APP_BUILD_STAMP: &str = "2026-08-24 01:04:00 ICT";
 
 fn main() {
     // Nạp cấu hình độ sâu mặc định DEPTH 60 từ biến môi trường OS (Rule 8.11 / 7.11)

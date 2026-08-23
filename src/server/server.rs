@@ -207,6 +207,8 @@ pub struct Server {
     pub hash: Arc<AtomicUsize>,
     /// Trạng thái chiến dịch vét cạn định lượng Campaign Controller
     pub campaign: Arc<std::sync::Mutex<crate::server::campaign::State>>,
+    /// Bộ điều phối tài nguyên động thời gian thực Zero-Downtime Hot-Reload Governor
+    pub governor: Arc<crate::server::campaign::Governor>,
 }
 
 impl Server {
@@ -218,6 +220,7 @@ impl Server {
             gym: Gym::new(),
             hash: Arc::new(AtomicUsize::new(256)),
             campaign: Arc::new(std::sync::Mutex::new(crate::server::campaign::State::new())),
+            governor: Arc::new(crate::server::campaign::Governor::new()),
         }
     }
 
@@ -447,8 +450,16 @@ impl Server {
                 let mut op_mates = 0usize;
 
                 for (b_idx, &branch_move) in top_branches.iter().enumerate() {
-                    // Nhường nhịp CPU tương hỗ (Cooperative Yield) cho các kết nối HTTP / WebSocket
-                    thread::yield_now();
+                    // Đọc cấu hình điều phối Governor động thời gian thực (Zero-Downtime Hot Reload)
+                    let current_mode = self.governor.get_mode();
+                    let depth_override = self.governor.depth.load(Ordering::Relaxed);
+                    let actual_depth = if depth_override > 0 { depth_override as u8 } else { depth_limit };
+
+                    if current_mode == crate::server::campaign::Mode::Eco {
+                        thread::sleep(Duration::from_millis(50));
+                    } else {
+                        thread::yield_now();
+                    }
 
                     let mut branch_pos = root_pos;
                     branch_pos.apply(branch_move.from, branch_move.to);
@@ -494,7 +505,7 @@ impl Server {
                             (n.pos, n.ply)
                         };
 
-                        if curr_ply >= depth_limit {
+                        if curr_ply >= actual_depth {
                             continue;
                         }
 
@@ -1102,6 +1113,35 @@ impl Server {
             (Method::Get, "/api/v1/campaign/status") => {
                 let st = self.campaign.lock().unwrap();
                 let text = st.json();
+                Response::json(Status::Ok, &text)
+            }
+
+            // 18. GET /api/v1/campaign/config -> Lấy cấu hình điều phối Governor động hiện tại (Mode, Threads, Depth, Breadth)
+            (Method::Get, "/api/v1/campaign/config") => {
+                let text = self.governor.json();
+                Response::json(Status::Ok, &text)
+            }
+
+            // 19. POST /api/v1/campaign/config -> Hot-Reload nạp cấu hình nóng thay đổi số luồng CPU, chế độ Turbo/Eco mà KHÔNG CẦN KHỞI ĐỘNG LẠI!
+            (Method::Post, "/api/v1/campaign/config") => {
+                let body = String::from_utf8_lossy(&req.body);
+                if let Some(mode_str) = json::str(&body, "mode") {
+                    let mode = crate::server::campaign::Mode::from_str(mode_str);
+                    self.governor.set_mode(mode);
+                }
+                if let Some(threads_val) = json::num(&body, "threads") {
+                    let th = (threads_val as usize).max(1).min(8);
+                    self.governor.threads.store(th, Ordering::Relaxed);
+                }
+                if let Some(depth_val) = json::num(&body, "depth") {
+                    self.governor.depth.store(depth_val as usize, Ordering::Relaxed);
+                }
+                if let Some(breadth_val) = json::num(&body, "breadth") {
+                    self.governor.breadth.store(breadth_val as usize, Ordering::Relaxed);
+                }
+
+                let text = self.governor.json();
+                println!("[HOT RELOAD GOVERNOR] ⚡ Đã nạp nóng cấu hình động mới thành công: {}", text);
                 Response::json(Status::Ok, &text)
             }
 
