@@ -205,6 +205,8 @@ pub struct Server {
     pub gym: Gym,
     /// Dung lượng bộ nhớ băm Hash RAM động (tính bằng MB)
     pub hash: Arc<AtomicUsize>,
+    /// Trạng thái chiến dịch vét cạn định lượng Campaign Controller
+    pub campaign: Arc<std::sync::Mutex<crate::server::campaign::State>>,
 }
 
 impl Server {
@@ -215,6 +217,7 @@ impl Server {
             port,
             gym: Gym::new(),
             hash: Arc::new(AtomicUsize::new(256)),
+            campaign: Arc::new(std::sync::Mutex::new(crate::server::campaign::State::new())),
         }
     }
 
@@ -258,9 +261,9 @@ impl Server {
         Ok(())
     }
 
-    /// Luồng tự động ngầm làm giàu ký ức kinh nghiệm bằng Động cơ Nước Lũ Tràn Nhánh (Autonomous Waterfall Flood Engine)
+    /// Luồng tự động ngầm làm giàu ký ức kinh nghiệm bằng Động cơ Nước Lũ Tràn Nhánh (Deterministic Campaign Controller)
     pub fn start_autonomous_enrichment(&self) {
-        println!("[AUTONOMOUS ENRICHMENT] 🌊 Đã kích hoạt Động Cơ Nước Lũ Tràn Nhánh Ngầm (Autonomous Waterfall Flood Engine)...");
+        println!("[CAMPAIGN CONTROLLER] 🚀 Đã kích hoạt Bộ Điều Khiển Chiến Dịch Vét Cạn Định Lượng (Deterministic Campaign)...");
         let shard = crate::learn::shard::Shard::default();
 
         let openings = [
@@ -298,11 +301,34 @@ impl Server {
             ),
         ];
 
-        let mut opening_idx = 0;
+        let total_openings = openings.len();
+        let campaign_start = std::time::Instant::now();
 
-        loop {
-            let (name, seed) = &openings[opening_idx % openings.len()];
-            opening_idx += 1;
+        // 1. Khởi tạo trạng thái ban đầu của chiến dịch
+        {
+            let mut st = self.campaign.lock().unwrap();
+            st.status = "IN_PROGRESS".to_string();
+            st.total = total_openings;
+            st.current = 0;
+            st.pending = openings.iter().map(|(n, _)| n.to_string()).collect();
+            st.done = Vec::new();
+        }
+
+        let mut total_campaign_nodes = 0usize;
+        let mut total_campaign_mates = 0usize;
+
+        // Vòng lặp duyệt trọn vẹn 8/8 Khai Cuộc Kinh Điển của Chiến Dịch
+        for (op_idx, (name, seed)) in openings.iter().enumerate() {
+            let op_start = std::time::Instant::now();
+
+            {
+                let mut st = self.campaign.lock().unwrap();
+                st.current = op_idx;
+                st.opening = name.to_string();
+                if !st.pending.is_empty() {
+                    st.pending.remove(0);
+                }
+            }
 
             // 1. Khởi tạo bàn cờ thế trận mào đầu
             let mut root_pos = Parser::parse(Parser::DEFAULT);
@@ -313,7 +339,7 @@ impl Server {
                 }
             }
 
-            // 2. Sinh danh sách các nhánh mào đầu chính
+            // 2. Sinh danh sách các nhánh mào đầu chính (TOP 6 nhánh chủ lực)
             let mut root_list = crate::movegen::types::List::new();
             crate::movegen::legal::legal(&mut root_pos, &mut root_list);
 
@@ -326,6 +352,9 @@ impl Server {
             let top_branches = &root_moves[0..root_moves.len().min(6)];
             let total_branches = top_branches.len();
 
+            let mut op_nodes = 0usize;
+            let mut op_mates = 0usize;
+
             for (b_idx, &branch_move) in top_branches.iter().enumerate() {
                 // Nhường CPU cho các request Web UI / WebSocket của người dùng
                 thread::sleep(Duration::from_millis(300));
@@ -333,7 +362,6 @@ impl Server {
                 let mut branch_pos = root_pos;
                 branch_pos.apply(branch_move.from, branch_move.to);
 
-                // Cấu trúc nút cây ngầm trong luồng background
                 #[derive(Clone)]
                 #[allow(dead_code)]
                 struct FloodNode {
@@ -508,19 +536,94 @@ impl Server {
                     }
                 }
 
+                op_nodes += nodes_count;
+                op_mates += mates_count;
+                total_campaign_nodes += nodes_count;
+                total_campaign_mates += mates_count;
+
                 let total_shards = shard.count();
+                let elapsed_sec = campaign_start.elapsed().as_secs_f64().max(0.001);
+                let current_progress = ((op_idx as f64 + ((b_idx + 1) as f64 / total_branches as f64)) / total_openings as f64) * 100.0;
+                let avg_nps = total_campaign_nodes as f64 / elapsed_sec;
+                let remaining_branches = (total_openings * total_branches).saturating_sub(op_idx * total_branches + b_idx + 1);
+                let avg_sec_per_branch = elapsed_sec / (op_idx * total_branches + b_idx + 1) as f64;
+                let eta_sec = (remaining_branches as f64 * avg_sec_per_branch).max(0.0);
+
+                // Cập nhật State cho REST API
+                {
+                    let mut st = self.campaign.lock().unwrap();
+                    st.branch = b_idx + 1;
+                    st.branches = total_branches;
+                    st.nodes = total_campaign_nodes;
+                    st.mates = total_campaign_mates;
+                    st.shards = total_shards;
+                    st.nps = avg_nps;
+                    st.elapsed = elapsed_sec;
+                    st.eta = eta_sec;
+                    st.progress = current_progress;
+                }
+
                 println!(
-                    "[SERVER] [WATERFALL FLOOD] 🌊 Khai cuộc: {} (Nhánh {}/{}) | Vét cạn: {} nodes | Sát cục: {} thế | 1,024 Shards: {} entries (Minimax: {} cp)",
+                    "[CAMPAIGN #1] 📊 TIẾN ĐỘ: {:>5.1}% | Khai cuộc {}/8 ({}) | Nhánh {}/{} | Vét cạn: {} nodes | Sát cục: {} | 1024 Shards: {} | ETA: {:.1}s",
+                    current_progress,
+                    op_idx + 1,
                     name,
                     b_idx + 1,
                     total_branches,
-                    nodes_count,
-                    mates_count,
+                    total_campaign_nodes,
+                    total_campaign_mates,
                     total_shards,
-                    nodes[0].score
+                    eta_sec
                 );
                 let _ = std::io::stdout().flush();
             }
+
+            // Ghi nhận hoàn thành khai cuộc này
+            {
+                let mut st = self.campaign.lock().unwrap();
+                st.done.push(name.to_string());
+            }
+
+            println!(
+                " ✨ [HOÀN TẤT KHAI CUỘC {}/8: {}] Đã vét cạn: {} nodes | Sát cục: {} ({:.2?})",
+                op_idx + 1,
+                name,
+                op_nodes,
+                op_mates,
+                op_start.elapsed()
+            );
+            let _ = std::io::stdout().flush();
+        }
+
+        // 3. KẾT THÚC CHIẾN DỊCH: Chuyển sang trạng thái STANDBY và in báo cáo hoàn tất
+        let total_campaign_elapsed = campaign_start.elapsed();
+        let final_shards_count = shard.count();
+
+        {
+            let mut st = self.campaign.lock().unwrap();
+            st.status = "STANDBY".to_string();
+            st.progress = 100.0;
+            st.eta = 0.0;
+            st.elapsed = total_campaign_elapsed.as_secs_f64();
+        }
+
+        println!("\n===============================================================================");
+        println!("  🏆 [CAMPAIGN #1 HOÀN TẤT 100%] ĐÃ VÉT CẠN TOÀN BỘ 8/8 KHAI CUỘC KINH ĐIỂN!");
+        println!("===============================================================================");
+        println!("📊 BÁO CÁO THỐNG KÊ CHIẾN DỊCH:");
+        println!("   • Tổng Số Khai Cuộc Đã Vét Cạn : 8/8 Khai Cuộc Hoàn Tất 100%");
+        println!("   • Tổng Số Thế Cờ Đã Khai Thác  : {} Unique FENs", total_campaign_nodes);
+        println!("   • Tổng Số Đòn Sát Cục Bắt Được : {} thế cờ Sát Cục dứt điểm", total_campaign_mates);
+        println!("   • Tổng Bản Ghi Trong 1024 Shards: {} entries (data/shards_10b/)", final_shards_count);
+        println!("   • Tổng Thời Gian Thực Thi       : {:.2?}", total_campaign_elapsed);
+        println!("   • Tốc Độ Trung Bình Toàn Trình : {:.0} FEN / giây", total_campaign_nodes as f64 / total_campaign_elapsed.as_secs_f64().max(0.001));
+        println!("   • Trạng Thái Hệ Thống           : CHUYỂN SANG STANDBY (SẴN SÀNG PHỤC VỤ)");
+        println!("===============================================================================\n");
+        let _ = std::io::stdout().flush();
+
+        // Giữ luồng ở chế độ Standby với mức tiêu thụ CPU = 0%
+        loop {
+            thread::sleep(Duration::from_secs(60));
         }
     }
 
@@ -877,6 +980,13 @@ impl Server {
                     "{{\"status\":\"ok\",\"shards\":1024,\"entries\":{},\"dir\":\"data/shards_10b\"}}",
                     entries
                 );
+                Response::json(Status::Ok, &text)
+            }
+
+            // 17. GET /api/v1/campaign/status -> Lấy thông tin tiến độ chiến dịch vét cạn định lượng (Đã làm gì, Đang làm gì, Còn bao lâu)
+            (Method::Get, "/api/v1/campaign/status") => {
+                let st = self.campaign.lock().unwrap();
+                let text = st.json();
                 Response::json(Status::Ok, &text)
             }
 

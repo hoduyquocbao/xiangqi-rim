@@ -7,6 +7,7 @@
 // ============================================================================
 
 pub mod base64;
+pub mod campaign;
 pub mod frame;
 pub mod json;
 pub mod method;
