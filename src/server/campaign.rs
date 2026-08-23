@@ -19,26 +19,28 @@ pub struct Opening {
     pub seed: Vec<String>,
 }
 
-/// Struct `State`: Trạng thái tiến độ chi tiết của chiến dịch vét cạn.
+/// Struct `State`: Trạng thái tiến độ chi tiết của chiến dịch vét cạn đa giai đoạn.
 #[derive(Clone, Debug)]
 pub struct State {
     /// Trạng thái hoạt động: "IN_PROGRESS", "COMPLETED", "STANDBY" (String)
     pub status: String,
-    /// Số thứ tự chiến dịch hiện tại (usize)
-    pub campaign: usize,
-    /// Tổng số khai cuộc trong chiến dịch (usize)
+    /// Số thứ tự giai đoạn chiến dịch hiện tại (1..5) (usize)
+    pub stage: usize,
+    /// Tên mô tả của giai đoạn chiến dịch (String)
+    pub title: String,
+    /// Tổng số mục tiêu trong giai đoạn hiện tại (usize)
     pub total: usize,
-    /// Chỉ số khai cuộc đang thực hiện (0-indexed) (usize)
+    /// Chỉ số mục tiêu đang thực hiện (0-indexed) (usize)
     pub current: usize,
-    /// Tên khai cuộc đang thực hiện (String)
+    /// Tên mục tiêu/khai cuộc đang thực hiện (String)
     pub opening: String,
-    /// Chỉ số nhánh đang thực hiện trong khai cuộc (1-indexed) (usize)
+    /// Chỉ số nhánh đang thực hiện (1-indexed) (usize)
     pub branch: usize,
-    /// Tổng số nhánh của khai cuộc hiện tại (usize)
+    /// Tổng số nhánh của mục tiêu hiện tại (usize)
     pub branches: usize,
-    /// Tổng số thế cờ FEN đã khai thác trong chiến dịch (usize)
+    /// Tổng số thế cờ FEN đã khai thác trong giai đoạn (usize)
     pub nodes: usize,
-    /// Tổng số đòn Sát Cục dứt điểm bắt được trong chiến dịch (usize)
+    /// Tổng số đòn Sát Cục dứt điểm bắt được trong giai đoạn (usize)
     pub mates: usize,
     /// Tổng số bản ghi trong 1,024 Shards NVMe (usize)
     pub shards: usize,
@@ -48,11 +50,11 @@ pub struct State {
     pub elapsed: f64,
     /// Thời gian ước tính còn lại tính bằng giây (f64)
     pub eta: f64,
-    /// Tỷ lệ phần trăm hoàn thành chiến dịch (0.0 - 100.0) (f64)
+    /// Tỷ lệ phần trăm hoàn thành giai đoạn (0.0 - 100.0) (f64)
     pub progress: f64,
-    /// Danh sách các khai cuộc đã hoàn thành 100% (Vec<String>)
+    /// Danh sách các mục tiêu đã hoàn thành 100% (Vec<String>)
     pub done: Vec<String>,
-    /// Danh sách các khai cuộc chưa thực hiện (Vec<String>)
+    /// Danh sách các mục tiêu chưa thực hiện (Vec<String>)
     pub pending: Vec<String>,
 }
 
@@ -60,8 +62,9 @@ impl State {
     /// Khởi tạo trạng thái ban đầu của chiến dịch.
     pub fn new() -> Self {
         Self {
-            status: "STANDBY".to_string(),
-            campaign: 1,
+            status: "IN_PROGRESS".to_string(),
+            stage: 1,
+            title: "Khai Cuộc Cơ Bản (Depth 5)".to_string(),
             total: 8,
             current: 0,
             opening: "".to_string(),
@@ -85,9 +88,10 @@ impl State {
         let pending_json = self.pending.iter().map(|s| format!("\"{}\"", s)).collect::<Vec<_>>().join(",");
 
         format!(
-            "{{\"status\":\"{}\",\"campaign\":{},\"total\":{},\"current\":{},\"opening\":\"{}\",\"branch\":{},\"branches\":{},\"nodes\":{},\"mates\":{},\"shards\":{},\"nps\":{:.1},\"elapsed\":{:.1},\"eta\":{:.1},\"progress\":{:.1},\"done\":[{}],\"pending\":[{}]}}",
+            "{{\"status\":\"{}\",\"stage\":{},\"title\":\"{}\",\"total\":{},\"current\":{},\"opening\":\"{}\",\"branch\":{},\"branches\":{},\"nodes\":{},\"mates\":{},\"shards\":{},\"nps\":{:.1},\"elapsed\":{:.1},\"eta\":{:.1},\"progress\":{:.1},\"done\":[{}],\"pending\":[{}]}}",
             self.status,
-            self.campaign,
+            self.stage,
+            self.title,
             self.total,
             self.current + 1,
             self.opening,
