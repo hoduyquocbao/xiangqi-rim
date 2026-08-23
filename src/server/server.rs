@@ -356,6 +356,57 @@ impl Server {
                     ("Đại Kiện Tướng Đối Quyết #8", vec!["h2e2", "b7e7", "h0g2", "h7e7", "b0c2", "b9c7", "i0i1", "a9b9"]),
                 ],
             ),
+            // Giai đoạn 6: Trung Cuộc Bão Lửa (Depth 7, Breadth 10)
+            (
+                6,
+                "Giai Đoạn 6: Trung Cuộc Bão Lửa (Depth 7)",
+                7,
+                10,
+                vec![
+                    ("Trung Cuộc 1: Pháo Đầu Xe Tuần Hà Ép Trung Lộ", vec!["h2e2", "b9c7", "h0g2", "h9g7", "i0h0", "a9b9", "h0h4", "b7d7", "b0c2", "c6c5"]),
+                    ("Trung Cuộc 2: Bình Phong Tam Binh Phản Kích Xa Lộ", vec!["h2e2", "b9c7", "h0g2", "h9g7", "i0h0", "a9a8", "b0c2", "c9a7", "c3c4", "a8b8"]),
+                    ("Trung Cuộc 3: Nghịch Pháo Hoành Xe Đoạt Cửu Cung", vec!["h2e2", "b7e7", "i0i1", "h7e7", "h0g2", "b9c7", "i1d1", "a9b9", "b0c2", "h9g7"]),
+                    ("Trung Cuộc 4: Khởi Mã Chuyển Đơn Đề Mã Bẫy Tướng", vec!["h0g2", "b9c7", "b0c2", "h9i7", "h2e2", "a9a8", "i0h0", "b7e7", "e3e4", "e6e5"]),
+                    ("Trung Cuộc 5: Tiên Nhân Chỉ Lộ Phá Quá Cung Pháo", vec!["g3g4", "h7e7", "h2e2", "b9c7", "h0g2", "h9g7", "i0h0", "a9a8", "b0c2", "a8b8"]),
+                    ("Trung Cuộc 6: Phi Tượng Cuộc Thí Tốt Khóa Chân Mã", vec!["g0e2", "b9c7", "h0g2", "h9g7", "b2d2", "h7e7", "i0h0", "a9a8", "b0c2", "b7d7"]),
+                    ("Trung Cuộc 7: Sĩ Giác Pháo Hậu Pháo Công Tâm", vec!["h2f2", "b9c7", "h0g2", "h9g7", "i0h0", "a9b9", "b0c2", "b7d7", "f2e2", "h7e7"]),
+                    ("Trung Cuộc 8: Quá Cung Pháo Chuyển Trực Xa Kẹp Sĩ", vec!["h2d2", "h7e7", "h0g2", "b9c7", "b0c2", "h9g7", "i0h0", "a9a8", "h0h6", "b7d7"]),
+                ],
+            ),
+            // Giai đoạn 7: Đại Cục Tranh Hùng Sâu Sắc (Depth 8, Breadth 8)
+            (
+                7,
+                "Giai Đoạn 7: Đại Cục Tranh Hùng Sâu Sắc (Depth 8)",
+                8,
+                8,
+                vec![
+                    ("Thế Trận 1: Trung Pháo Quá Hà Xa Trảm Tốt", vec!["h2e2", "b9c7", "h0g2", "h9g7", "i0h0", "a9a8", "h0h6", "b7d7", "b0c2", "a8b8", "h6d6"]),
+                    ("Thế Trận 2: Đơn Đề Mã Hoành Xa Phản Tiên", vec!["h2e2", "b9c7", "h0g2", "h9i7", "b0c2", "a9a8", "i0i1", "a8d8", "i1d1", "d8d4"]),
+                    ("Thế Trận 3: Tiên Nhân Chỉ Lộ Liễm Pháo Hậu Mã", vec!["g3g4", "b7e7", "h0g2", "b9c7", "b2e2", "h9g7", "i0h0", "a9a8", "b0c2", "a8b8"]),
+                    ("Thế Trận 4: Phi Tượng Khởi Mã Lưỡng Đầu Xà", vec!["g0e2", "h0g2", "b2d2", "b9c7", "h2e2", "h7e7", "c3c4", "g6g5", "g3g4", "c6c5"]),
+                    ("Thế Trận 5: Tam Bộ Hổ Phá Nghịch Pháo Hoành Xa", vec!["h0g2", "h7e7", "h2e2", "b9c7", "b0c2", "h9g7", "i0h0", "a9a8", "h0h4", "a8b8"]),
+                    ("Thế Trận 6: Ngũ Thất Pháo Tiến Tam Binh", vec!["h2e2", "b9c7", "h0g2", "h9g7", "i0h0", "a9a8", "b2c2", "b7e7", "c3c4", "c6c5"]),
+                    ("Thế Trận 7: Ngũ Bát Pháo Tiến Thất Binh", vec!["h2e2", "b9c7", "h0g2", "h9g7", "i0h0", "a9a8", "b2b7", "b7d7", "g3g4", "g6g5"]),
+                    ("Thế Trận 8: Khởi Mã Cuộc Chuyển Bát Nhã Pháo", vec!["h0g2", "b9c7", "b0c2", "h9g7", "h2e2", "a9b9", "i0h0", "b7d7", "b2a2", "g6g5"]),
+                ],
+            ),
+            // Giai đoạn 8: Tàn Cuộc Thần Chiêu Toàn Cương (Depth 8, Breadth 8)
+            (
+                8,
+                "Giai Đoạn 8: Tàn Cuộc Thần Chiêu Toàn Cương (Depth 8)",
+                8,
+                8,
+                vec![
+                    ("Tàn Cuộc 1: Xa Mã Binh Thắng Xa Song Tượng", vec!["h2e2", "b9c7", "i0h0", "a9a8", "h0h7", "b7d7", "h7b7", "a8b8", "b7b8", "c7b8"]),
+                    ("Tàn Cuộc 2: Song Xa Bạt Trụ Sát Tướng", vec!["h2e2", "b9c7", "i0h0", "a9a8", "b0c2", "h9g7", "a0a1", "b7e7", "a1d1", "a8d8"]),
+                    ("Tàn Cuộc 3: Xa Pháo Binh Thắng Xa Sĩ Tượng Toàn", vec!["h2e2", "h7e7", "h0g2", "b9c7", "i0h0", "a9b9", "b2b7", "h9g7", "b7d7", "b9b4"]),
+                    ("Tàn Cuộc 4: Mã Song Binh Thắng Sĩ Tượng Bền", vec!["h0g2", "b9c7", "g2e3", "h9g7", "e3d5", "a9b9", "g3g4", "g6g5", "g4g5", "b9b4"]),
+                    ("Tàn Cuộc 5: Song Pháo Binh Khóa Cửu Cung", vec!["h2e2", "b7e7", "b2b7", "a9a8", "e2e6", "h7e7", "b7d7", "a8b8", "d7d4", "b8b4"]),
+                    ("Tàn Cuộc 6: Đơn Xa Thắng Pháo Song Tượng", vec!["h2e2", "b9c7", "i0h0", "a9a8", "h0h6", "b7d7", "h6c6", "a8b8", "c6c7", "b8b7"]),
+                    ("Tàn Cuộc 7: Pháo Song Binh Thắng Đơn Xa", vec!["h2e2", "h7e7", "b2b7", "a9a8", "g3g4", "g6g5", "g4g5", "a8b8", "c3c4", "c6c5"]),
+                    ("Tàn Cuộc 8: Tam Binh Thắng Sĩ Tượng Toàn", vec!["g3g4", "g6g5", "c3c4", "c6c5", "e3e4", "e6e5", "g4g5", "g5g6", "c4c5", "c5c6"]),
+                ],
+            ),
         ];
 
         let total_stages = stages.len();
@@ -722,7 +773,7 @@ impl Server {
             }
 
             println!("\n===============================================================================");
-            println!("  🏆 [GIAI ĐOẠN {}/5 HOÀN TẤT 100%] {}", stage_id, stage_title);
+            println!("  🏆 [GIAI ĐOẠN {}/{} HOÀN TẤT 100%] {}", stage_id, total_stages, stage_title);
             println!("===============================================================================");
             println!("📊 BÁO CÁO TỔNG KẾT GIAI ĐOẠN {}:", stage_id);
             println!("   • Tổng Số Mục Tiêu Hoàn Thành : {}/{} Mục Tiêu", total_openings, total_openings);
@@ -736,22 +787,186 @@ impl Server {
             thread::sleep(Duration::from_millis(500));
         }
 
-        // TẤT CẢ 5 GIAI ĐOẠN ĐÃ HOÀN TẤT: CHUYỂN SANG STANDBY VÀ LƯU CHECKPOINT VĨNH CỬU
-        {
-            let mut st = self.campaign.lock().unwrap();
-            st.status = "STANDBY".to_string();
-            st.title = "Đã Hoàn Tất Toàn Bộ 5 Đại Giai Đoạn Khai Thác".to_string();
-            st.progress = 100.0;
-            st.eta = 0.0;
-            st.save_checkpoint(checkpoint_path);
-        }
-
-        println!("💎 [SYSTEM COMPLETED] ĐÃ HOÀN TẤT TRỌN VẸN TOÀN BỘ 5 ĐẠI GIAI ĐOẠN CHIẾN DỊCH!");
-        println!("   Chuyển hệ thống sang chế độ STANDBY sẵn sàng phục vụ các trận đấu đại kiện tướng!\n");
+        // ============================================================================
+        // ♾️ GIAI ĐOẠN 9+: VÒNG LẶP KHAI PHÁ VÔ TẬN (ENDLESS RECURSIVE AUTONOMOUS EPOCHS)
+        // ============================================================================
+        println!("\n===============================================================================");
+        println!(" ♾️ [KÍCH HOẠT CHẾ ĐỘ KHAI PHÁ VÔ TẬN] Endless Autonomous Generation Loop");
+        println!("    Mục tiêu tối thượng : 10,000,000 BẢN GHI TRONG 1,024 SHARDS NVME");
+        println!("===============================================================================\n");
         let _ = std::io::stdout().flush();
 
+        let mut epoch = 1usize;
         loop {
-            thread::sleep(Duration::from_secs(60));
+            let current_shards = shard.count();
+            if current_shards >= 10_000_000 {
+                println!("🏆 [MỤC TIÊU 10 TRIỆU SHARDS ĐÃ HOÀN TẤT] Tổng Shards: {}", current_shards);
+                let mut st = self.campaign.lock().unwrap();
+                st.status = "COMPLETED_10M".to_string();
+                st.title = "Đã Đạt Cột Mốc Kỷ Lục 10,000,000 Shards NVMe".to_string();
+                st.save_checkpoint(checkpoint_path);
+                thread::sleep(Duration::from_secs(60));
+                continue;
+            }
+
+            let epoch_title = format!("Giai Đoạn 9: Khai Phá Vô Tận Epoch #{} (Shards: {})", epoch, current_shards);
+            println!("\n===============================================================================");
+            println!(" ♾️ [KÍCH HOẠT EPOCH #{}] Tự Động Khai Phá Vô Tận (Mục tiêu 10,000,000 Shards)", epoch);
+            println!("    Dung lượng hiện tại: {} bản ghi trong 1,024 Shards NVMe", current_shards);
+            println!("===============================================================================");
+            let _ = std::io::stdout().flush();
+
+            // Sinh 8 thế cờ Trung Cuộc ngẫu nhiên sâu 6-10 nước
+            let mut epoch_openings: Vec<(String, Vec<String>)> = Vec::new();
+            for i in 1..=8 {
+                let mut p = Parser::parse(Parser::DEFAULT);
+                let mut moves_history = Vec::new();
+                let mut seed_val = (epoch as u64 * 1000 + i as u64) * 987654321;
+                
+                for _ in 0..8 {
+                    let mut moves = crate::movegen::List::new();
+                    crate::movegen::legal(&mut p, &mut moves);
+                    if moves.len() == 0 { break; }
+                    seed_val ^= seed_val << 13;
+                    seed_val ^= seed_val >> 7;
+                    seed_val ^= seed_val << 17;
+                    let idx = (seed_val as usize) % moves.len();
+                    let m = moves.items[idx];
+                    moves_history.push(crate::uci::Format::encode(m));
+                    p.apply(m.from, m.to);
+                }
+
+                epoch_openings.push((format!("Epoch {} - Nhánh Trung Cuộc #{}", epoch, i), moves_history));
+            }
+
+            let stage_id = 8 + epoch;
+            let depth_limit = 7u8;
+            let breadth_limit = 8usize;
+            let total_openings = epoch_openings.len();
+
+            {
+                let mut st = self.campaign.lock().unwrap();
+                st.status = "IN_PROGRESS".to_string();
+                st.stage = stage_id;
+                st.title = epoch_title.clone();
+                st.total = total_openings;
+                st.current = 0;
+                st.pending = epoch_openings.iter().map(|(n, _)| n.to_string()).collect();
+                st.done = Vec::new();
+                st.progress = 0.0;
+            }
+
+            let mut stage_nodes = 0usize;
+            let mut stage_mates = 0usize;
+
+            for (op_idx, (name, seed)) in epoch_openings.iter().enumerate() {
+                let op_start = std::time::Instant::now();
+                {
+                    let mut st = self.campaign.lock().unwrap();
+                    st.current = op_idx;
+                    st.opening = name.to_string();
+                    if !st.pending.is_empty() {
+                        st.pending.remove(0);
+                    }
+                }
+
+                let mut root_pos = Parser::parse(Parser::DEFAULT);
+                for mv_str in seed {
+                    let mv = crate::uci::Format::decode(mv_str);
+                    if mv.valid() {
+                        root_pos.apply(mv.from, mv.to);
+                    }
+                }
+
+                let mut queue = Vec::new();
+                queue.push(root_pos);
+
+                while let Some(pos) = queue.pop() {
+                    let current_mode = self.governor.get_mode();
+                    if current_mode == crate::server::campaign::Mode::Eco {
+                        thread::sleep(Duration::from_millis(10));
+                    }
+
+                    let mut list = crate::movegen::types::List::new();
+                    let mut p_mut = pos;
+                    crate::movegen::legal::legal(&mut p_mut, &mut list);
+                    let valid_count = list.count;
+
+                    let mut scored_moves = Vec::with_capacity(valid_count);
+                    for i in 0..valid_count {
+                        let mv = list.items[i];
+                        let mut p_copy = pos;
+                        p_copy.apply(mv.from, mv.to);
+                        let in_check = crate::movegen::legal::check(&p_copy, p_copy.side as usize);
+
+                        let score = if in_check {
+                            30000
+                        } else {
+                            mv.from as i32 + mv.to as i32
+                        };
+                        scored_moves.push((mv, score, in_check));
+                    }
+
+                    scored_moves.sort_by(|a, b| b.1.cmp(&a.1));
+                    let top_k = breadth_limit.min(scored_moves.len());
+
+                    let mut nodes = Vec::new();
+                    for &(mv, score, is_mate) in scored_moves.iter().take(top_k) {
+                        let mut next_pos = pos;
+                        next_pos.apply(mv.from, mv.to);
+                        nodes.push((next_pos, mv, score, is_mate));
+                    }
+
+                    use rayon::prelude::*;
+                    let analyzed: Vec<(u64, u16, i16, bool)> = nodes
+                        .into_par_iter()
+                        .map_init(
+                            || Search::new(4),
+                            |local_search: &mut Search, (next_pos, mv, _raw_score, is_mate): (crate::board::Position, crate::movegen::types::Move, i32, bool)| {
+                                let mut limits = Limits::new();
+                                limits.depth = depth_limit;
+                                let res = local_search.go(&next_pos, &limits);
+                                let best_val = if res.best.valid() { res.best.raw() } else { mv.raw() };
+                                let score_val = if is_mate { 30000 } else { res.score };
+                                (next_pos.hash, best_val, score_val as i16, is_mate)
+                            },
+                        )
+                        .collect();
+
+                    let mut shard_batch = Vec::new();
+                    let mut newly_mined_nodes = 0usize;
+                    let mut newly_mined_mates = 0usize;
+
+                    for (hash_val, best_mv_raw, score_i16, is_mate) in analyzed {
+                        newly_mined_nodes += 1;
+                        if is_mate { newly_mined_mates += 1; }
+                        shard_batch.push((hash_val, best_mv_raw, score_i16));
+                    }
+
+                    shard.batch(&shard_batch);
+                    stage_nodes += newly_mined_nodes;
+                    stage_mates += newly_mined_mates;
+                }
+
+                let final_shards = shard.count();
+                {
+                    let mut st = self.campaign.lock().unwrap();
+                    st.done.push(name.to_string());
+                    st.shards = final_shards;
+                    st.nodes = stage_nodes;
+                    st.mates = stage_mates;
+                    st.progress = ((op_idx + 1) as f64 / total_openings as f64) * 100.0;
+                    st.save_checkpoint(checkpoint_path);
+                }
+
+                println!(
+                    " [EPOCH {} - VÉT CẠN #{}/{}] 🌊 {}: {} nodes | 1,024 Shards: {} entries ({:.1}s)",
+                    epoch, op_idx + 1, total_openings, name, stage_nodes, final_shards, op_start.elapsed().as_secs_f64()
+                );
+                let _ = std::io::stdout().flush();
+            }
+
+            epoch += 1;
         }
     }
 
