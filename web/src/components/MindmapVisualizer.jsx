@@ -1,11 +1,15 @@
 // web/src/components/MindmapVisualizer.jsx
-// Sơ Đồ Tư Duy Cây Suy Luận 360° & Hậu Kiểm Toàn Ván Đẳng Cấp Hoàng Gia
-// Đồng Bộ & Tái Sử Dụng 100% Bàn Cờ Thật (Linh Kiện Board.jsx & Vector Canvas Snapshot)
-// 1. Sidebar chi tiết sử dụng trực tiếp linh kiện Board.jsx (100% giống bàn cờ chính, đầy đủ âm thanh, laser arrow, thước tọa độ, cửu cung).
-// 2. Các Node trên Canvas Viewport sử dụng Snapshot Canvas 2X Retina mô phỏng chính xác từng Pixel của Board.jsx.
-// 3. Render-On-Demand: 0% CPU khi đứng yên, chống nóng máy và hỗ trợ 10,000+ Nodes mượt mà.
+// Sơ Đồ Tư Duy Cây Suy Luận 360° & Hậu Kiểm Toàn Ván
+// Sao Chép 100% Bàn Cờ Chính Bằng Cách Tái Sử Dụng Trực Tiếp Linh Kiện Board.jsx
+// 1. Toàn bộ các Node trong Cây Tư Duy đều nhúng trực tiếp linh kiện <Board compact={true} />.
+// 2. Không vẽ lại qua Canvas xấp xỉ, đảm bảo 100% giống bàn cờ chính về:
+//    - Quân cờ Ngọc Cẩm Thạch 3D (Ruby vs Obsidian Gradients)
+//    - Vành đai Hoàng Kim nét đứt
+//    - Tia Laser Neon nước đi phát sáng
+//    - Văn bản thư pháp chữ Hán Sông "楚 河" & "漢 界"
+// 3. Viewport Pan & Zoom vô cực siêu mượt với GPU CSS Hardware Acceleration.
 
-import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { 
   Compass, 
   Layers, 
@@ -20,20 +24,12 @@ import {
   LayoutGrid, 
   Activity,
   Cpu,
-  Sparkles
+  Sparkles,
+  ChevronRight
 } from 'lucide-react';
 import { parse, fen as buildFen, moves as getLegalMoves, check as isCheck, hasLegalMoves } from '../rules/rules.js';
 import { instance as engine } from '../engine/engine.js';
 import Board from './Board.jsx';
-
-// Hệ số Retina DPR vật lý
-const dpr = typeof window !== 'undefined' ? (window.devicePixelRatio || 2) : 2;
-
-// Bảng tra cứu chữ Hán Hoàng Gia chuẩn cho quân cờ (Đồng bộ 100% với Board.jsx)
-const labels = {
-  K: '帥', A: '仕', B: '相', N: '傌', R: '俥', C: '炮', P: '兵',
-  k: '將', a: '士', b: '象', n: '馬', r: '車', c: '砲', p: '卒'
-};
 
 // Tên quân cờ tiếng Việt
 const pieceNames = {
@@ -46,267 +42,6 @@ const pieceWeights = {
   K: 10000, R: 900, C: 450, N: 400, B: 200, A: 200, P: 100,
   k: 10000, r: 900, c: 450, n: 400, b: 200, a: 200, p: 100
 };
-
-// Tỷ lệ chuẩn của Bàn Cờ Thật (900 x 1000 tương ứng 9:10)
-const snapW = 108;
-const snapH = 120;
-const snapPadX = 6;
-const snapPadY = 6;
-const snapCellW = (snapW - snapPadX * 2) / 8;
-const snapCellH = (snapH - snapPadY * 2) / 9;
-
-// Bộ đệm LRU Cache lưu trữ ảnh chụp nhanh Bitmap của các thế cờ FEN
-const snapshotCache = new Map();
-
-// ============================================================================
-// HỆ THỐNG VẼ LƯỚI TĨNH BÀN CỜ SAO CHÉP CHUẨN XÁC BOARD.JSX
-// ============================================================================
-function drawAuthenticStaticBoard(ctx, width, height, padx, pady, cellw, cellh) {
-  // 1. Nền Gỗ Hoàng Gia Gradient Tối
-  const grad = ctx.createRadialGradient(width / 2, height / 2, 20, width / 2, height / 2, width);
-  grad.addColorStop(0, '#26190e');
-  grad.addColorStop(1, '#0e0804');
-  ctx.fillStyle = grad;
-  ctx.fillRect(0, 0, width, height);
-
-  // Viền vàng Hoàng Kim
-  ctx.strokeStyle = '#D4AF37';
-  ctx.lineWidth = 1.2;
-  ctx.strokeRect(padx, pady, width - padx * 2, height - pady * 2);
-
-  // 2. Lưới đường kẻ bàn cờ (10 ngang, 9 dọc)
-  ctx.strokeStyle = '#D4AF37';
-  ctx.lineWidth = 0.9;
-  ctx.globalAlpha = 0.85;
-
-  // Đường ngang
-  for (let r = 0; r < 10; r++) {
-    const y = Math.round(pady + r * cellh) + 0.5;
-    ctx.beginPath();
-    ctx.moveTo(padx, y);
-    ctx.lineTo(width - padx, y);
-    ctx.stroke();
-  }
-
-  // Đường dọc (ngắt ở sông giữa hàng 4 và 5)
-  for (let f = 0; f < 9; f++) {
-    const x = Math.round(padx + f * cellw) + 0.5;
-    if (f === 0 || f === 8) {
-      ctx.beginPath();
-      ctx.moveTo(x, pady);
-      ctx.lineTo(x, height - pady);
-      ctx.stroke();
-    } else {
-      ctx.beginPath();
-      ctx.moveTo(x, pady);
-      ctx.lineTo(x, pady + 4 * cellh);
-      ctx.stroke();
-      ctx.beginPath();
-      ctx.moveTo(x, pady + 5 * cellh);
-      ctx.lineTo(x, height - pady);
-      ctx.stroke();
-    }
-  }
-
-  // Cửu Cung Đỏ & Đen (Đường chéo X)
-  ctx.beginPath();
-  ctx.moveTo(padx + 3 * cellw, pady);
-  ctx.lineTo(padx + 5 * cellw, pady + 2 * cellh);
-  ctx.moveTo(padx + 5 * cellw, pady);
-  ctx.lineTo(padx + 3 * cellw, pady + 2 * cellh);
-  ctx.stroke();
-
-  ctx.beginPath();
-  ctx.moveTo(padx + 3 * cellw, pady + 7 * cellh);
-  ctx.lineTo(padx + 5 * cellw, pady + 9 * cellh);
-  ctx.moveTo(padx + 5 * cellw, pady + 7 * cellh);
-  ctx.lineTo(padx + 3 * cellw, pady + 9 * cellh);
-  ctx.stroke();
-
-  // Văn bản Chữ Hán Sông "楚 河" & "漢 界"
-  ctx.globalAlpha = 0.6;
-  ctx.fillStyle = '#D4AF37';
-  ctx.font = 'bold 8px serif';
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  ctx.fillText('楚 河', padx + 2 * cellw, pady + 4.5 * cellh);
-  ctx.fillText('漢 界', padx + 6 * cellw, pady + 4.5 * cellh);
-  ctx.globalAlpha = 1.0;
-}
-
-// Bộ đệm Layer Tĩnh Bàn Cờ
-let staticSnapLayer = null;
-
-function getStaticBoardLayer() {
-  const scaleRatio = 2;
-  if (!staticSnapLayer) {
-    const canvas = document.createElement('canvas');
-    canvas.width = snapW * scaleRatio;
-    canvas.height = snapH * scaleRatio;
-    const ctx = canvas.getContext('2d', { alpha: false });
-    if (ctx) {
-      ctx.scale(scaleRatio, scaleRatio);
-      drawAuthenticStaticBoard(ctx, snapW, snapH, snapPadX, snapPadY, snapCellW, snapCellH);
-    }
-    staticSnapLayer = canvas;
-  }
-  return staticSnapLayer;
-}
-
-// ============================================================================
-// HỆ THỐNG SNAPSHOT BITMAP SAO CHÉP CHUẨN XÁC TỪNG QUÂN CỜ HOÀNG GIA
-// ============================================================================
-function getBoardSnapshot(fenStr, moveFrom, moveTo) {
-  const cacheKey = `${fenStr}_${moveFrom}_${moveTo}`;
-  if (snapshotCache.has(cacheKey)) {
-    return snapshotCache.get(cacheKey);
-  }
-
-  const scaleRatio = 2;
-  const canvas = document.createElement('canvas');
-  canvas.width = snapW * scaleRatio;
-  canvas.height = snapH * scaleRatio;
-  const ctx = canvas.getContext('2d', { alpha: false });
-  if (!ctx) return canvas;
-
-  ctx.imageSmoothingEnabled = true;
-  ctx.imageSmoothingQuality = 'high';
-
-  // 1. Sao chép Layer Nền Tĩnh
-  const staticBg = getStaticBoardLayer();
-  ctx.drawImage(staticBg, 0, 0, canvas.width, canvas.height);
-
-  ctx.save();
-  ctx.scale(scaleRatio, scaleRatio);
-
-  // 2. Vẽ Đường Nối Laser Nước Đi (Royal Neon Laser Path chuẩn Board.jsx)
-  if (moveFrom !== undefined && moveTo !== undefined && moveFrom >= 0 && moveTo >= 0) {
-    const f1 = moveFrom % 9;
-    const r1 = Math.floor(moveFrom / 9);
-    const f2 = moveTo % 9;
-    const r2 = Math.floor(moveTo / 9);
-    const x1 = snapPadX + f1 * snapCellW;
-    const y1 = snapPadY + (9 - r1) * snapCellH;
-    const x2 = snapPadX + f2 * snapCellW;
-    const y2 = snapPadY + (9 - r2) * snapCellH;
-
-    // Dải Hào Quang Phát Sáng
-    ctx.strokeStyle = '#FF0055';
-    ctx.lineWidth = 4;
-    ctx.globalAlpha = 0.3;
-    ctx.beginPath();
-    ctx.moveTo(x1, y1);
-    ctx.lineTo(x2, y2);
-    ctx.stroke();
-
-    // Tia Laser Neon Nối Tĩnh
-    ctx.strokeStyle = '#FF0055';
-    ctx.lineWidth = 1.8;
-    ctx.globalAlpha = 1.0;
-    ctx.setLineDash([3, 1.5]);
-    ctx.beginPath();
-    ctx.moveTo(x1, y1);
-    ctx.lineTo(x2, y2);
-    ctx.stroke();
-    ctx.setLineDash([]);
-
-    // Vòng Tròn Định Vị Vị Trí Cũ (Origin Marker)
-    ctx.strokeStyle = '#FF0055';
-    ctx.lineWidth = 1.2;
-    ctx.setLineDash([2, 1]);
-    ctx.beginPath();
-    ctx.arc(x1, y1, 5, 0, Math.PI * 2);
-    ctx.stroke();
-    ctx.setLineDash([]);
-
-    ctx.fillStyle = '#FF0055';
-    ctx.beginPath();
-    ctx.arc(x1, y1, 1.5, 0, Math.PI * 2);
-    ctx.fill();
-
-    // Mũi Tên Chỉ Hướng
-    const angle = Math.atan2(y2 - y1, x2 - x1);
-    ctx.fillStyle = '#FF0055';
-    ctx.beginPath();
-    ctx.moveTo(x2, y2);
-    ctx.lineTo(x2 - 5 * Math.cos(angle - Math.PI / 6), y2 - 5 * Math.sin(angle - Math.PI / 6));
-    ctx.lineTo(x2 - 5 * Math.cos(angle + Math.PI / 6), y2 - 5 * Math.sin(angle + Math.PI / 6));
-    ctx.closePath();
-    ctx.fill();
-
-    // Vòng Viền Vị Trí Mới (Target Arrival Ring)
-    ctx.strokeStyle = '#FFD700';
-    ctx.lineWidth = 1.5;
-    ctx.beginPath();
-    ctx.arc(x2, y2, 5.5, 0, Math.PI * 2);
-    ctx.stroke();
-  }
-
-  // 3. Vẽ 32 Quân Cờ Ngọc Cẩm Thạch Hoàng Gia (Chuẩn Board.jsx)
-  const parsed = parse(fenStr);
-  const board = parsed.board;
-
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  ctx.font = 'bold 7px serif';
-
-  for (let sq = 0; sq < 90; sq++) {
-    const piece = board[sq];
-    if (piece === '.') continue;
-
-    const f = sq % 9;
-    const r = Math.floor(sq / 9);
-    const x = snapPadX + f * snapCellW;
-    const y = snapPadY + (9 - r) * snapCellH;
-    const isRed = piece === piece.toUpperCase();
-
-    // Thân quân cờ 3D Ngọc Cẩm Thạch (Ruby vs Dark Obsidian Gradient)
-    const pieceGrad = ctx.createRadialGradient(x - 1.5, y - 1.5, 0.5, x, y, 5);
-    if (isRed) {
-      pieceGrad.addColorStop(0, '#2A0808');
-      pieceGrad.addColorStop(0.7, '#160303');
-      pieceGrad.addColorStop(1, '#0D0000');
-    } else {
-      pieceGrad.addColorStop(0, '#1F242D');
-      pieceGrad.addColorStop(0.7, '#0F1318');
-      pieceGrad.addColorStop(1, '#05070A');
-    }
-    ctx.fillStyle = pieceGrad;
-    ctx.beginPath();
-    ctx.arc(x, y, 4.8, 0, Math.PI * 2);
-    ctx.fill();
-
-    // Viền vàng Hoàng Kim
-    ctx.strokeStyle = '#D4AF37';
-    ctx.lineWidth = 0.8;
-    ctx.stroke();
-
-    // Vành trong Hoàng Kim nét đứt
-    ctx.strokeStyle = '#D4AF37';
-    ctx.lineWidth = 0.5;
-    ctx.globalAlpha = 0.6;
-    ctx.setLineDash([1, 1]);
-    ctx.beginPath();
-    ctx.arc(x, y, 3.8, 0, Math.PI * 2);
-    ctx.stroke();
-    ctx.setLineDash([]);
-    ctx.globalAlpha = 1.0;
-
-    // Chữ Hán thư pháp
-    ctx.fillStyle = isRed ? '#8B0000' : '#D4AF37';
-    ctx.fillText(labels[piece] || piece, x, y + 0.5);
-  }
-
-  ctx.restore();
-
-  if (snapshotCache.size > 2000) {
-    const firstKey = snapshotCache.keys().next().value;
-    snapshotCache.delete(firstKey);
-  }
-
-  snapshotCache.set(cacheKey, canvas);
-  return canvas;
-}
 
 // Chuyển đổi tọa độ ô cờ sang chuỗi UCI
 function sqToUci(sq) {
@@ -379,18 +114,15 @@ function evaluatePosition(board) {
 }
 
 // ============================================================================
-// CANVAS VIEWPORT SƠ ĐỒ TƯ DUY RETINA 10,000+ NODES (ZERO BLUR / ZERO HEAT)
+// VIEWPORT PAN & ZOOM CÂY TƯ DUY NHÚNG 100% BÀN CỜ THẬT <BOARD COMPACT={TRUE} />
 // ============================================================================
-function MindmapCanvasViewport({ treeNodes, activeNodeId, onSelectNode, layoutMode }) {
-  const canvasRef = useRef(null);
+function MindmapVectorViewport({ treeNodes, activeNodeId, onSelectNode, layoutMode }) {
   const containerRef = useRef(null);
-  
-  // Camera Viewport Pan & Zoom
-  const cameraRef = useRef({ x: 0, y: 0, scale: 1.0 });
+  const [camera, setCamera] = useState({ x: 0, y: 0, scale: 0.95 });
   const isDraggingRef = useRef(false);
   const dragStartRef = useRef({ x: 0, y: 0 });
 
-  // Tính toán tọa độ phân bố các Node một lần duy nhất
+  // Tính toán tọa độ phân bổ các node
   const layoutedNodes = useMemo(() => {
     if (!treeNodes || treeNodes.length === 0) return [];
 
@@ -405,34 +137,34 @@ function MindmapCanvasViewport({ treeNodes, activeNodeId, onSelectNode, layoutMo
     const count = candidates.length;
 
     if (layoutMode === 'radial') {
-      const radius1 = 320;
-      const radius2 = 600;
+      const radius1 = 360;
+      const radius2 = 720;
 
       candidates.forEach((cand, idx) => {
         const angle = -Math.PI / 2 + (idx * 2 * Math.PI) / Math.max(1, count);
-        cand.x = radius1 * Math.cos(angle);
-        cand.y = radius1 * Math.sin(angle);
+        cand.x = Math.round(radius1 * Math.cos(angle));
+        cand.y = Math.round(radius1 * Math.sin(angle));
 
         const replies = nodes.filter((n) => n.parentId === cand.id);
         replies.forEach((rep, rIdx) => {
-          const subSpread = 0.35;
+          const subSpread = 0.38;
           const subAngle = angle + (rIdx - (replies.length - 1) / 2) * subSpread;
-          rep.x = radius2 * Math.cos(subAngle);
-          rep.y = radius2 * Math.sin(subAngle);
+          rep.x = Math.round(radius2 * Math.cos(subAngle));
+          rep.y = Math.round(radius2 * Math.sin(subAngle));
         });
       });
     } else {
-      const spacingY = 160;
+      const spacingY = 220;
       const totalH = (count - 1) * spacingY;
 
       candidates.forEach((cand, idx) => {
-        cand.x = 400;
-        cand.y = -totalH / 2 + idx * spacingY;
+        cand.x = 360;
+        cand.y = Math.round(-totalH / 2 + idx * spacingY);
 
         const replies = nodes.filter((n) => n.parentId === cand.id);
         replies.forEach((rep, rIdx) => {
-          rep.x = 800;
-          rep.y = cand.y + (rIdx - (replies.length - 1) / 2) * 90;
+          rep.x = 720;
+          rep.y = Math.round(cand.y + (rIdx - (replies.length - 1) / 2) * 120);
         });
       });
     }
@@ -440,240 +172,147 @@ function MindmapCanvasViewport({ treeNodes, activeNodeId, onSelectNode, layoutMo
     return nodes;
   }, [treeNodes, layoutMode]);
 
-  // Vẽ Render trên Canvas THEO YÊU CẦU (High-DPI Retina Backing Store)
-  const drawScene = useCallback(() => {
-    const canvas = canvasRef.current;
-    const container = containerRef.current;
-    if (!canvas || !container) return;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-
-    const cssW = container.clientWidth;
-    const cssH = container.clientHeight;
-    const ratio = window.devicePixelRatio || 2;
-
-    if (canvas.width !== Math.round(cssW * ratio) || canvas.height !== Math.round(cssH * ratio)) {
-      canvas.width = Math.round(cssW * ratio);
-      canvas.height = Math.round(cssH * ratio);
-      canvas.style.width = `${cssW}px`;
-      canvas.style.height = `${cssH}px`;
-    }
-
-    ctx.imageSmoothingEnabled = true;
-    ctx.imageSmoothingQuality = 'high';
-
-    const cam = cameraRef.current;
-
-    // Reset transform & Xóa nền
-    ctx.setTransform(1, 0, 0, 1, 0, 0);
-    ctx.fillStyle = '#0a0604';
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-    // Tính toán khung nhìn thế giới
-    const viewLeft = (-cssW / 2) / cam.scale - cam.x - 140;
-    const viewRight = (cssW / 2) / cam.scale - cam.x + 140;
-    const viewTop = (-cssH / 2) / cam.scale - cam.y - 140;
-    const viewBottom = (cssH / 2) / cam.scale - cam.y + 140;
-
-    // Áp dụng Ma trận Camera kết hợp Retina Scale
-    ctx.setTransform(
-      cam.scale * ratio, 0,
-      0, cam.scale * ratio,
-      (cam.x * cam.scale + cssW / 2) * ratio,
-      (cam.y * cam.scale + cssH / 2) * ratio
-    );
-
-    // 1. VẼ DÂY NỐI BEZIER PHẲNG SIÊU NÉT
-    ctx.lineWidth = 1.5;
-    layoutedNodes.forEach((node) => {
-      if (!node.parentId) return;
-      const parent = layoutedNodes.find((p) => p.id === node.parentId);
-      if (!parent) return;
-
-      if (
-        (node.x < viewLeft && parent.x < viewLeft) ||
-        (node.x > viewRight && parent.x > viewRight) ||
-        (node.y < viewTop && parent.y < viewTop) ||
-        (node.y > viewBottom && parent.y > viewBottom)
-      ) {
-        return;
-      }
-
-      const isSelected = activeNodeId === node.id || activeNodeId === parent.id;
-      ctx.strokeStyle = isSelected ? '#f59e0b' : 'rgba(212, 175, 55, 0.35)';
-
-      ctx.beginPath();
-      ctx.moveTo(parent.x, parent.y);
-      ctx.quadraticCurveTo(parent.x, node.y, node.x, node.y);
-      ctx.stroke();
-    });
-
-    // 2. VẼ CÁC NODE KÈM ẢNH CHỤP NHANH SNAPSHOT BITMAP 2X RETINA
-    const isFarZoom = cam.scale < 0.45;
-
-    layoutedNodes.forEach((node) => {
-      if (
-        node.x + 120 < viewLeft ||
-        node.x - 120 > viewRight ||
-        node.y + 90 < viewTop ||
-        node.y - 90 > viewBottom
-      ) {
-        return;
-      }
-
-      const isSelected = activeNodeId === node.id;
-      const nodeW = 204;
-      const nodeH = 136;
-      const rx = node.x - nodeW / 2;
-      const ry = node.y - nodeH / 2;
-
-      if (isFarZoom) {
-        ctx.fillStyle = isSelected ? '#f59e0b' : node.score >= 0 ? '#10b981' : '#ef4444';
-        ctx.beginPath();
-        ctx.arc(node.x, node.y, isSelected ? 14 : 9, 0, Math.PI * 2);
-        ctx.fill();
-        return;
-      }
-
-      // Khung Node Card
-      ctx.fillStyle = isSelected ? '#2b1b10' : '#140e09';
-      ctx.strokeStyle = isSelected ? '#f59e0b' : 'rgba(212, 175, 55, 0.4)';
-      ctx.lineWidth = isSelected ? 2 : 1;
-
-      ctx.beginPath();
-      ctx.roundRect(rx, ry, nodeW, nodeH, 8);
-      ctx.fill();
-      ctx.stroke();
-
-      // Blit Ảnh Chụp Nhanh Bàn Cờ Bitmap Snapshot 2X Siêu Nét O(1)
-      if (node.fen) {
-        const snap = getBoardSnapshot(node.fen, node.from, node.to);
-        ctx.drawImage(snap, rx + 8, ry + 8, snapW, snapH);
-      }
-
-      // Văn bản tiêu đề & Ký hiệu nước đi
-      ctx.textAlign = 'left';
-      ctx.textBaseline = 'top';
-      ctx.font = 'bold 11px system-ui, -apple-system, sans-serif';
-      ctx.fillStyle = isSelected ? '#fbbf24' : '#d4af37';
-      ctx.fillText(node.title.slice(0, 12), rx + snapW + 14, ry + 12);
-
-      // Điểm số Centipawn
-      ctx.font = 'bold 10px monospace';
-      ctx.fillStyle = node.score >= 0 ? '#34d399' : '#f87171';
-      const scoreStr = node.score !== undefined ? `${node.score > 0 ? '+' : ''}${node.score} cp` : '';
-      ctx.fillText(scoreStr, rx + snapW + 14, ry + 34);
-
-      // Mã nước đi UCI
-      ctx.font = '10px monospace';
-      ctx.fillStyle = '#93c5fd';
-      ctx.fillText(node.uci || '', rx + snapW + 14, ry + 54);
-
-      // Huy hiệu
-      if (node.badge) {
-        ctx.font = '9px system-ui, -apple-system, sans-serif';
-        ctx.fillStyle = '#a78bfa';
-        ctx.fillText(node.badge, rx + snapW + 14, ry + 74);
-      }
-    });
-  }, [layoutedNodes, activeNodeId]);
-
-  useEffect(() => {
-    drawScene();
-  }, [drawScene]);
-
-  // Resize canvas
-  useEffect(() => {
-    const handleResize = () => {
-      drawScene();
-    };
-    window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
-  }, [drawScene]);
-
-  // Tương tác chuột: Pan & Zoom
+  // Xử lý sự kiện kéo chuột Pan
   const handleMouseDown = (e) => {
+    // Chỉ pan khi bấm vào vùng trống, không click vào nút
+    if (e.target.closest('.node-card')) return;
     isDraggingRef.current = true;
-    dragStartRef.current = { x: e.clientX, y: e.clientY };
+    dragStartRef.current = { x: e.clientX - camera.x, y: e.clientY - camera.y };
   };
 
   const handleMouseMove = (e) => {
     if (!isDraggingRef.current) return;
-    const cam = cameraRef.current;
-    const dx = (e.clientX - dragStartRef.current.x) / cam.scale;
-    const dy = (e.clientY - dragStartRef.current.y) / cam.scale;
-    cam.x += dx;
-    cam.y += dy;
-    dragStartRef.current = { x: e.clientX, y: e.clientY };
-    drawScene();
+    setCamera((prev) => ({
+      ...prev,
+      x: e.clientX - dragStartRef.current.x,
+      y: e.clientY - dragStartRef.current.y
+    }));
   };
 
-  const handleMouseUp = (e) => {
-    if (!isDraggingRef.current) return;
-    const container = containerRef.current;
-    if (!container) return;
-    const rect = container.getBoundingClientRect();
-    const mouseX = e.clientX - rect.left;
-    const mouseY = e.clientY - rect.top;
-
-    const cam = cameraRef.current;
-    const worldX = (mouseX - container.clientWidth / 2) / cam.scale - cam.x;
-    const worldY = (mouseY - container.clientHeight / 2) / cam.scale - cam.y;
-
-    // Hit test click chọn Node
-    for (const node of layoutedNodes) {
-      const nodeW = 204;
-      const nodeH = 136;
-      if (
-        worldX >= node.x - nodeW / 2 &&
-        worldX <= node.x + nodeW / 2 &&
-        worldY >= node.y - nodeH / 2 &&
-        worldY <= node.y + nodeH / 2
-      ) {
-        onSelectNode(node);
-        break;
-      }
-    }
-
+  const handleMouseUp = () => {
     isDraggingRef.current = false;
   };
 
+  // Xử lý cuộn chuột Zoom
   const handleWheel = (e) => {
     e.preventDefault();
-    const cam = cameraRef.current;
-    const zoomFactor = e.deltaY < 0 ? 1.1 : 0.9;
-    cam.scale = Math.max(0.2, Math.min(2.5, cam.scale * zoomFactor));
-    drawScene();
+    const zoomFactor = e.deltaY < 0 ? 1.08 : 0.92;
+    setCamera((prev) => ({
+      ...prev,
+      scale: Math.max(0.3, Math.min(2.0, prev.scale * zoomFactor))
+    }));
   };
 
-  const resetCamera = () => {
-    cameraRef.current = { x: 0, y: 0, scale: 1.0 };
-    drawScene();
-  };
-
-  const zoomIn = () => {
-    cameraRef.current.scale = Math.min(2.5, cameraRef.current.scale * 1.2);
-    drawScene();
-  };
-
-  const zoomOut = () => {
-    cameraRef.current.scale = Math.max(0.2, cameraRef.current.scale * 0.8);
-    drawScene();
-  };
+  const resetCamera = () => setCamera({ x: 0, y: 0, scale: 0.95 });
+  const zoomIn = () => setCamera((prev) => ({ ...prev, scale: Math.min(2.0, prev.scale * 1.15) }));
+  const zoomOut = () => setCamera((prev) => ({ ...prev, scale: Math.max(0.3, prev.scale * 0.85) }));
 
   return (
-    <div ref={containerRef} className="relative w-full h-full min-h-[460px] overflow-hidden rounded-xl border border-gold/30 bg-black shadow-glow">
-      <canvas
-        ref={canvasRef}
-        onMouseDown={handleMouseDown}
-        onMouseMove={handleMouseMove}
-        onMouseUp={handleMouseUp}
-        onWheel={handleWheel}
-        className="w-full h-full block select-none cursor-grab active:cursor-grabbing"
-      />
+    <div
+      ref={containerRef}
+      onMouseDown={handleMouseDown}
+      onMouseMove={handleMouseMove}
+      onMouseUp={handleMouseUp}
+      onWheel={handleWheel}
+      className="relative w-full h-full min-h-[460px] overflow-hidden rounded-xl border border-gold/30 bg-[#0c0805] shadow-glow select-none cursor-grab active:cursor-grabbing"
+    >
+      {/* VÙNG KHÔNG GIAN BIẾN ĐỔI PAN & ZOOM (GPU CSS TRANSFORM) */}
+      <div
+        className="absolute inset-0 w-full h-full pointer-events-none"
+        style={{
+          transform: `translate(${camera.x}px, ${camera.y}px) scale(${camera.scale})`,
+          transformOrigin: 'center center',
+          transition: isDraggingRef.current ? 'none' : 'transform 0.05s ease-out',
+          willChange: 'transform'
+        }}
+      >
+        {/* TẦNG SVG NỐI DÂY LIÊN KẾT BEZIER */}
+        <svg className="absolute inset-0 w-full h-full overflow-visible pointer-events-none">
+          <defs>
+            <linearGradient id="curve-gold" x1="0%" y1="0%" x2="100%" y2="100%">
+              <stop offset="0%" stopColor="#D4AF37" stopOpacity="0.8" />
+              <stop offset="100%" stopColor="#F59E0B" stopOpacity="0.4" />
+            </linearGradient>
+          </defs>
+
+          {layoutedNodes.map((node) => {
+            if (!node.parentId) return null;
+            const parent = layoutedNodes.find((p) => p.id === node.parentId);
+            if (!parent) return null;
+
+            const isPathActive = activeNodeId === node.id || activeNodeId === parent.id;
+
+            return (
+              <path
+                key={`edge-${parent.id}-${node.id}`}
+                d={`M calc(50% + ${parent.x}px) calc(50% + ${parent.y}px) Q calc(50% + ${parent.x}px) calc(50% + ${node.y}px) calc(50% + ${node.x}px) calc(50% + ${node.y}px)`}
+                fill="none"
+                stroke={isPathActive ? '#F59E0B' : 'rgba(212, 175, 55, 0.35)'}
+                strokeWidth={isPathActive ? '3' : '1.5'}
+                strokeDasharray={isPathActive ? 'none' : '4 2'}
+              />
+            );
+          })}
+        </svg>
+
+        {/* TẦNG CÁC THẺ NODE: MỖI THẺ CHỨA 1 BÀN CỜ THẬT 100% TỪ BOARD.JSX */}
+        {layoutedNodes.map((node) => {
+          const isSelected = activeNodeId === node.id;
+
+          return (
+            <div
+              key={node.id}
+              onClick={(e) => {
+                e.stopPropagation();
+                onSelectNode(node);
+              }}
+              className={`node-card absolute pointer-events-auto cursor-pointer rounded-xl p-2 border flex flex-col items-center gap-1.5 backdrop-blur-md transition-transform ${
+                isSelected
+                  ? 'bg-amber-950/90 border-amber-400 shadow-[0_0_24px_rgba(245,158,11,0.6)] scale-105 z-20'
+                  : 'bg-obsidian-card/95 border-gold/30 hover:border-gold/70 shadow-lg hover:scale-102 z-10'
+              }`}
+              style={{
+                left: `calc(50% + ${node.x}px)`,
+                top: `calc(50% + ${node.y}px)`,
+                transform: 'translate(-50%, -50%)',
+                width: '144px'
+              }}
+            >
+              {/* Header Info */}
+              <div className="w-full flex items-center justify-between text-[11px] font-bold px-0.5">
+                <span className={`truncate max-w-[85px] ${isSelected ? 'text-amber-300 font-extrabold' : 'text-gold'}`}>
+                  {node.title}
+                </span>
+                <span className={`font-mono text-[10px] ${node.score >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                  {node.score !== undefined ? `${node.score > 0 ? '+' : ''}${node.score}` : ''}
+                </span>
+              </div>
+
+              {/* BÀN CỜ THẬT 100% SAO CHÉP TỪ LINH KIỆN BOARD.JSX */}
+              <div className="w-full aspect-[9/10] rounded-lg overflow-hidden border border-gold/30 shadow-inner bg-black">
+                <Board
+                  fen={node.fen}
+                  lastMove={node.from >= 0 ? { from: node.from, to: node.to } : null}
+                  compact={true}
+                  rulers={false}
+                  disabled={true}
+                />
+              </div>
+
+              {/* Footer Meta */}
+              <div className="w-full flex items-center justify-between text-[9px] px-0.5">
+                <span className="font-mono text-cyan-300 font-bold">{node.uci}</span>
+                <span className="px-1.5 py-0.5 rounded bg-gold/15 text-gold/90 font-semibold border border-gold/20">
+                  {node.badge}
+                </span>
+              </div>
+            </div>
+          );
+        })}
+      </div>
 
       {/* Floating Controls */}
-      <div className="absolute top-3 left-3 flex items-center gap-1.5 bg-obsidian/90 p-1.5 rounded-lg border border-gold/30 backdrop-blur-md">
+      <div className="absolute top-3 left-3 flex items-center gap-1.5 bg-obsidian/90 p-1.5 rounded-lg border border-gold/30 backdrop-blur-md z-30">
         <button onClick={zoomIn} title="Phóng to" className="p-1.5 rounded hover:bg-gold/20 text-gold transition">
           <ZoomIn className="w-4 h-4" />
         </button>
@@ -685,15 +324,15 @@ function MindmapCanvasViewport({ treeNodes, activeNodeId, onSelectNode, layoutMo
         </button>
       </div>
 
-      <div className="absolute bottom-3 left-3 text-[11px] text-gold/60 bg-obsidian/90 px-2.5 py-1 rounded border border-gold/20 pointer-events-none">
-        ⚡ 100% Sao Chép Bàn Cờ Thật • Retina 4K Crisp (DPR {dpr}x) • 0% CPU Idle
+      <div className="absolute bottom-3 left-3 text-[11px] text-gold/70 bg-obsidian/90 px-3 py-1 rounded-lg border border-gold/20 pointer-events-none z-30 flex items-center gap-1.5">
+        <Sparkles className="w-3.5 h-3.5 text-gold animate-pulse" /> 100% Bản Sao Chuẩn Bàn Cờ Chính (<code className="text-cyan-300 font-mono">Board.jsx</code>)
       </div>
     </div>
   );
 }
 
 // ============================================================================
-// THANH TIMELINE THẾ TRẬN GỌN GÀNG SẮP XẾP MƯỢT MÀ RETINA
+// THANH TIMELINE THẾ TRẬN GỌN GÀNG RETINA
 // ============================================================================
 function ElegantGameTimeline({ timeline, selectedPly, onSelectPly }) {
   const canvasRef = useRef(null);
@@ -1041,9 +680,9 @@ export function MindmapVisualizer({ show, close, fen, history, score, line, thou
             </div>
             <div>
               <h2 className="text-base font-royal font-bold text-gold flex items-center gap-2">
-                🧠 SƠ ĐỒ TƯ DUY 360° CANVAS VIEWPORT
+                🧠 SƠ ĐỒ TƯ DUY 360° VIEWPORT
                 <span className="px-2 py-0.5 rounded text-[10px] uppercase tracking-wider font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/40">
-                  100% Đồng Bộ Bàn Cờ Thật
+                  100% Bản Sao Bàn Cờ Chính
                 </span>
               </h2>
               <p className="text-xs text-gold/60">
@@ -1085,10 +724,10 @@ export function MindmapVisualizer({ show, close, fen, history, score, line, thou
         {/* MAIN BODY: VIEWPORT + SIDEBAR */}
         <div className="flex-1 overflow-hidden p-4 bg-obsidian/60 grid grid-cols-1 lg:grid-cols-12 gap-4">
           
-          {/* CỘT TRÁI: CANVAS VIEWPORT TỰ ĐỘNG BUNG NODES */}
+          {/* CỘT TRÁI: VIEWPORT NHÚNG TRỰC TIẾP BÀN CỜ THẬT */}
           <div className="lg:col-span-8 flex flex-col gap-3 h-full overflow-hidden">
             <div className="flex-1 relative min-h-[420px]">
-              <MindmapCanvasViewport
+              <MindmapVectorViewport
                 treeNodes={treeNodes}
                 activeNodeId={activeNode ? activeNode.id : 'root'}
                 onSelectNode={(node) => setActiveNode(node)}
@@ -1104,7 +743,7 @@ export function MindmapVisualizer({ show, close, fen, history, score, line, thou
             />
           </div>
 
-          {/* CỘT PHẢI: CHI TIẾT NODE & BÀN CỜ THẬT HOÀNG GIA CHUẨN XÁC 100% */}
+          {/* CỘT PHẢI: CHI TIẾT NODE & BÀN CỜ THẬT HOÀNG GIA ĐẦY ĐỦ */}
           <div className="lg:col-span-4 flex flex-col gap-3 bg-obsidian/80 p-4 rounded-xl border border-gold/20 overflow-y-auto">
             <div className="flex items-center justify-between text-xs border-b border-gold/20 pb-2">
               <span className="font-bold text-gold uppercase">BÀN CỜ THẬT CHI TIẾT</span>
@@ -1113,7 +752,7 @@ export function MindmapVisualizer({ show, close, fen, history, score, line, thou
               </span>
             </div>
 
-            {/* Bàn Cờ Thật 100% Tái Sử Dụng Linh Kiện Board.jsx */}
+            {/* Bàn Cờ Thật Tái Sử Dụng Linh Kiện Board.jsx Đầy Đủ */}
             <div className="w-full flex justify-center py-1">
               <Board
                 fen={activeNode ? activeNode.fen : inspectFen}
