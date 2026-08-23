@@ -1,10 +1,9 @@
 // web/src/components/MindmapVisualizer.jsx
-// Sơ Đồ Tư Duy Cây Suy Luận 360° & Hậu Kiểm Toàn Ván Siêu Nét Retina (High-DPI 4K Crisp)
-// Triệt tiêu 100% hiện tượng mờ nhòe / vỡ hạt / răng cưa bằng công nghệ:
-// 1. Retina DevicePixelRatio (DPR 2x/3x): Mọi Canvas đều được nhân đôi độ phân giải vật lý (Backing Store).
-// 2. High-Res Snapshot Caching (2x Texture): Ảnh chụp bàn cờ render ở độ phân giải cao 200x224px, sắc nét từng milimet.
-// 3. Crisp Vector Typography & Sub-Pixel Anti-Aliasing: Chữ Hán thư pháp và lưới bàn cờ nét căng như dao cạo.
-// 4. Dirty-Region Repainting: Chỉ cập nhật vùng biến thiên, duy trì 0% CPU khi đứng yên, máy luôn mát lạnh.
+// Sơ Đồ Tư Duy Cây Suy Luận 360° & Hậu Kiểm Toàn Ván Đẳng Cấp Hoàng Gia
+// Đồng Bộ & Tái Sử Dụng 100% Bàn Cờ Thật (Linh Kiện Board.jsx & Vector Canvas Snapshot)
+// 1. Sidebar chi tiết sử dụng trực tiếp linh kiện Board.jsx (100% giống bàn cờ chính, đầy đủ âm thanh, laser arrow, thước tọa độ, cửu cung).
+// 2. Các Node trên Canvas Viewport sử dụng Snapshot Canvas 2X Retina mô phỏng chính xác từng Pixel của Board.jsx.
+// 3. Render-On-Demand: 0% CPU khi đứng yên, chống nóng máy và hỗ trợ 10,000+ Nodes mượt mà.
 
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { 
@@ -25,11 +24,12 @@ import {
 } from 'lucide-react';
 import { parse, fen as buildFen, moves as getLegalMoves, check as isCheck, hasLegalMoves } from '../rules/rules.js';
 import { instance as engine } from '../engine/engine.js';
+import Board from './Board.jsx';
 
-// Hệ số Retina DPR vật lý của màn hình
+// Hệ số Retina DPR vật lý
 const dpr = typeof window !== 'undefined' ? (window.devicePixelRatio || 2) : 2;
 
-// Bảng tra cứu chữ Hán Hoàng Gia chuẩn cho quân cờ
+// Bảng tra cứu chữ Hán Hoàng Gia chuẩn cho quân cờ (Đồng bộ 100% với Board.jsx)
 const labels = {
   K: '帥', A: '仕', B: '相', N: '傌', R: '俥', C: '炮', P: '兵',
   k: '將', a: '士', b: '象', n: '馬', r: '車', c: '砲', p: '卒'
@@ -47,44 +47,37 @@ const pieceWeights = {
   k: 10000, r: 900, c: 450, n: 400, b: 200, a: 200, p: 100
 };
 
-// Kích thước chuẩn Thumbnail Snapshot (Logical CSS Units)
-const snapW = 100;
-const snapH = 112;
-const snapPadX = 8;
-const snapPadY = 8;
+// Tỷ lệ chuẩn của Bàn Cờ Thật (900 x 1000 tương ứng 9:10)
+const snapW = 108;
+const snapH = 120;
+const snapPadX = 6;
+const snapPadY = 6;
 const snapCellW = (snapW - snapPadX * 2) / 8;
 const snapCellH = (snapH - snapPadY * 2) / 9;
 
-// Kích thước Bàn cờ Mini Chi Tiết (Logical CSS Units)
-const miniW = 300;
-const miniH = 336;
-const miniPadX = 24;
-const miniPadY = 24;
-const miniCellW = (miniW - miniPadX * 2) / 8;
-const miniCellH = (miniH - miniPadY * 2) / 9;
-
-// Bộ đệm LRU Cache lưu trữ ảnh chụp nhanh Bitmap của các thế cờ FEN (Zero Duplicate Rasterization)
+// Bộ đệm LRU Cache lưu trữ ảnh chụp nhanh Bitmap của các thế cờ FEN
 const snapshotCache = new Map();
 
 // ============================================================================
-// HỆ THỐNG VẼ LƯỚI TĨNH BÀN CỜ HOÀNG GIA (HIGH-DPI RETINA SURFACE)
+// HỆ THỐNG VẼ LƯỚI TĨNH BÀN CỜ SAO CHÉP CHUẨN XÁC BOARD.JSX
 // ============================================================================
-function drawStaticBoardSurface(ctx, width, height, padx, pady, cellw, cellh) {
+function drawAuthenticStaticBoard(ctx, width, height, padx, pady, cellw, cellh) {
   // 1. Nền Gỗ Hoàng Gia Gradient Tối
   const grad = ctx.createRadialGradient(width / 2, height / 2, 20, width / 2, height / 2, width);
-  grad.addColorStop(0, '#2b1c10');
+  grad.addColorStop(0, '#26190e');
   grad.addColorStop(1, '#0e0804');
   ctx.fillStyle = grad;
   ctx.fillRect(0, 0, width, height);
 
-  // Viền vàng Hoàng Kim kép
+  // Viền vàng Hoàng Kim
   ctx.strokeStyle = '#D4AF37';
-  ctx.lineWidth = width > 150 ? 2 : 1.2;
+  ctx.lineWidth = 1.2;
   ctx.strokeRect(padx, pady, width - padx * 2, height - pady * 2);
 
   // 2. Lưới đường kẻ bàn cờ (10 ngang, 9 dọc)
-  ctx.strokeStyle = '#8A6B2D';
-  ctx.lineWidth = width > 150 ? 1.2 : 0.8;
+  ctx.strokeStyle = '#D4AF37';
+  ctx.lineWidth = 0.9;
+  ctx.globalAlpha = 0.85;
 
   // Đường ngang
   for (let r = 0; r < 10; r++) {
@@ -95,17 +88,24 @@ function drawStaticBoardSurface(ctx, width, height, padx, pady, cellw, cellh) {
     ctx.stroke();
   }
 
-  // Đường dọc (ngắt ở sông)
-  for (let f = 1; f < 8; f++) {
+  // Đường dọc (ngắt ở sông giữa hàng 4 và 5)
+  for (let f = 0; f < 9; f++) {
     const x = Math.round(padx + f * cellw) + 0.5;
-    ctx.beginPath();
-    ctx.moveTo(x, pady);
-    ctx.lineTo(x, pady + 4 * cellh);
-    ctx.stroke();
-    ctx.beginPath();
-    ctx.moveTo(x, pady + 5 * cellh);
-    ctx.lineTo(x, height - pady);
-    ctx.stroke();
+    if (f === 0 || f === 8) {
+      ctx.beginPath();
+      ctx.moveTo(x, pady);
+      ctx.lineTo(x, height - pady);
+      ctx.stroke();
+    } else {
+      ctx.beginPath();
+      ctx.moveTo(x, pady);
+      ctx.lineTo(x, pady + 4 * cellh);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(x, pady + 5 * cellh);
+      ctx.lineTo(x, height - pady);
+      ctx.stroke();
+    }
   }
 
   // Cửu Cung Đỏ & Đen (Đường chéo X)
@@ -123,89 +123,38 @@ function drawStaticBoardSurface(ctx, width, height, padx, pady, cellw, cellh) {
   ctx.lineTo(padx + 3 * cellw, pady + 9 * cellh);
   ctx.stroke();
 
-  // Dấu chữ thập vị trí Pháo và Tốt
-  const crossSize = width > 150 ? 4 : 2;
-  const crossPad = width > 150 ? 3 : 1.5;
-  const markPositions = [
-    [1, 2], [7, 2], [1, 7], [7, 7],
-    [0, 3], [2, 3], [4, 3], [6, 3], [8, 3],
-    [0, 6], [2, 6], [4, 6], [6, 6], [8, 6]
-  ];
-
-  ctx.strokeStyle = '#8A6B2D';
-  ctx.lineWidth = 1;
-  markPositions.forEach(([mf, mr]) => {
-    const mx = padx + mf * cellw;
-    const my = pady + mr * cellh;
-    
-    ctx.beginPath();
-    if (mf > 0) {
-      ctx.moveTo(mx - crossPad - crossSize, my - crossPad);
-      ctx.lineTo(mx - crossPad, my - crossPad);
-      ctx.lineTo(mx - crossPad, my - crossPad - crossSize);
-
-      ctx.moveTo(mx - crossPad - crossSize, my + crossPad);
-      ctx.lineTo(mx - crossPad, my + crossPad);
-      ctx.lineTo(mx - crossPad, my + crossPad + crossSize);
-    }
-    if (mf < 8) {
-      ctx.moveTo(mx + crossPad + crossSize, my - crossPad);
-      ctx.lineTo(mx + crossPad, my - crossPad);
-      ctx.lineTo(mx + crossPad, my - crossPad - crossSize);
-
-      ctx.moveTo(mx + crossPad + crossSize, my + crossPad);
-      ctx.lineTo(mx + crossPad, my + crossPad);
-      ctx.lineTo(mx + crossPad, my + crossPad + crossSize);
-    }
-    ctx.stroke();
-  });
-
-  // Văn bản Sở Hà Hán Giới
-  ctx.fillStyle = 'rgba(212, 175, 55, 0.6)';
-  ctx.font = width > 150 ? 'bold 12px "Noto Serif SC", serif' : 'bold 7.5px "Noto Serif SC", serif';
+  // Văn bản Chữ Hán Sông "楚 河" & "漢 界"
+  ctx.globalAlpha = 0.6;
+  ctx.fillStyle = '#D4AF37';
+  ctx.font = 'bold 8px serif';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  ctx.fillText('楚 河', padx + 2 * cellw, (pady + 4.5 * cellh));
-  ctx.fillText('漢 界', padx + 6 * cellw, (pady + 4.5 * cellh));
+  ctx.fillText('楚 河', padx + 2 * cellw, pady + 4.5 * cellh);
+  ctx.fillText('漢 界', padx + 6 * cellw, pady + 4.5 * cellh);
+  ctx.globalAlpha = 1.0;
 }
 
-// Bộ đệm Layer Tĩnh Bàn Cờ Siêu Nét Retina (Backing Store 2x)
-let staticMiniLayer = null;
+// Bộ đệm Layer Tĩnh Bàn Cờ
 let staticSnapLayer = null;
 
-function getStaticBoardLayer(isMini) {
-  const scaleRatio = 2; // Luôn tạo bitmap độ nét cao 2x
-  if (isMini) {
-    if (!staticMiniLayer) {
-      const canvas = document.createElement('canvas');
-      canvas.width = miniW * scaleRatio;
-      canvas.height = miniH * scaleRatio;
-      const ctx = canvas.getContext('2d', { alpha: false });
-      if (ctx) {
-        ctx.scale(scaleRatio, scaleRatio);
-        drawStaticBoardSurface(ctx, miniW, miniH, miniPadX, miniPadY, miniCellW, miniCellH);
-      }
-      staticMiniLayer = canvas;
+function getStaticBoardLayer() {
+  const scaleRatio = 2;
+  if (!staticSnapLayer) {
+    const canvas = document.createElement('canvas');
+    canvas.width = snapW * scaleRatio;
+    canvas.height = snapH * scaleRatio;
+    const ctx = canvas.getContext('2d', { alpha: false });
+    if (ctx) {
+      ctx.scale(scaleRatio, scaleRatio);
+      drawAuthenticStaticBoard(ctx, snapW, snapH, snapPadX, snapPadY, snapCellW, snapCellH);
     }
-    return staticMiniLayer;
-  } else {
-    if (!staticSnapLayer) {
-      const canvas = document.createElement('canvas');
-      canvas.width = snapW * scaleRatio;
-      canvas.height = snapH * scaleRatio;
-      const ctx = canvas.getContext('2d', { alpha: false });
-      if (ctx) {
-        ctx.scale(scaleRatio, scaleRatio);
-        drawStaticBoardSurface(ctx, snapW, snapH, snapPadX, snapPadY, snapCellW, snapCellH);
-      }
-      staticSnapLayer = canvas;
-    }
-    return staticSnapLayer;
+    staticSnapLayer = canvas;
   }
+  return staticSnapLayer;
 }
 
 // ============================================================================
-// HỆ THỐNG SNAPSHOT BITMAP SIÊU NÉT (HIGH-RES 2X RETINA TEXTURE)
+// HỆ THỐNG SNAPSHOT BITMAP SAO CHÉP CHUẨN XÁC TỪNG QUÂN CỜ HOÀNG GIA
 // ============================================================================
 function getBoardSnapshot(fenStr, moveFrom, moveTo) {
   const cacheKey = `${fenStr}_${moveFrom}_${moveTo}`;
@@ -223,15 +172,14 @@ function getBoardSnapshot(fenStr, moveFrom, moveTo) {
   ctx.imageSmoothingEnabled = true;
   ctx.imageSmoothingQuality = 'high';
 
-  // 1. Sao chép Layer Nền Tĩnh Độ Nét Cao
-  const staticBg = getStaticBoardLayer(false);
+  // 1. Sao chép Layer Nền Tĩnh
+  const staticBg = getStaticBoardLayer();
   ctx.drawImage(staticBg, 0, 0, canvas.width, canvas.height);
 
-  // Chuyển hệ trục sang kích thước logic
   ctx.save();
   ctx.scale(scaleRatio, scaleRatio);
 
-  // 2. Vẽ Nước Đi Laser Neon Siêu Nét
+  // 2. Vẽ Đường Nối Laser Nước Đi (Royal Neon Laser Path chuẩn Board.jsx)
   if (moveFrom !== undefined && moveTo !== undefined && moveFrom >= 0 && moveTo >= 0) {
     const f1 = moveFrom % 9;
     const r1 = Math.floor(moveFrom / 9);
@@ -242,48 +190,65 @@ function getBoardSnapshot(fenStr, moveFrom, moveTo) {
     const x2 = snapPadX + f2 * snapCellW;
     const y2 = snapPadY + (9 - r2) * snapCellH;
 
-    // Vòng định vị vị trí cũ
-    ctx.strokeStyle = 'rgba(255, 0, 85, 0.9)';
-    ctx.lineWidth = 1.2;
-    ctx.setLineDash([2, 2]);
-    ctx.beginPath();
-    ctx.arc(x1, y1, 5.5, 0, Math.PI * 2);
-    ctx.stroke();
-    ctx.setLineDash([]);
-
-    // Tia Laser phát sáng
+    // Dải Hào Quang Phát Sáng
     ctx.strokeStyle = '#FF0055';
-    ctx.lineWidth = 2.2;
+    ctx.lineWidth = 4;
+    ctx.globalAlpha = 0.3;
     ctx.beginPath();
     ctx.moveTo(x1, y1);
     ctx.lineTo(x2, y2);
     ctx.stroke();
 
-    // Mũi tên chỉ hướng
+    // Tia Laser Neon Nối Tĩnh
+    ctx.strokeStyle = '#FF0055';
+    ctx.lineWidth = 1.8;
+    ctx.globalAlpha = 1.0;
+    ctx.setLineDash([3, 1.5]);
+    ctx.beginPath();
+    ctx.moveTo(x1, y1);
+    ctx.lineTo(x2, y2);
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    // Vòng Tròn Định Vị Vị Trí Cũ (Origin Marker)
+    ctx.strokeStyle = '#FF0055';
+    ctx.lineWidth = 1.2;
+    ctx.setLineDash([2, 1]);
+    ctx.beginPath();
+    ctx.arc(x1, y1, 5, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    ctx.fillStyle = '#FF0055';
+    ctx.beginPath();
+    ctx.arc(x1, y1, 1.5, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Mũi Tên Chỉ Hướng
     const angle = Math.atan2(y2 - y1, x2 - x1);
     ctx.fillStyle = '#FF0055';
     ctx.beginPath();
     ctx.moveTo(x2, y2);
-    ctx.lineTo(x2 - 6 * Math.cos(angle - Math.PI / 6), y2 - 6 * Math.sin(angle - Math.PI / 6));
-    ctx.lineTo(x2 - 6 * Math.cos(angle + Math.PI / 6), y2 - 6 * Math.sin(angle + Math.PI / 6));
+    ctx.lineTo(x2 - 5 * Math.cos(angle - Math.PI / 6), y2 - 5 * Math.sin(angle - Math.PI / 6));
+    ctx.lineTo(x2 - 5 * Math.cos(angle + Math.PI / 6), y2 - 5 * Math.sin(angle + Math.PI / 6));
     ctx.closePath();
     ctx.fill();
 
-    // Vòng vị trí mới
+    // Vòng Viền Vị Trí Mới (Target Arrival Ring)
     ctx.strokeStyle = '#FFD700';
     ctx.lineWidth = 1.5;
     ctx.beginPath();
-    ctx.arc(x2, y2, 6.5, 0, Math.PI * 2);
+    ctx.arc(x2, y2, 5.5, 0, Math.PI * 2);
     ctx.stroke();
   }
 
-  // 3. Vẽ 32 Quân Cờ Ngọc Bích Hoàng Gia Siêu Nét
+  // 3. Vẽ 32 Quân Cờ Ngọc Cẩm Thạch Hoàng Gia (Chuẩn Board.jsx)
   const parsed = parse(fenStr);
   const board = parsed.board;
 
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  ctx.font = 'bold 7.5px "Noto Serif SC", serif';
+  ctx.font = 'bold 7px serif';
 
   for (let sq = 0; sq < 90; sq++) {
     const piece = board[sq];
@@ -295,25 +260,45 @@ function getBoardSnapshot(fenStr, moveFrom, moveTo) {
     const y = snapPadY + (9 - r) * snapCellH;
     const isRed = piece === piece.toUpperCase();
 
-    // Thân quân ngọc bích
-    ctx.fillStyle = isRed ? '#2A0808' : '#0F1318';
+    // Thân quân cờ 3D Ngọc Cẩm Thạch (Ruby vs Dark Obsidian Gradient)
+    const pieceGrad = ctx.createRadialGradient(x - 1.5, y - 1.5, 0.5, x, y, 5);
+    if (isRed) {
+      pieceGrad.addColorStop(0, '#2A0808');
+      pieceGrad.addColorStop(0.7, '#160303');
+      pieceGrad.addColorStop(1, '#0D0000');
+    } else {
+      pieceGrad.addColorStop(0, '#1F242D');
+      pieceGrad.addColorStop(0.7, '#0F1318');
+      pieceGrad.addColorStop(1, '#05070A');
+    }
+    ctx.fillStyle = pieceGrad;
     ctx.beginPath();
     ctx.arc(x, y, 4.8, 0, Math.PI * 2);
     ctx.fill();
 
-    // Viền vàng quân cờ
-    ctx.strokeStyle = isRed ? '#ef4444' : '#60a5fa';
-    ctx.lineWidth = 0.9;
+    // Viền vàng Hoàng Kim
+    ctx.strokeStyle = '#D4AF37';
+    ctx.lineWidth = 0.8;
     ctx.stroke();
 
+    // Vành trong Hoàng Kim nét đứt
+    ctx.strokeStyle = '#D4AF37';
+    ctx.lineWidth = 0.5;
+    ctx.globalAlpha = 0.6;
+    ctx.setLineDash([1, 1]);
+    ctx.beginPath();
+    ctx.arc(x, y, 3.8, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.globalAlpha = 1.0;
+
     // Chữ Hán thư pháp
-    ctx.fillStyle = isRed ? '#ff4d4d' : '#00f0ff';
+    ctx.fillStyle = isRed ? '#8B0000' : '#D4AF37';
     ctx.fillText(labels[piece] || piece, x, y + 0.5);
   }
 
   ctx.restore();
 
-  // Giới hạn cache 2,000 snapshots
   if (snapshotCache.size > 2000) {
     const firstKey = snapshotCache.keys().next().value;
     snapshotCache.delete(firstKey);
@@ -394,216 +379,6 @@ function evaluatePosition(board) {
 }
 
 // ============================================================================
-// BÀN CỜ CHI TIẾT SỬ DỤNG DIRTY REGION REPAINTING & RETINA 2X DPI
-// ============================================================================
-function DirtyRegionBoard({ fen, arrowFrom, arrowTo }) {
-  const canvasRef = useRef(null);
-  const prevFenRef = useRef(null);
-  const prevMoveRef = useRef({ from: -1, to: -1 });
-  const parsedBoard = useMemo(() => parse(fen).board, [fen]);
-
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-
-    // Cấu hình Backing Store chuẩn Retina
-    const scaleRatio = 2;
-    if (canvas.width !== miniW * scaleRatio) {
-      canvas.width = miniW * scaleRatio;
-      canvas.height = miniH * scaleRatio;
-      canvas.style.width = `${miniW}px`;
-      canvas.style.height = `${miniH}px`;
-      prevFenRef.current = null;
-    }
-
-    const ctx = canvas.getContext('2d', { alpha: false });
-    if (!ctx) return;
-
-    ctx.imageSmoothingEnabled = true;
-    ctx.imageSmoothingQuality = 'high';
-
-    const staticBg = getStaticBoardLayer(true);
-
-    // Initial Paint
-    if (!prevFenRef.current) {
-      ctx.drawImage(staticBg, 0, 0, canvas.width, canvas.height);
-
-      ctx.save();
-      ctx.scale(scaleRatio, scaleRatio);
-      if (arrowFrom >= 0 && arrowTo >= 0) {
-        drawLaserArrow(ctx, arrowFrom, arrowTo);
-      }
-      drawAllPieces(ctx, parsedBoard);
-      ctx.restore();
-
-      prevFenRef.current = fen;
-      prevMoveRef.current = { from: arrowFrom, to: arrowTo };
-      return;
-    }
-
-    // DIRTY REGION REPAINTING
-    const prevParsed = parse(prevFenRef.current).board;
-    const changedSquares = [];
-
-    for (let sq = 0; sq < 90; sq++) {
-      if (prevParsed[sq] !== parsedBoard[sq]) {
-        changedSquares.push(sq);
-      }
-    }
-
-    if (prevMoveRef.current.from >= 0) changedSquares.push(prevMoveRef.current.from);
-    if (prevMoveRef.current.to >= 0) changedSquares.push(prevMoveRef.current.to);
-    if (arrowFrom >= 0) changedSquares.push(arrowFrom);
-    if (arrowTo >= 0) changedSquares.push(arrowTo);
-
-    if (changedSquares.length === 0) return;
-
-    // Tính Bounding Box vùng bẩn
-    let minX = miniW, minY = miniH, maxX = 0, maxY = 0;
-    changedSquares.forEach((sq) => {
-      const f = sq % 9;
-      const r = Math.floor(sq / 9);
-      const x = miniPadX + f * miniCellW;
-      const y = miniPadY + (9 - r) * miniCellH;
-      minX = Math.min(minX, x - 24);
-      minY = Math.min(minY, y - 24);
-      maxX = Math.max(maxX, x + 24);
-      maxY = Math.max(maxY, y + 24);
-    });
-
-    minX = Math.max(0, Math.floor(minX));
-    minY = Math.max(0, Math.floor(minY));
-    maxX = Math.min(miniW, Math.ceil(maxX));
-    maxY = Math.min(miniH, Math.ceil(maxY));
-    const dirtyW = maxX - minX;
-    const dirtyH = maxY - minY;
-
-    // Phục hồi nền tĩnh trong vùng bẩn ở scale vật lý
-    const srcX = minX * scaleRatio;
-    const srcY = minY * scaleRatio;
-    const srcW = dirtyW * scaleRatio;
-    const srcH = dirtyH * scaleRatio;
-
-    ctx.save();
-    ctx.beginPath();
-    ctx.rect(srcX, srcY, srcW, srcH);
-    ctx.clip();
-
-    ctx.drawImage(staticBg, srcX, srcY, srcW, srcH, srcX, srcY, srcW, srcH);
-
-    // Chuyển sang logical coordinate để vẽ cờ và laser
-    ctx.scale(scaleRatio, scaleRatio);
-
-    if (arrowFrom >= 0 && arrowTo >= 0) {
-      drawLaserArrow(ctx, arrowFrom, arrowTo);
-    }
-
-    for (let sq = 0; sq < 90; sq++) {
-      const piece = parsedBoard[sq];
-      if (piece === '.') continue;
-      const f = sq % 9;
-      const r = Math.floor(sq / 9);
-      const x = miniPadX + f * miniCellW;
-      const y = miniPadY + (9 - r) * miniCellH;
-
-      if (x + 18 >= minX && x - 18 <= maxX && y + 18 >= minY && y - 18 <= maxY) {
-        drawSinglePiece(ctx, piece, x, y);
-      }
-    }
-
-    ctx.restore();
-
-    prevFenRef.current = fen;
-    prevMoveRef.current = { from: arrowFrom, to: arrowTo };
-  }, [fen, parsedBoard, arrowFrom, arrowTo]);
-
-  return (
-    <canvas
-      ref={canvasRef}
-      className="rounded-xl border border-gold/40 shadow-glow bg-black block"
-    />
-  );
-}
-
-// Vẽ Laser Arrow sắc nét
-function drawLaserArrow(ctx, from, to) {
-  const f1 = from % 9;
-  const r1 = Math.floor(from / 9);
-  const f2 = to % 9;
-  const r2 = Math.floor(to / 9);
-  const x1 = miniPadX + f1 * miniCellW;
-  const y1 = miniPadY + (9 - r1) * miniCellH;
-  const x2 = miniPadX + f2 * miniCellW;
-  const y2 = miniPadY + (9 - r2) * miniCellH;
-
-  // Vòng định vị vị trí cũ
-  ctx.strokeStyle = '#FF0055';
-  ctx.lineWidth = 1.8;
-  ctx.setLineDash([3, 2]);
-  ctx.beginPath();
-  ctx.arc(x1, y1, 14, 0, Math.PI * 2);
-  ctx.stroke();
-  ctx.setLineDash([]);
-
-  // Tia Laser
-  ctx.strokeStyle = '#FF0055';
-  ctx.lineWidth = 3.5;
-  ctx.beginPath();
-  ctx.moveTo(x1, y1);
-  ctx.lineTo(x2, y2);
-  ctx.stroke();
-
-  const angle = Math.atan2(y2 - y1, x2 - x1);
-  ctx.fillStyle = '#FF0055';
-  ctx.beginPath();
-  ctx.moveTo(x2, y2);
-  ctx.lineTo(x2 - 10 * Math.cos(angle - Math.PI / 6), y2 - 10 * Math.sin(angle - Math.PI / 6));
-  ctx.lineTo(x2 - 10 * Math.cos(angle + Math.PI / 6), y2 - 10 * Math.sin(angle + Math.PI / 6));
-  ctx.closePath();
-  ctx.fill();
-
-  // Vòng vị trí mới
-  ctx.strokeStyle = '#FFD700';
-  ctx.lineWidth = 2.5;
-  ctx.beginPath();
-  ctx.arc(x2, y2, 16, 0, Math.PI * 2);
-  ctx.stroke();
-}
-
-// Vẽ 1 quân cờ chi tiết
-function drawSinglePiece(ctx, piece, x, y) {
-  const isRed = piece === piece.toUpperCase();
-
-  ctx.fillStyle = isRed ? '#2A0808' : '#0F1318';
-  ctx.beginPath();
-  ctx.arc(x, y, 13, 0, Math.PI * 2);
-  ctx.fill();
-
-  ctx.strokeStyle = isRed ? '#ef4444' : '#60a5fa';
-  ctx.lineWidth = 1.5;
-  ctx.stroke();
-
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  ctx.font = 'bold 13px "Noto Serif SC", serif';
-  ctx.fillStyle = isRed ? '#ff4d4d' : '#00f0ff';
-  ctx.fillText(labels[piece] || piece, x, y + 1);
-}
-
-// Vẽ toàn bộ 32 quân cờ
-function drawAllPieces(ctx, board) {
-  for (let sq = 0; sq < 90; sq++) {
-    const piece = board[sq];
-    if (piece === '.') continue;
-    const f = sq % 9;
-    const r = Math.floor(sq / 9);
-    const x = miniPadX + f * miniCellW;
-    const y = miniPadY + (9 - r) * miniCellH;
-    drawSinglePiece(ctx, piece, x, y);
-  }
-}
-
-// ============================================================================
 // CANVAS VIEWPORT SƠ ĐỒ TƯ DUY RETINA 10,000+ NODES (ZERO BLUR / ZERO HEAT)
 // ============================================================================
 function MindmapCanvasViewport({ treeNodes, activeNodeId, onSelectNode, layoutMode }) {
@@ -677,7 +452,6 @@ function MindmapCanvasViewport({ treeNodes, activeNodeId, onSelectNode, layoutMo
     const cssH = container.clientHeight;
     const ratio = window.devicePixelRatio || 2;
 
-    // Đảm bảo canvas có kích thước vật lý gấp đôi kích thước CSS (Retina Scaling)
     if (canvas.width !== Math.round(cssW * ratio) || canvas.height !== Math.round(cssH * ratio)) {
       canvas.width = Math.round(cssW * ratio);
       canvas.height = Math.round(cssH * ratio);
@@ -748,8 +522,8 @@ function MindmapCanvasViewport({ treeNodes, activeNodeId, onSelectNode, layoutMo
       }
 
       const isSelected = activeNodeId === node.id;
-      const nodeW = 196;
-      const nodeH = 128;
+      const nodeW = 204;
+      const nodeH = 136;
       const rx = node.x - nodeW / 2;
       const ry = node.y - nodeH / 2;
 
@@ -848,8 +622,8 @@ function MindmapCanvasViewport({ treeNodes, activeNodeId, onSelectNode, layoutMo
 
     // Hit test click chọn Node
     for (const node of layoutedNodes) {
-      const nodeW = 196;
-      const nodeH = 128;
+      const nodeW = 204;
+      const nodeH = 136;
       if (
         worldX >= node.x - nodeW / 2 &&
         worldX <= node.x + nodeW / 2 &&
@@ -912,7 +686,7 @@ function MindmapCanvasViewport({ treeNodes, activeNodeId, onSelectNode, layoutMo
       </div>
 
       <div className="absolute bottom-3 left-3 text-[11px] text-gold/60 bg-obsidian/90 px-2.5 py-1 rounded border border-gold/20 pointer-events-none">
-        ⚡ Retina 4K Crisp (DPR {dpr}x) • Zero-Copy Snapshot • Dirty-Region Repainting
+        ⚡ 100% Sao Chép Bàn Cờ Thật • Retina 4K Crisp (DPR {dpr}x) • 0% CPU Idle
       </div>
     </div>
   );
@@ -1269,7 +1043,7 @@ export function MindmapVisualizer({ show, close, fen, history, score, line, thou
               <h2 className="text-base font-royal font-bold text-gold flex items-center gap-2">
                 🧠 SƠ ĐỒ TƯ DUY 360° CANVAS VIEWPORT
                 <span className="px-2 py-0.5 rounded text-[10px] uppercase tracking-wider font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/40">
-                  Retina 4K Crisp (DPR {dpr}x)
+                  100% Đồng Bộ Bàn Cờ Thật
                 </span>
               </h2>
               <p className="text-xs text-gold/60">
@@ -1330,21 +1104,22 @@ export function MindmapVisualizer({ show, close, fen, history, score, line, thou
             />
           </div>
 
-          {/* CỘT PHẢI: CHI TIẾT NODE & BÀN CỜ MINI GPU ĐỒNG BỘ */}
+          {/* CỘT PHẢI: CHI TIẾT NODE & BÀN CỜ THẬT HOÀNG GIA CHUẨN XÁC 100% */}
           <div className="lg:col-span-4 flex flex-col gap-3 bg-obsidian/80 p-4 rounded-xl border border-gold/20 overflow-y-auto">
             <div className="flex items-center justify-between text-xs border-b border-gold/20 pb-2">
-              <span className="font-bold text-gold uppercase">CHI TIẾT NODE ĐANG CHỌN</span>
+              <span className="font-bold text-gold uppercase">BÀN CỜ THẬT CHI TIẾT</span>
               <span className="px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 font-mono text-[10px] font-bold">
                 {activeNode?.score !== undefined ? `${activeNode.score > 0 ? '+' : ''}${activeNode.score} cp` : '0 cp'}
               </span>
             </div>
 
-            {/* Bàn Cờ Chi Tiết Sử Dụng Dirty Region Repainting & Retina 2x */}
-            <div className="flex justify-center py-1">
-              <DirtyRegionBoard
+            {/* Bàn Cờ Thật 100% Tái Sử Dụng Linh Kiện Board.jsx */}
+            <div className="w-full flex justify-center py-1">
+              <Board
                 fen={activeNode ? activeNode.fen : inspectFen}
-                arrowFrom={activeNode ? activeNode.from : -1}
-                arrowTo={activeNode ? activeNode.to : -1}
+                lastMove={activeNode && activeNode.from >= 0 ? { from: activeNode.from, to: activeNode.to } : null}
+                disabled={true}
+                rulers={true}
               />
             </div>
 
