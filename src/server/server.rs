@@ -258,45 +258,268 @@ impl Server {
         Ok(())
     }
 
-    /// Luồng tự động ngầm làm giàu ký ức kinh nghiệm liên tục (.agents/memory/experience_store.bin)
+    /// Luồng tự động ngầm làm giàu ký ức kinh nghiệm bằng Động cơ Nước Lũ Tràn Nhánh (Autonomous Waterfall Flood Engine)
     pub fn start_autonomous_enrichment(&self) {
-        println!("[AUTONOMOUS ENRICHMENT] 🚀 Đã kích hoạt Luồng Ngầm Tự Động Làm Giàu Ký Ức Kinh Nghiệm...");
-        let base_fens = [
-            "rnbakabnr/9/1c5c1/p1p1p1p1p/9/9/P1P1P1P1P/1C5C1/9/RNBAKABNR w - - 0 1",
-            "rnbakabnr/9/1c5c1/p1p1p1p1p/9/9/P1P1P1P1P/1C4NC1/9/RNBAKAB1R b - - 0 1",
-            "rnbakab1r/9/1c4nc1/p1p1p1p1p/9/9/P1P1P1P1P/1C4NC1/9/RNBAKAB1R w - - 0 1",
-            "r1bakab2/8r/2n3nc1/p1p1p1p1p/4c4/2P1P1P2/P7P/4C1NC1/8R/RNBAKAB2 b - - 0 1",
+        println!("[AUTONOMOUS ENRICHMENT] 🌊 Đã kích hoạt Động Cơ Nước Lũ Tràn Nhánh Ngầm (Autonomous Waterfall Flood Engine)...");
+        let shard = crate::learn::shard::Shard::default();
+
+        let openings = [
+            (
+                "Thuận Pháo Kinh Điển",
+                vec!["h2e2", "h7e7"],
+            ),
+            (
+                "Bình Phong Mã Phá Trung Pháo",
+                vec!["h2e2", "b9c7"],
+            ),
+            (
+                "Tiên Nhân Chỉ Lộ",
+                vec!["g3g4"],
+            ),
+            (
+                "Phi Tượng Cuộc",
+                vec!["g0e2"],
+            ),
+            (
+                "Khởi Mã Cuộc",
+                vec!["h0g2"],
+            ),
+            (
+                "Nghịch Pháo Đối Công",
+                vec!["h2e2", "b7e7"],
+            ),
+            (
+                "Quá Cung Pháo",
+                vec!["h2d2"],
+            ),
+            (
+                "Đơn Đề Mã Phòng Ngự",
+                vec!["h2e2", "b9c7", "h0g2", "h9i7"],
+            ),
         ];
 
-        let mut step = 0;
+        let mut opening_idx = 0;
+
         loop {
-            thread::sleep(Duration::from_millis(1500));
-            let fen_str = base_fens[step % base_fens.len()];
-            step += 1;
+            let (name, seed) = &openings[opening_idx % openings.len()];
+            opening_idx += 1;
 
-            let mut pos = Parser::parse(fen_str);
-
-            // Thực hiện nước đi hợp lệ ngẫu nhiên để mở rộng không gian trạng thái (State Space Expansion)
-            let mut moves = List::new();
-            gen(&mut pos, &mut moves);
-            if moves.len() > 0 {
-                let m = moves[step % moves.len()];
-                pos.apply(m.from, m.to);
+            // 1. Khởi tạo bàn cờ thế trận mào đầu
+            let mut root_pos = Parser::parse(Parser::DEFAULT);
+            for mv_str in seed {
+                let mv = Format::decode(mv_str);
+                if mv.valid() {
+                    root_pos.apply(mv.from, mv.to);
+                }
             }
 
-            let mb = self.hash.load(Ordering::Relaxed);
-            let mut search = Search::new(mb);
-            let mut limit = Limits::new();
-            limit.depth = 6; // Độ sâu 6 làm giàu ngầm hiệu năng cao 0₫
+            // 2. Sinh danh sách các nhánh mào đầu chính
+            let mut root_list = crate::movegen::types::List::new();
+            crate::movegen::legal::legal(&mut root_pos, &mut root_list);
 
-            let mut replay = Replay::new();
-            if LearnStore::load(&mut replay, DATASET).is_ok() {
-                search.tt.populate(&replay);
-            }
+            let mut root_moves: Vec<crate::movegen::types::Move> = (0..root_list.count).map(|i| root_list.items[i]).collect();
+            root_moves.sort_by_key(|&m| {
+                let is_cap = root_pos.grid[m.to as usize] < 14;
+                if is_cap { 0 } else { 1 }
+            });
 
-            let res = search.go(&pos, &limit);
-            if res.nodes > 0 {
-                auto_record(&search.tt, pos.hash, res.best.raw(), res.score);
+            let top_branches = &root_moves[0..root_moves.len().min(6)];
+            let total_branches = top_branches.len();
+
+            for (b_idx, &branch_move) in top_branches.iter().enumerate() {
+                // Nhường CPU cho các request Web UI / WebSocket của người dùng
+                thread::sleep(Duration::from_millis(300));
+
+                let mut branch_pos = root_pos;
+                branch_pos.apply(branch_move.from, branch_move.to);
+
+                // Cấu trúc nút cây ngầm trong luồng background
+                #[derive(Clone)]
+                #[allow(dead_code)]
+                struct FloodNode {
+                    id: usize,
+                    parent: Option<usize>,
+                    hash: u64,
+                    pos: crate::board::Position,
+                    mv: crate::movegen::types::Move,
+                    ply: u8,
+                    score: i32,
+                    best: crate::movegen::types::Move,
+                    mate: bool,
+                    kids: Vec<usize>,
+                }
+
+                let mut nodes: Vec<FloodNode> = Vec::with_capacity(8192);
+                let mut seen: std::collections::HashSet<u64> = std::collections::HashSet::with_capacity(8192);
+                let mut queue: std::collections::VecDeque<usize> = std::collections::VecDeque::with_capacity(8192);
+
+                let root_node = FloodNode {
+                    id: 0,
+                    parent: None,
+                    hash: branch_pos.hash,
+                    pos: branch_pos,
+                    mv: branch_move,
+                    ply: 1,
+                    score: 0,
+                    best: crate::movegen::types::Move::none(),
+                    mate: false,
+                    kids: Vec::with_capacity(8),
+                };
+                nodes.push(root_node);
+                seen.insert(branch_pos.hash);
+                queue.push_back(0);
+
+                // Xả nước lũ tràn tầng sâu ưu tiên nước ép buộc (Checks & Captures)
+                while let Some(curr_id) = queue.pop_front() {
+                    let (curr_pos, curr_ply) = {
+                        let n = &nodes[curr_id];
+                        (n.pos, n.ply)
+                    };
+
+                    if curr_ply >= 5 {
+                        continue;
+                    }
+
+                    let mut pos = curr_pos;
+                    let mut list = crate::movegen::types::List::new();
+                    crate::movegen::legal::legal(&mut pos, &mut list);
+
+                    if list.count == 0 {
+                        let in_check = crate::movegen::legal::check(&pos, pos.side as usize);
+                        nodes[curr_id].mate = in_check;
+                        nodes[curr_id].score = if in_check {
+                            if pos.side == 0 { -29990 } else { 29990 }
+                        } else {
+                            0
+                        };
+                        continue;
+                    }
+
+                    let mut moves: Vec<(crate::movegen::types::Move, i32)> = Vec::with_capacity(list.count);
+                    for i in 0..list.count {
+                        let m = list.items[i];
+                        let mut test_pos = pos;
+                        test_pos.apply(m.from, m.to);
+
+                        let is_checking = crate::movegen::legal::check(&test_pos, test_pos.side as usize);
+                        let is_capturing = pos.grid[m.to as usize] < 14;
+
+                        let priority = if is_checking {
+                            3000
+                        } else if is_capturing {
+                            2000 + (14 - pos.grid[m.to as usize] as i32) * 10
+                        } else {
+                            100
+                        };
+
+                        moves.push((m, priority));
+                    }
+
+                    moves.sort_by(|a, b| b.1.cmp(&a.1));
+                    let selected = &moves[0..moves.len().min(4)];
+
+                    for &(m, _) in selected {
+                        let mut next_pos = pos;
+                        next_pos.apply(m.from, m.to);
+                        let next_hash = next_pos.hash;
+
+                        if !seen.contains(&next_hash) {
+                            let next_id = nodes.len();
+                            let next_node = FloodNode {
+                                id: next_id,
+                                parent: Some(curr_id),
+                                hash: next_hash,
+                                pos: next_pos,
+                                mv: m,
+                                ply: curr_ply + 1,
+                                score: 0,
+                                best: crate::movegen::types::Move::none(),
+                                mate: false,
+                                kids: Vec::with_capacity(8),
+                            };
+                            nodes.push(next_node);
+                            seen.insert(next_hash);
+                            nodes[curr_id].kids.push(next_id);
+                            queue.push_back(next_id);
+                        }
+                    }
+                }
+
+                // Thẩm định thế cờ bằng Search Engine
+                let mb = self.hash.load(Ordering::Relaxed);
+                let mut search = Search::new(mb);
+                let mut limit = Limits::new();
+                limit.depth = 3;
+
+                let nodes_count = nodes.len();
+                let mut mates_count = 0usize;
+
+                for i in 0..nodes_count {
+                    if !nodes[i].mate {
+                        let res = search.go(&nodes[i].pos, &limit);
+                        nodes[i].score = res.score;
+                        nodes[i].best = res.best;
+                    } else {
+                        mates_count += 1;
+                    }
+                }
+
+                // Lan truyền ngược Minimax
+                let max_ply = nodes.iter().map(|n| n.ply).max().unwrap_or(0);
+                for p in (0..=max_ply).rev() {
+                    let level_ids: Vec<usize> = nodes.iter().filter(|n| n.ply == p).map(|n| n.id).collect();
+                    for id in level_ids {
+                        let kid_ids = nodes[id].kids.clone();
+                        if kid_ids.is_empty() {
+                            continue;
+                        }
+
+                        let is_red = nodes[id].pos.side == 0;
+                        let mut best_score = if is_red { -999999 } else { 999999 };
+                        let mut best_move = crate::movegen::types::Move::none();
+
+                        for kid_id in kid_ids {
+                            let kid_score = nodes[kid_id].score;
+                            let kid_move = nodes[kid_id].mv;
+
+                            if is_red {
+                                if kid_score > best_score {
+                                    best_score = kid_score;
+                                    best_move = kid_move;
+                                }
+                            } else {
+                                if kid_score < best_score {
+                                    best_score = kid_score;
+                                    best_move = kid_move;
+                                }
+                            }
+                        }
+
+                        nodes[id].score = best_score;
+                        nodes[id].best = best_move;
+                    }
+                }
+
+                // Ghi nhận trực tiếp vào 1,024 Shards NVMe
+                for node in &nodes {
+                    if node.best.valid() {
+                        let score_clamped = node.score.max(-30000).min(30000) as i16;
+                        let _ = shard.save(node.hash, node.best.raw(), score_clamped);
+                    }
+                }
+
+                let total_shards = shard.count();
+                println!(
+                    "[SERVER] [WATERFALL FLOOD] 🌊 Khai cuộc: {} (Nhánh {}/{}) | Vét cạn: {} nodes | Sát cục: {} thế | 1,024 Shards: {} entries (Minimax: {} cp)",
+                    name,
+                    b_idx + 1,
+                    total_branches,
+                    nodes_count,
+                    mates_count,
+                    total_shards,
+                    nodes[0].score
+                );
+                let _ = std::io::stdout().flush();
             }
         }
     }
