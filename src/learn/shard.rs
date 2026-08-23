@@ -121,6 +121,18 @@ impl Shard {
 
         None
     }
+
+    /// Đếm tổng số bản ghi hiện có trong tất cả các phân mảnh Shards
+    pub fn count(&self) -> usize {
+        let mut total = 0;
+        for idx in 0..CAPACITY {
+            let path = self.path(idx);
+            if let Ok(meta) = fs::metadata(&path) {
+                total += (meta.len() / 16) as usize;
+            }
+        }
+        total
+    }
 }
 
 impl Default for Shard {
@@ -128,3 +140,4 @@ impl Default for Shard {
         Self::new("data/shards_10b")
     }
 }
+

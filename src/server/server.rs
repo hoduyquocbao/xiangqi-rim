@@ -604,6 +604,59 @@ impl Server {
                 Response::json(Status::Ok, &text)
             }
 
+            // 14. POST /api/v1/shards/save -> Lưu bản ghi thế cờ trực tiếp vào 1,024 phân mảnh data/shards_10b
+            (Method::Post, "/api/v1/shards/save") => {
+                let body = String::from_utf8_lossy(&req.body);
+                let fen = json::str(&body, "fen").unwrap_or(Parser::DEFAULT);
+                let mv_str = json::str(&body, "move").unwrap_or("");
+                let score = json::num(&body, "score").unwrap_or(0) as i16;
+
+                let pos = Parser::parse(fen);
+                let mv = Format::decode(mv_str);
+                let shard = crate::learn::Shard::default();
+                let saved = shard.save(pos.hash, mv.raw(), score);
+
+                let text = format!(
+                    "{{\"status\":\"ok\",\"saved\":{},\"hash\":\"0x{:016x}\",\"dir\":\"data/shards_10b\"}}",
+                    if saved.is_ok() { 1 } else { 0 }, pos.hash
+                );
+                Response::json(Status::Ok, &text)
+            }
+
+            // 15. POST /api/v1/shards/batch -> Lưu hàng loạt bản ghi thế cờ vào 1,024 phân mảnh data/shards_10b
+            (Method::Post, "/api/v1/shards/batch") => {
+                let body = String::from_utf8_lossy(&req.body);
+                let list = json::list(&body, "items");
+                let shard = crate::learn::Shard::default();
+                let mut count = 0;
+                for item_str in list {
+                    let item_fen = json::str(&item_str, "fen").unwrap_or(Parser::DEFAULT);
+                    let item_mv = json::str(&item_str, "move").unwrap_or("");
+                    let item_score = json::num(&item_str, "score").unwrap_or(0) as i16;
+                    let item_pos = Parser::parse(item_fen);
+                    let mv = Format::decode(item_mv);
+                    if shard.save(item_pos.hash, mv.raw(), item_score).is_ok() {
+                        count += 1;
+                    }
+                }
+                let text = format!(
+                    "{{\"status\":\"ok\",\"saved\":{},\"dir\":\"data/shards_10b\"}}",
+                    count
+                );
+                Response::json(Status::Ok, &text)
+            }
+
+            // 16. GET /api/v1/shards/stats -> Thống kê dung lượng 1,024 phân mảnh data/shards_10b
+            (Method::Get, "/api/v1/shards/stats") => {
+                let shard = crate::learn::Shard::default();
+                let entries = shard.count();
+                let text = format!(
+                    "{{\"status\":\"ok\",\"shards\":1024,\"entries\":{},\"dir\":\"data/shards_10b\"}}",
+                    entries
+                );
+                Response::json(Status::Ok, &text)
+            }
+
             // Mặc định trả về 404 Not Found
             _ => Response::json(Status::NotFound, "{\"status\":\"error\",\"message\":\"Endpoint không tồn tại\"}"),
         }
@@ -897,6 +950,21 @@ impl Server {
                 let payload = format!(
                     "{{\"type\":\"perft\",\"depth\":{},\"nodes\":{}}}",
                     depth, total
+                );
+                let packet = Frame::text(&payload);
+                let _ = stream.write_all(&packet);
+                let _ = stream.flush();
+            }
+
+            "save_shards" => {
+                let shard = crate::learn::Shard::default();
+                let score = json::num(text, "score").unwrap_or(0) as i16;
+                let mv_str = json::str(text, "move").unwrap_or("");
+                let mv = Format::decode(mv_str);
+                let saved = shard.save(pos.hash, mv.raw(), score);
+                let payload = format!(
+                    "{{\"type\":\"shard_saved\",\"status\":\"ok\",\"saved\":{},\"hash\":\"0x{:016x}\"}}",
+                    if saved.is_ok() { 1 } else { 0 }, pos.hash
                 );
                 let packet = Frame::text(&payload);
                 let _ = stream.write_all(&packet);
