@@ -5,6 +5,7 @@
 
 ## 1. Nhật Ký Phiên Đang Hoạt Động & Lịch Sử Phiên
 
+- [`session_active_20260823_v63_dynamic_360_engine.md`](file://.agents/logs/session_active_20260823_v63_dynamic_360_engine.md) — **Engine v36.0.0: True Dynamic 385-Line Reasoning Unit per Turn**: Triệt tiêu 100% dòng lặp boilerplate filler, động cơ tính toán động học bàn cờ thực tế cho toàn bộ 385 dòng suy luận/turn.
 - [`session_active_20260823_v62_exhaustive_360_lines.md`](file://.agents/logs/session_active_20260823_v62_exhaustive_360_lines.md) — **Engine v35.0.0: Exhaustive ≥ 360-Line Reasoning Unit per Turn**: Triển khai đầy đủ 385 dòng suy luận logic chuyên sâu, 7 khối phân tích (quét 90 ô, 9 lộ, đe dọa, tranh biện 3 vai trò, 5 ứng viên, ảo hóa 3-ply).
 - [`session_active_20260822_v61_rolling_chunks.md`](file://.agents/logs/session_active_20260822_v61_rolling_chunks.md) — **Engine v34.0.0: Rolling Chunk Miner Pipeline (< 100MB/chunk)**: Tích hợp cơ chế cuốn chiếu tự động và kịch bản điều phối Python `scripts/rolling_cqrs_360_miner.py` phục vụ 1.000.000 ván cờ.
 - [`session_active_20260822_v60_tri_tier_pipeline.md`](file://.agents/logs/session_active_20260822_v60_tri_tier_pipeline.md) — **Engine v33.0.0: Tri-Tier Decoupled Pipeline Architecture** (Search Producers ➔ 360 Transformers ➔ 4MB Async Sink), gia tốc throughput lên 471.74 turns/s, đồng bộ hóa pipeline thông lượng cao.
