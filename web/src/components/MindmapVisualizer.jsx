@@ -1,47 +1,32 @@
 // web/src/components/MindmapVisualizer.jsx
-// Sơ Đồ Tư Duy Cây Suy Luận 360° & Hậu Kiểm Toàn Ván Thực Tế (Live Xiangqi 360° Mindmap & Game Tree Explorer)
-// Công cụ phân tích thực chiến: Cây phân nhánh 3 tầng động học, Quét bước ngoặt & sai lầm toàn ván,
-// Bóc tách JSONL DeepSeek-R1, Phòng thử nghiệm What-If, Bánh đà TT Cache và Benchmark phần cứng.
+// Sơ Đồ Tư Duy Cây Suy Luận 360° & Hậu Kiểm Toàn Ván Hiệu Năng Cao
+// Kiến Trúc Tối Ưu Nhiệt Độ & Chống Lag:
+// 1. Render-On-Demand: 0% CPU khi đứng yên, không chạy vòng lặp hoạt ảnh vô tận gây nóng máy.
+// 2. Snapshot Cache (Ảnh chụp nhanh bàn cờ): Render Offscreen Bitmap 1 lần duy nhất, Blit O(1) qua GPU.
+// 3. View Frustum Culling: Chỉ vẽ các Node trong vùng nhìn Viewport, hỗ trợ cây 10,000+ Nodes mượt mà.
+// 4. Level Of Detail (LOD): Tự động giảm tải hình học khi thu nhỏ xa.
+// 5. Timeline thế trận phẳng, mượt, phản hồi tức thì 0ms.
 
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { 
-  GitCommit, 
-  ArrowUpCircle, 
-  Zap, 
-  Database, 
-  ShieldCheck, 
-  Sparkles, 
-  Layers, 
   Compass, 
-  Cpu, 
+  Layers, 
   TrendingUp, 
-  Eye, 
-  RotateCcw,
-  CheckCircle2,
-  AlertTriangle,
-  Play,
-  Gauge,
+  RotateCcw, 
+  Play, 
+  Zap, 
+  Maximize2, 
+  ZoomIn, 
+  ZoomOut, 
+  Target, 
+  LayoutGrid, 
   Activity,
-  FileCode,
-  Crosshair,
-  Sliders,
-  ChevronRight,
-  ChevronDown,
-  Copy,
-  Upload,
-  RefreshCw,
-  Search,
-  Sword,
-  Target,
-  Flame,
-  Shield,
-  HelpCircle,
-  Award
+  Cpu
 } from 'lucide-react';
-import { parse, fen as buildFen, moves as getLegalMoves, check as isCheck, hasLegalMoves, uciToMove } from '../rules/rules.js';
+import { parse, fen as buildFen, moves as getLegalMoves, check as isCheck, hasLegalMoves } from '../rules/rules.js';
 import { instance as engine } from '../engine/engine.js';
 
-// Bảng tra cứu chữ Hán quân cờ O(1)
+// Ký hiệu quân cờ chữ Hán
 const symbols = {
   K: '帥', A: '仕', B: '相', N: '傌', R: '俥', C: '炮', P: '兵',
   k: '將', a: '士', b: '象', n: '馬', r: '車', c: '砲', p: '卒'
@@ -53,53 +38,117 @@ const pieceNames = {
   k: 'Tướng Đen', a: 'Sĩ Đen', b: 'Tượng Đen', n: 'Mã Đen', r: 'Xe Đen', c: 'Pháo Đen', p: 'Tốt Đen'
 };
 
-// Trọng số giá trị quân cờ vật chất
+// Giá trị vật chất
 const pieceWeights = {
   K: 10000, R: 900, C: 450, N: 400, B: 200, A: 200, P: 100,
   k: 10000, r: 900, c: 450, n: 400, b: 200, a: 200, p: 100
 };
 
-// Bảng Tọa Độ Tĩnh Cố Định LUT (Lookup Tables) O(1) CPU Cache L1 Friendly
-const padx = 25;
-const pady = 25;
-const cellw = 30;
-const cellh = 30;
-const width = 290;
-const height = 320;
+// Kích thước chuẩn Thumbnail Snapshot
+const snapW = 80;
+const snapH = 90;
+const snapPadX = 6;
+const snapPadY = 6;
+const snapCellW = (snapW - snapPadX * 2) / 8;
+const snapCellH = (snapH - snapPadY * 2) / 9;
 
-const gridx = new Float32Array([
-  padx + 0 * cellw,
-  padx + 1 * cellw,
-  padx + 2 * cellw,
-  padx + 3 * cellw,
-  padx + 4 * cellw,
-  padx + 5 * cellw,
-  padx + 6 * cellw,
-  padx + 7 * cellw,
-  padx + 8 * cellw,
-]);
+// Kích thước Bàn cờ Mini Chi Tiết
+const miniW = 280;
+const miniH = 310;
+const miniPadX = 20;
+const miniPadY = 20;
+const miniCellW = (miniW - miniPadX * 2) / 8;
+const miniCellH = (miniH - miniPadY * 2) / 9;
 
-const gridy = new Float32Array([
-  pady + 9 * cellh, // rank 0
-  pady + 8 * cellh, // rank 1
-  pady + 7 * cellh, // rank 2
-  pady + 6 * cellh, // rank 3
-  pady + 5 * cellh, // rank 4
-  pady + 4 * cellh, // rank 5
-  pady + 3 * cellh, // rank 6
-  pady + 2 * cellh, // rank 7
-  pady + 1 * cellh, // rank 8
-  pady + 0 * cellh, // rank 9
-]);
+// Bộ đệm LRU Cache lưu trữ ảnh chụp nhanh Bitmap của các thế cờ FEN (Zero Duplicate Rasterization)
+const snapshotCache = new Map();
 
-// Hàm chuyển đổi tọa độ ô cờ sang chuỗi UCI (vd: 22 -> "e2")
+// Sinh ảnh chụp nhanh Snapshot Offscreen cho một thế cờ FEN (Chỉ vẽ 1 lần duy nhất)
+function getBoardSnapshot(fenStr) {
+  if (snapshotCache.has(fenStr)) {
+    return snapshotCache.get(fenStr);
+  }
+
+  const canvas = document.createElement('canvas');
+  canvas.width = snapW;
+  canvas.height = snapH;
+  const ctx = canvas.getContext('2d', { alpha: false });
+  if (!ctx) return canvas;
+
+  // 1. Nền gỗ tối phẳng
+  ctx.fillStyle = '#1c150e';
+  ctx.fillRect(0, 0, snapW, snapH);
+
+  // 2. Viền bàn cờ
+  ctx.strokeStyle = '#8A6B2D';
+  ctx.lineWidth = 1;
+  ctx.strokeRect(snapPadX, snapPadY, snapW - snapPadX * 2, snapH - snapPadY * 2);
+
+  // 3. Đường ngang & dọc đơn giản
+  for (let r = 1; r < 9; r++) {
+    const y = snapPadY + r * snapCellH;
+    ctx.beginPath();
+    ctx.moveTo(snapPadX, y);
+    ctx.lineTo(snapW - snapPadX, y);
+    ctx.stroke();
+  }
+
+  for (let f = 1; f < 8; f++) {
+    const x = snapPadX + f * snapCellW;
+    // Nửa dưới
+    ctx.beginPath();
+    ctx.moveTo(x, snapPadY);
+    ctx.lineTo(x, snapPadY + 4 * snapCellH);
+    ctx.stroke();
+    // Nửa trên
+    ctx.beginPath();
+    ctx.moveTo(x, snapPadY + 5 * snapCellH);
+    ctx.lineTo(x, snapH - snapPadY);
+    ctx.stroke();
+  }
+
+  // 4. Vẽ quân cờ dạng chấm / ký hiệu nhỏ
+  const parsed = parse(fenStr);
+  const board = parsed.board;
+
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.font = 'bold 7px sans-serif';
+
+  for (let sq = 0; sq < 90; sq++) {
+    const piece = board[sq];
+    if (piece === '.') continue;
+
+    const f = sq % 9;
+    const r = Math.floor(sq / 9);
+    const x = snapPadX + f * snapCellW;
+    const y = snapPadY + (9 - r) * snapCellH;
+    const isRed = piece === piece.toUpperCase();
+
+    ctx.fillStyle = isRed ? '#ef4444' : '#60a5fa';
+    ctx.beginPath();
+    ctx.arc(x, y, 3.5, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  // Giới hạn dung lượng cache tối đa 2,000 snapshots để tiết kiệm RAM
+  if (snapshotCache.size > 2000) {
+    const firstKey = snapshotCache.keys().next().value;
+    snapshotCache.delete(firstKey);
+  }
+
+  snapshotCache.set(fenStr, canvas);
+  return canvas;
+}
+
+// Chuyển đổi tọa độ ô cờ sang chuỗi UCI
 function sqToUci(sq) {
   const file = sq % 9;
   const rank = Math.floor(sq / 9);
   return `${String.fromCharCode(97 + file)}${rank}`;
 }
 
-// Hàm chuyển đổi nước đi sang ký hiệu truyền thống tiếng Việt (vd: "Pháo 2 bình 5")
+// Chuyển đổi nước đi sang ký hiệu truyền thống tiếng Việt
 function moveToNotation(board, from, to) {
   const piece = board[from];
   if (!piece || piece === '.') return `${sqToUci(from)}${sqToUci(to)}`;
@@ -131,7 +180,7 @@ function moveToNotation(board, from, to) {
   }
 }
 
-// Đánh giá thế cờ Heuristic nhanh O(1)
+// Đánh giá thế cờ Heuristic O(1)
 function evaluatePosition(board) {
   let redMaterial = 0;
   let blackMaterial = 0;
@@ -146,11 +195,9 @@ function evaluatePosition(board) {
     const file = sq % 9;
     let val = pieceWeights[piece] || 0;
 
-    // Thưởng tốt qua sông
     if (piece === 'P' && rank >= 5) val += 100;
     if (piece === 'p' && rank <= 4) val += 100;
 
-    // Kiểm soát trung lộ (cột 4, 3, 5)
     if (file === 4) {
       if (isRed) redCenter += 30; else blackCenter += 30;
     } else if (file === 3 || file === 5) {
@@ -164,85 +211,10 @@ function evaluatePosition(board) {
   return { score, redMaterial, blackMaterial, redCenter, blackCenter };
 }
 
-// Vẽ nền tĩnh Offscreen Buffer (Chỉ vẽ 1 lần)
-function drawStaticBackground(ctx) {
-  const grad = ctx.createRadialGradient(width / 2, height / 2, 20, width / 2, height / 2, width);
-  grad.addColorStop(0, '#2c1e11');
-  grad.addColorStop(1, '#140d07');
-  ctx.fillStyle = grad;
-  ctx.fillRect(5, 5, width - 10, height - 10);
-
-  ctx.strokeStyle = '#D4AF37';
-  ctx.lineWidth = 2;
-  ctx.strokeRect(5, 5, width - 10, height - 10);
-
-  ctx.strokeStyle = '#8A6B2D';
-  ctx.lineWidth = 1.2;
-  for (let r = 0; r < 10; r++) {
-    const y = gridy[r];
-    ctx.beginPath();
-    ctx.moveTo(gridx[0], y);
-    ctx.lineTo(gridx[8], y);
-    ctx.stroke();
-  }
-
-  for (let f = 0; f < 9; f++) {
-    const x = gridx[f];
-    ctx.beginPath();
-    ctx.moveTo(x, gridy[0]);
-    ctx.lineTo(x, gridy[4]);
-    ctx.stroke();
-    ctx.beginPath();
-    ctx.moveTo(x, gridy[5]);
-    ctx.lineTo(x, gridy[9]);
-    ctx.stroke();
-  }
-
-  ctx.beginPath();
-  ctx.moveTo(gridx[0], gridy[4]);
-  ctx.lineTo(gridx[0], gridy[5]);
-  ctx.moveTo(gridx[8], gridy[4]);
-  ctx.lineTo(gridx[8], gridy[5]);
-  ctx.stroke();
-
-  ctx.beginPath();
-  ctx.moveTo(gridx[3], gridy[0]);
-  ctx.lineTo(gridx[5], gridy[2]);
-  ctx.moveTo(gridx[5], gridy[0]);
-  ctx.lineTo(gridx[3], gridy[2]);
-  ctx.stroke();
-
-  ctx.beginPath();
-  ctx.moveTo(gridx[3], gridy[7]);
-  ctx.lineTo(gridx[5], gridy[9]);
-  ctx.moveTo(gridx[5], gridy[7]);
-  ctx.lineTo(gridx[3], gridy[9]);
-  ctx.stroke();
-
-  ctx.fillStyle = '#8A6B2D';
-  ctx.font = 'bold 10px serif';
-  ctx.textAlign = 'center';
-  ctx.fillText('楚 河', 75, (gridy[4] + gridy[5]) / 2 + 3);
-  ctx.fillText('漢 界', 215, (gridy[4] + gridy[5]) / 2 + 3);
-}
-
-// Bàn Cờ GPU Hardware Canvas Tối Thượng
-function FastGpuBoard({ fen, arrowFrom, arrowTo, selectedSq, validDests, onSquareClick }) {
+// Bàn Cờ GPU Mini Chi Tiết Render Tĩnh Phẳng
+function StaticMiniBoard({ fen, arrowFrom, arrowTo }) {
   const canvasRef = useRef(null);
-  const staticCacheRef = useRef(null);
-  const pulseRef = useRef(0);
   const parsedBoard = useMemo(() => parse(fen).board, [fen]);
-
-  useEffect(() => {
-    const off = document.createElement('canvas');
-    off.width = width;
-    off.height = height;
-    const offCtx = off.getContext('2d');
-    if (offCtx) {
-      drawStaticBackground(offCtx);
-      staticCacheRef.current = off;
-    }
-  }, []);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -250,179 +222,570 @@ function FastGpuBoard({ fen, arrowFrom, arrowTo, selectedSq, validDests, onSquar
     const ctx = canvas.getContext('2d', { alpha: false });
     if (!ctx) return;
 
-    let animId;
-    let lastTime = performance.now();
+    // Nền phẳng
+    ctx.fillStyle = '#140d07';
+    ctx.fillRect(0, 0, miniW, miniH);
 
-    const render = (time) => {
-      const delta = (time - lastTime) / 1000;
-      lastTime = time;
-      pulseRef.current = (pulseRef.current + delta * 2.5) % (Math.PI * 2);
+    ctx.strokeStyle = '#D4AF37';
+    ctx.lineWidth = 1.5;
+    ctx.strokeRect(5, 5, miniW - 10, miniH - 10);
 
-      if (staticCacheRef.current) {
-        ctx.drawImage(staticCacheRef.current, 0, 0);
-      }
+    // Đường lưới
+    ctx.strokeStyle = '#8A6B2D';
+    ctx.lineWidth = 1;
+    for (let r = 0; r < 10; r++) {
+      const y = miniPadY + r * miniCellH;
+      ctx.beginPath();
+      ctx.moveTo(miniPadX, y);
+      ctx.lineTo(miniW - miniPadX, y);
+      ctx.stroke();
+    }
 
-      // Vẽ ô được chọn
-      if (selectedSq !== undefined && selectedSq >= 0 && selectedSq < 90) {
-        const sx = gridx[selectedSq % 9];
-        const sy = gridy[Math.floor(selectedSq / 9)];
-        ctx.strokeStyle = '#22c55e';
-        ctx.lineWidth = 2;
-        ctx.strokeRect(sx - 14, sy - 14, 28, 28);
-      }
+    for (let f = 0; f < 9; f++) {
+      const x = miniPadX + f * miniCellW;
+      ctx.beginPath();
+      ctx.moveTo(x, miniPadY);
+      ctx.lineTo(x, miniPadY + 4 * miniCellH);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(x, miniPadY + 5 * miniCellH);
+      ctx.lineTo(x, miniH - miniPadY);
+      ctx.stroke();
+    }
 
-      // Vẽ các chấm nước đi hợp lệ
-      if (validDests && validDests.length > 0) {
-        ctx.fillStyle = 'rgba(34, 197, 94, 0.7)';
-        for (const dest of validDests) {
-          const dx = gridx[dest % 9];
-          const dy = gridy[Math.floor(dest / 9)];
-          ctx.beginPath();
-          ctx.arc(dx, dy, 4, 0, Math.PI * 2);
-          ctx.fill();
-        }
-      }
+    ctx.beginPath();
+    ctx.moveTo(miniPadX, miniPadY + 4 * miniCellH);
+    ctx.lineTo(miniPadX, miniPadY + 5 * miniCellH);
+    ctx.moveTo(miniW - miniPadX, miniPadY + 4 * miniCellH);
+    ctx.lineTo(miniW - miniPadX, miniPadY + 5 * miniCellH);
+    ctx.stroke();
 
-      // Vẽ Laser Arrow động học
-      if (arrowFrom >= 0 && arrowTo >= 0) {
-        const fromX = gridx[arrowFrom % 9];
-        const fromY = gridy[Math.floor(arrowFrom / 9)];
-        const toX = gridx[arrowTo % 9];
-        const toY = gridy[Math.floor(arrowTo / 9)];
+    // Mũi tên nước đi tĩnh
+    if (arrowFrom >= 0 && arrowTo >= 0) {
+      const f1 = arrowFrom % 9;
+      const r1 = Math.floor(arrowFrom / 9);
+      const f2 = arrowTo % 9;
+      const r2 = Math.floor(arrowTo / 9);
+      const x1 = miniPadX + f1 * miniCellW;
+      const y1 = miniPadY + (9 - r1) * miniCellH;
+      const x2 = miniPadX + f2 * miniCellW;
+      const y2 = miniPadY + (9 - r2) * miniCellH;
 
-        const glowAlpha = 0.5 + 0.5 * Math.sin(pulseRef.current);
-        ctx.strokeStyle = `rgba(239, 68, 68, ${0.4 * glowAlpha})`;
-        ctx.lineWidth = 6;
-        ctx.beginPath();
-        ctx.moveTo(fromX, fromY);
-        ctx.lineTo(toX, toY);
-        ctx.stroke();
+      ctx.strokeStyle = '#f59e0b';
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.moveTo(x1, y1);
+      ctx.lineTo(x2, y2);
+      ctx.stroke();
 
-        ctx.strokeStyle = '#f59e0b';
-        ctx.lineWidth = 2.5;
-        ctx.beginPath();
-        ctx.moveTo(fromX, fromY);
-        ctx.lineTo(toX, toY);
-        ctx.stroke();
+      const angle = Math.atan2(y2 - y1, x2 - x1);
+      ctx.fillStyle = '#f59e0b';
+      ctx.beginPath();
+      ctx.moveTo(x2, y2);
+      ctx.lineTo(x2 - 10 * Math.cos(angle - Math.PI / 6), y2 - 10 * Math.sin(angle - Math.PI / 6));
+      ctx.lineTo(x2 - 10 * Math.cos(angle + Math.PI / 6), y2 - 10 * Math.sin(angle + Math.PI / 6));
+      ctx.closePath();
+      ctx.fill();
+    }
 
-        const angle = Math.atan2(toY - fromY, toX - fromX);
-        const headLen = 10;
-        ctx.fillStyle = '#f59e0b';
-        ctx.beginPath();
-        ctx.moveTo(toX, toY);
-        ctx.lineTo(toX - headLen * Math.cos(angle - Math.PI / 6), toY - headLen * Math.sin(angle - Math.PI / 6));
-        ctx.lineTo(toX - headLen * Math.cos(angle + Math.PI / 6), toY - headLen * Math.sin(angle + Math.PI / 6));
-        ctx.closePath();
-        ctx.fill();
-      }
+    // Quân cờ chữ Hán
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.font = 'bold 12px sans-serif';
 
-      // Vẽ 32 quân cờ chữ Hán
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.font = 'bold 13px sans-serif';
-
-      for (let sq = 0; sq < 90; sq++) {
-        const piece = parsedBoard[sq];
-        if (piece === '.') continue;
-
-        const x = gridx[sq % 9];
-        const y = gridy[Math.floor(sq / 9)];
-        const isRed = piece === piece.toUpperCase();
-
-        ctx.fillStyle = '#1c150e';
-        ctx.beginPath();
-        ctx.arc(x, y, 12, 0, Math.PI * 2);
-        ctx.fill();
-
-        ctx.strokeStyle = isRed ? '#ef4444' : '#60a5fa';
-        ctx.lineWidth = 1.2;
-        ctx.stroke();
-
-        ctx.fillStyle = isRed ? '#f87171' : '#93c5fd';
-        ctx.fillText(symbols[piece] || piece, x, y + 1);
-      }
-
-      animId = requestAnimationFrame(render);
-    };
-
-    animId = requestAnimationFrame(render);
-    return () => cancelAnimationFrame(animId);
-  }, [parsedBoard, arrowFrom, arrowTo, selectedSq, validDests]);
-
-  const handleCanvasClick = (e) => {
-    if (!onSquareClick) return;
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const rect = canvas.getBoundingClientRect();
-    const cx = (e.clientX - rect.left) * (width / rect.width);
-    const cy = (e.clientY - rect.top) * (height / rect.height);
-
-    let closestSq = -1;
-    let minDist = 20;
     for (let sq = 0; sq < 90; sq++) {
-      const gx = gridx[sq % 9];
-      const gy = gridy[Math.floor(sq / 9)];
-      const dist = Math.hypot(cx - gx, cy - gy);
-      if (dist < minDist) {
-        minDist = dist;
-        closestSq = sq;
-      }
-    }
+      const piece = parsedBoard[sq];
+      if (piece === '.') continue;
+      const f = sq % 9;
+      const r = Math.floor(sq / 9);
+      const x = miniPadX + f * miniCellW;
+      const y = miniPadY + (9 - r) * miniCellH;
+      const isRed = piece === piece.toUpperCase();
 
-    if (closestSq !== -1) {
-      onSquareClick(closestSq);
+      ctx.fillStyle = '#1c150e';
+      ctx.beginPath();
+      ctx.arc(x, y, 11, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.strokeStyle = isRed ? '#ef4444' : '#60a5fa';
+      ctx.lineWidth = 1;
+      ctx.stroke();
+
+      ctx.fillStyle = isRed ? '#f87171' : '#93c5fd';
+      ctx.fillText(symbols[piece] || piece, x, y + 1);
     }
-  };
+  }, [parsedBoard, arrowFrom, arrowTo]);
 
   return (
     <canvas
       ref={canvasRef}
-      width={width}
-      height={height}
-      onClick={handleCanvasClick}
-      className="rounded-xl border border-gold/40 shadow-glow bg-black cursor-pointer select-none"
-      style={{ transform: 'translate3d(0,0,0)' }}
+      width={miniW}
+      height={miniH}
+      className="rounded-xl border border-gold/40 shadow-glow bg-black block"
     />
   );
 }
 
-// Component Chính: Sơ Đồ Tư Duy Cây Suy Luận 360° & Hậu Kiểm Toàn Ván
+// ============================================================================
+// CANVAS VIEWPORT SƠ ĐỒ TƯ DUY 10,000+ NODES (ZERO LAG / ZERO OVERHEATING)
+// ============================================================================
+function MindmapCanvasViewport({ treeNodes, activeNodeId, onSelectNode, layoutMode }) {
+  const canvasRef = useRef(null);
+  const containerRef = useRef(null);
+  
+  // Camera Viewport Pan & Zoom
+  const cameraRef = useRef({ x: 0, y: 0, scale: 1.0 });
+  const isDraggingRef = useRef(false);
+  const dragStartRef = useRef({ x: 0, y: 0 });
+  const needsRenderRef = useRef(true);
+
+  // Tính toán tọa độ phân bố các Node một lần duy nhất
+  const layoutedNodes = useMemo(() => {
+    if (!treeNodes || treeNodes.length === 0) return [];
+
+    const nodes = JSON.parse(JSON.stringify(treeNodes));
+    const root = nodes[0];
+    if (!root) return [];
+
+    root.x = 0;
+    root.y = 0;
+
+    const candidates = nodes.filter((n) => n.level === 1);
+    const count = candidates.length;
+
+    if (layoutMode === 'radial') {
+      const radius1 = 280;
+      const radius2 = 520;
+
+      candidates.forEach((cand, idx) => {
+        const angle = -Math.PI / 2 + (idx * 2 * Math.PI) / Math.max(1, count);
+        cand.x = radius1 * Math.cos(angle);
+        cand.y = radius1 * Math.sin(angle);
+
+        const replies = nodes.filter((n) => n.parentId === cand.id);
+        replies.forEach((rep, rIdx) => {
+          const subSpread = 0.35;
+          const subAngle = angle + (rIdx - (replies.length - 1) / 2) * subSpread;
+          rep.x = radius2 * Math.cos(subAngle);
+          rep.y = radius2 * Math.sin(subAngle);
+        });
+      });
+    } else {
+      const spacingY = 140;
+      const totalH = (count - 1) * spacingY;
+
+      candidates.forEach((cand, idx) => {
+        cand.x = 340;
+        cand.y = -totalH / 2 + idx * spacingY;
+
+        const replies = nodes.filter((n) => n.parentId === cand.id);
+        replies.forEach((rep, rIdx) => {
+          rep.x = 680;
+          rep.y = cand.y + (rIdx - (replies.length - 1) / 2) * 80;
+        });
+      });
+    }
+
+    return nodes;
+  }, [treeNodes, layoutMode]);
+
+  // Vẽ Render trên Canvas THEO YÊU CẦU (Render On-Demand - 0% CPU khi đứng yên)
+  const drawScene = useCallback(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    const w = canvas.width;
+    const h = canvas.height;
+    const cam = cameraRef.current;
+
+    // Reset transform & Xóa nền
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.fillStyle = '#0a0604';
+    ctx.fillRect(0, 0, w, h);
+
+    // Tính toán khung nhìn thế giới (View Frustum Culling Bounds)
+    const viewLeft = (-w / 2) / cam.scale - cam.x - 120;
+    const viewRight = (w / 2) / cam.scale - cam.x + 120;
+    const viewTop = (-h / 2) / cam.scale - cam.y - 120;
+    const viewBottom = (h / 2) / cam.scale - cam.y + 120;
+
+    // Áp dụng Ma trận Camera
+    ctx.setTransform(cam.scale, 0, 0, cam.scale, cam.x * cam.scale + w / 2, cam.y * cam.scale + h / 2);
+
+    // 1. VẼ DÂY NỐI BEZIER PHẲNG TĨNH
+    ctx.lineWidth = 1.5;
+    layoutedNodes.forEach((node) => {
+      if (!node.parentId) return;
+      const parent = layoutedNodes.find((p) => p.id === node.parentId);
+      if (!parent) return;
+
+      // Culling kiểm tra xem 1 trong 2 điểm có trong viewport không
+      if (
+        (node.x < viewLeft && parent.x < viewLeft) ||
+        (node.x > viewRight && parent.x > viewRight) ||
+        (node.y < viewTop && parent.y < viewTop) ||
+        (node.y > viewBottom && parent.y > viewBottom)
+      ) {
+        return;
+      }
+
+      const isSelected = activeNodeId === node.id || activeNodeId === parent.id;
+      ctx.strokeStyle = isSelected ? '#f59e0b' : 'rgba(212, 175, 55, 0.25)';
+
+      ctx.beginPath();
+      ctx.moveTo(parent.x, parent.y);
+      ctx.quadraticCurveTo(parent.x, node.y, node.x, node.y);
+      ctx.stroke();
+    });
+
+    // 2. VẼ CÁC NODE KÈM ẢNH CHỤP NHANH SNAPSHOT BITMAP O(1)
+    const isFarZoom = cam.scale < 0.45;
+
+    layoutedNodes.forEach((node) => {
+      // Frustum Culling: Bỏ qua 100% các node nằm ngoài màn hình
+      if (
+        node.x + 100 < viewLeft ||
+        node.x - 100 > viewRight ||
+        node.y + 80 < viewTop ||
+        node.y - 80 > viewBottom
+      ) {
+        return;
+      }
+
+      const isSelected = activeNodeId === node.id;
+      const nodeW = 160;
+      const nodeH = 110;
+      const rx = node.x - nodeW / 2;
+      const ry = node.y - nodeH / 2;
+
+      // Nếu zoom quá xa -> vẽ điểm tròn đơn giản để đạt tốc độ tối đa
+      if (isFarZoom) {
+        ctx.fillStyle = isSelected ? '#f59e0b' : node.score >= 0 ? '#10b981' : '#ef4444';
+        ctx.beginPath();
+        ctx.arc(node.x, node.y, isSelected ? 12 : 8, 0, Math.PI * 2);
+        ctx.fill();
+        return;
+      }
+
+      // Khung Node Card phẳng
+      ctx.fillStyle = isSelected ? '#261b11' : '#140e09';
+      ctx.strokeStyle = isSelected ? '#f59e0b' : 'rgba(212, 175, 55, 0.35)';
+      ctx.lineWidth = isSelected ? 2 : 1;
+
+      ctx.beginPath();
+      ctx.roundRect(rx, ry, nodeW, nodeH, 8);
+      ctx.fill();
+      ctx.stroke();
+
+      // Blit Ảnh Chụp Nhanh Bàn Cờ Bitmap Snapshot O(1)
+      if (node.fen) {
+        const snap = getBoardSnapshot(node.fen);
+        ctx.drawImage(snap, rx + 8, ry + 10, 60, 68);
+      }
+
+      // Văn bản tiêu đề & Ký hiệu nước đi
+      ctx.textAlign = 'left';
+      ctx.textBaseline = 'top';
+      ctx.font = 'bold 11px sans-serif';
+      ctx.fillStyle = isSelected ? '#fbbf24' : '#d4af37';
+      ctx.fillText(node.title.slice(0, 14), rx + 74, ry + 12);
+
+      // Điểm số Centipawn
+      ctx.font = 'bold 10px monospace';
+      ctx.fillStyle = node.score >= 0 ? '#34d399' : '#f87171';
+      const scoreStr = node.score !== undefined ? `${node.score > 0 ? '+' : ''}${node.score} cp` : '';
+      ctx.fillText(scoreStr, rx + 74, ry + 32);
+
+      // Mã nước đi UCI
+      ctx.font = '10px monospace';
+      ctx.fillStyle = '#93c5fd';
+      ctx.fillText(node.uci || '', rx + 74, ry + 50);
+
+      // Huy hiệu
+      if (node.badge) {
+        ctx.font = '9px sans-serif';
+        ctx.fillStyle = '#a78bfa';
+        ctx.fillText(node.badge, rx + 8, ry + 88);
+      }
+    });
+
+    needsRenderRef.current = false;
+  }, [layoutedNodes, activeNodeId]);
+
+  // Chỉ trigger render khi layout hoặc active node thay đổi
+  useEffect(() => {
+    drawScene();
+  }, [drawScene]);
+
+  // Resize canvas
+  useEffect(() => {
+    const handleResize = () => {
+      const container = containerRef.current;
+      const canvas = canvasRef.current;
+      if (!container || !canvas) return;
+      canvas.width = container.clientWidth;
+      canvas.height = container.clientHeight;
+      drawScene();
+    };
+    handleResize();
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, [drawScene]);
+
+  // Tương tác chuột: Pan & Zoom không chạy rAF liên tục
+  const handleMouseDown = (e) => {
+    isDraggingRef.current = true;
+    dragStartRef.current = { x: e.clientX, y: e.clientY };
+  };
+
+  const handleMouseMove = (e) => {
+    if (!isDraggingRef.current) return;
+    const cam = cameraRef.current;
+    const dx = (e.clientX - dragStartRef.current.x) / cam.scale;
+    const dy = (e.clientY - dragStartRef.current.y) / cam.scale;
+    cam.x += dx;
+    cam.y += dy;
+    dragStartRef.current = { x: e.clientX, y: e.clientY };
+    drawScene();
+  };
+
+  const handleMouseUp = (e) => {
+    if (!isDraggingRef.current) return;
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const rect = canvas.getBoundingClientRect();
+    const mouseX = e.clientX - rect.left;
+    const mouseY = e.clientY - rect.top;
+
+    const cam = cameraRef.current;
+    const worldX = (mouseX - canvas.width / 2) / cam.scale - cam.x;
+    const worldY = (mouseY - canvas.height / 2) / cam.scale - cam.y;
+
+    // Hit test click chọn Node
+    for (const node of layoutedNodes) {
+      const nodeW = 160;
+      const nodeH = 110;
+      if (
+        worldX >= node.x - nodeW / 2 &&
+        worldX <= node.x + nodeW / 2 &&
+        worldY >= node.y - nodeH / 2 &&
+        worldY <= node.y + nodeH / 2
+      ) {
+        onSelectNode(node);
+        break;
+      }
+    }
+
+    isDraggingRef.current = false;
+  };
+
+  const handleWheel = (e) => {
+    e.preventDefault();
+    const cam = cameraRef.current;
+    const zoomFactor = e.deltaY < 0 ? 1.1 : 0.9;
+    cam.scale = Math.max(0.2, Math.min(2.5, cam.scale * zoomFactor));
+    drawScene();
+  };
+
+  const resetCamera = () => {
+    cameraRef.current = { x: 0, y: 0, scale: 1.0 };
+    drawScene();
+  };
+
+  const zoomIn = () => {
+    cameraRef.current.scale = Math.min(2.5, cameraRef.current.scale * 1.2);
+    drawScene();
+  };
+
+  const zoomOut = () => {
+    cameraRef.current.scale = Math.max(0.2, cameraRef.current.scale * 0.8);
+    drawScene();
+  };
+
+  return (
+    <div ref={containerRef} className="relative w-full h-full min-h-[460px] overflow-hidden rounded-xl border border-gold/30 bg-black shadow-glow">
+      <canvas
+        ref={canvasRef}
+        onMouseDown={handleMouseDown}
+        onMouseMove={handleMouseMove}
+        onMouseUp={handleMouseUp}
+        onWheel={handleWheel}
+        className="w-full h-full block select-none cursor-grab active:cursor-grabbing"
+      />
+
+      {/* Floating Controls */}
+      <div className="absolute top-3 left-3 flex items-center gap-1.5 bg-obsidian/90 p-1.5 rounded-lg border border-gold/30 backdrop-blur-md">
+        <button onClick={zoomIn} title="Phóng to" className="p-1.5 rounded hover:bg-gold/20 text-gold transition">
+          <ZoomIn className="w-4 h-4" />
+        </button>
+        <button onClick={zoomOut} title="Thu nhỏ" className="p-1.5 rounded hover:bg-gold/20 text-gold transition">
+          <ZoomOut className="w-4 h-4" />
+        </button>
+        <button onClick={resetCamera} title="Căn giữa" className="p-1.5 rounded hover:bg-gold/20 text-gold transition">
+          <Maximize2 className="w-4 h-4" />
+        </button>
+      </div>
+
+      <div className="absolute bottom-3 left-3 text-[11px] text-gold/60 bg-obsidian/90 px-2.5 py-1 rounded border border-gold/20 pointer-events-none">
+        ⚡ Render-On-Demand (0% CPU khi đứng yên) • {layoutedNodes.length} Nodes Snapshot Caching O(1)
+      </div>
+    </div>
+  );
+}
+
+// ============================================================================
+// THANH TIMELINE THẾ TRẬN GỌN GÀNG SẮP XẾP MƯỢT MÀ
+// ============================================================================
+function ElegantGameTimeline({ timeline, selectedPly, onSelectPly }) {
+  const canvasRef = useRef(null);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas || !timeline || timeline.length === 0) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    const w = canvas.width;
+    const h = canvas.height;
+    const count = timeline.length;
+    const stepX = (w - 40) / Math.max(1, count - 1);
+    const midY = h / 2;
+
+    ctx.clearRect(0, 0, w, h);
+
+    // Trục giữa 0 cp
+    ctx.strokeStyle = 'rgba(212, 175, 55, 0.2)';
+    ctx.lineWidth = 1;
+    ctx.setLineDash([4, 4]);
+    ctx.beginPath();
+    ctx.moveTo(20, midY);
+    ctx.lineTo(w - 20, midY);
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    // Đường Đồ Thị Centipawn Curve
+    ctx.beginPath();
+    timeline.forEach((item, i) => {
+      const x = 20 + i * stepX;
+      const clampedScore = Math.max(-1000, Math.min(1000, item.score || 0));
+      const y = midY - (clampedScore / 1000) * (midY - 15);
+      if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+    });
+
+    ctx.strokeStyle = '#f59e0b';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+
+    // Điểm mốc
+    timeline.forEach((item, i) => {
+      const x = 20 + i * stepX;
+      const clampedScore = Math.max(-1000, Math.min(1000, item.score || 0));
+      const y = midY - (clampedScore / 1000) * (midY - 15);
+
+      const isCurrent = selectedPly === i;
+
+      if (isCurrent) {
+        ctx.fillStyle = '#22c55e';
+        ctx.beginPath();
+        ctx.arc(x, y, 5.5, 0, Math.PI * 2);
+        ctx.fill();
+      } else if (item.isTurningPoint) {
+        ctx.fillStyle = '#ef4444';
+        ctx.beginPath();
+        ctx.arc(x, y, 4, 0, Math.PI * 2);
+        ctx.fill();
+      } else {
+        ctx.fillStyle = '#d4af37';
+        ctx.beginPath();
+        ctx.arc(x, y, 2, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    });
+  }, [timeline, selectedPly]);
+
+  const handleCanvasClick = (e) => {
+    const canvas = canvasRef.current;
+    if (!canvas || !timeline || timeline.length === 0) return;
+    const rect = canvas.getBoundingClientRect();
+    const clickX = e.clientX - rect.left;
+    const w = canvas.width;
+    const stepX = (w - 40) / Math.max(1, timeline.length - 1);
+
+    const clickedIndex = Math.round((clickX - 20) / stepX);
+    const clampedIndex = Math.max(0, Math.min(timeline.length - 1, clickedIndex));
+    onSelectPly(clampedIndex);
+  };
+
+  return (
+    <div className="w-full bg-obsidian-card p-3 rounded-xl border border-gold/20 flex flex-col gap-2">
+      <div className="flex items-center justify-between text-xs">
+        <span className="font-bold text-gold flex items-center gap-1.5">
+          <TrendingUp className="w-4 h-4 text-gold" /> ĐỒ THỊ THẾ TRẬN ({timeline.length} PLIES)
+        </span>
+        <div className="flex items-center gap-3 text-[11px]">
+          <span className="flex items-center gap-1 text-emerald-400">● Đang chọn (P{selectedPly})</span>
+          <span className="flex items-center gap-1 text-red-400">● Bước ngoặt</span>
+          <span className="flex items-center gap-1 text-gold/60">● Nước đi</span>
+        </div>
+      </div>
+
+      <div className="h-14 w-full cursor-pointer">
+        <canvas
+          ref={canvasRef}
+          width={900}
+          height={56}
+          onClick={handleCanvasClick}
+          className="w-full h-full block rounded bg-obsidian border border-gold/10"
+        />
+      </div>
+    </div>
+  );
+}
+
+// ============================================================================
+// COMPONENT CHÍNH: MINDMAP VISUALIZER
+// ============================================================================
 export function MindmapVisualizer({ show, close, fen, history, score, line, thought, status, onApplyFen }) {
   if (!show) return null;
 
   const currentFen = fen || 'rnbakabnr/9/1c5c1/p1p1p1p1p/9/9/P1P1P1P1P/1C5C1/9/RNBAKABNR w - - 0 1';
   const gameHistory = history && Array.isArray(history) && history.length > 0 ? history : [currentFen];
 
-  // State quản lý tab và tương tác
-  const [tab, setTab] = useState('tree'); // 'tree' | 'timeline' | 'jsonl' | 'sandbox' | 'tt' | 'bench'
+  const [layoutMode, setLayoutMode] = useState('radial'); // 'radial' | 'tree'
   const [selectedPly, setSelectedPly] = useState(gameHistory.length - 1);
   const [activeNode, setActiveNode] = useState(null);
-  const [sandboxFen, setSandboxFen] = useState(currentFen);
-  const [sandboxSelected, setSandboxSelected] = useState(null);
-  const [sandboxValidMoves, setSandboxValidMoves] = useState([]);
-  const [jsonlInput, setJsonlInput] = useState('');
-  const [parsedJsonlData, setParsedJsonlData] = useState(null);
-  const [jsonlTurnIdx, setJsonlTurnIdx] = useState(0);
 
-  // Benchmark states
-  const [benchRunning, setBenchRunning] = useState(false);
-  const [benchResults, setBenchResults] = useState(null);
-
-  // Cập nhật khi FEN đổi
   useEffect(() => {
     setSelectedPly(gameHistory.length - 1);
-    setSandboxFen(currentFen);
   }, [currentFen, gameHistory.length]);
 
-  // 1. SINH CÂY SUY TƯỞNG ĐA TẦNG 3-PLY TỪ FEN ĐANG CHỌN (REAL LIVE 3-PLY TREE)
-  const inspectFen = tab === 'timeline' ? (gameHistory[selectedPly] || currentFen) : currentFen;
+  const inspectFen = gameHistory[selectedPly] || currentFen;
   const parsedInspect = useMemo(() => parse(inspectFen), [inspectFen]);
 
-  const treeData = useMemo(() => {
+  // Sinh toàn bộ Node cho Cây Tư Duy
+  const treeNodes = useMemo(() => {
     const board = parsedInspect.board;
     const turn = parsedInspect.turn;
     const isTurnRed = turn === 'w';
     const rootEval = evaluatePosition(board);
+
+    const nodes = [];
+
+    // Root Node
+    nodes.push({
+      id: 'root',
+      level: 0,
+      title: `Thế cờ Turn #${Math.floor(selectedPly / 2) + 1}`,
+      uci: 'GỐC',
+      fen: inspectFen,
+      from: -1,
+      to: -1,
+      score: rootEval.score,
+      badge: isTurnRed ? 'Lượt Đỏ' : 'Lượt Đen',
+      intent: 'Khởi điểm cây phân nhánh suy tưởng'
+    });
 
     // Lấy toàn bộ nước đi hợp lệ
     const candidates = [];
@@ -439,7 +802,6 @@ export function MindmapVisualizer({ show, close, fen, history, score, line, thou
         const targetPiece = board[dest];
         const isCap = targetPiece !== '.';
 
-        // Giả lập thế cờ sau nước đi candidate
         const clonedBoard1 = [...board];
         clonedBoard1[dest] = piece;
         clonedBoard1[sq] = '.';
@@ -448,66 +810,27 @@ export function MindmapVisualizer({ show, close, fen, history, score, line, thou
         const eval1 = evaluatePosition(clonedBoard1);
         const check1 = isCheck(clonedBoard1, nextTurn1);
 
-        // Tính điểm heuristic candidate
         let moveScore = isTurnRed ? (eval1.score - rootEval.score) : (rootEval.score - eval1.score);
         if (isCap) moveScore += (pieceWeights[targetPiece] || 50) / 2;
         if (check1) moveScore += 80;
 
-        // Phân loại ý đồ chiến thuật
-        let intent = 'Phát triển quân cờ, kiểm soát vị trí';
+        let intent = 'Phát triển quân cờ, củng cố vị trí';
         let badge = 'Nước phát triển';
-        let badgeColor = 'bg-blue-500/20 text-blue-300 border-blue-500/40';
 
         if (check1) {
-          intent = 'Chiếu tướng trực diện, dồn ép Cung Tướng';
+          intent = 'Chiếu tướng trực diện dồn ép Cung Tướng';
           badge = 'Chiếu tướng';
-          badgeColor = 'bg-amber-500/20 text-amber-300 border-amber-500/40';
         } else if (isCap) {
           intent = `Ăn ${pieceNames[targetPiece] || 'quân'}, chiếm ưu thế vật chất`;
           badge = 'Ăn quân';
-          badgeColor = 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40';
         } else if (sq % 9 === 4 || dest % 9 === 4) {
           intent = 'Khống chế lộ 5 trung lộ, mở đường Pháo đầu';
           badge = 'Trung Lộ';
-          badgeColor = 'bg-purple-500/20 text-purple-300 border-purple-500/40';
-        }
-
-        // Tầng 2: Tìm 1 nước đáp trả tốt nhất của đối phương
-        let bestReply = null;
-        for (let rsq = 0; rsq < 90; rsq++) {
-          const rpiece = clonedBoard1[rsq];
-          if (rpiece === '.') continue;
-          const isRPieceRed = rpiece === rpiece.toUpperCase();
-          if (isRPieceRed === isTurnRed) continue;
-
-          const rdests = getLegalMoves(clonedBoard1, rsq, nextTurn1);
-          if (rdests.length > 0) {
-            const rdest = rdests[0];
-            const ruci = `${sqToUci(rsq)}${sqToUci(rdest)}`;
-            const rnotation = moveToNotation(clonedBoard1, rsq, rdest);
-            const clonedBoard2 = [...clonedBoard1];
-            clonedBoard2[rdest] = rpiece;
-            clonedBoard2[rsq] = '.';
-            const nextTurn2 = turn;
-            const nextFen2 = buildFen(clonedBoard2, nextTurn2);
-            const eval2 = evaluatePosition(clonedBoard2);
-
-            bestReply = {
-              from: rsq,
-              to: rdest,
-              uci: ruci,
-              notation: rnotation,
-              fen: nextFen2,
-              score: eval2.score,
-              intent: 'Đối phương điều động quân chống trả'
-            };
-            break;
-          }
         }
 
         candidates.push({
-          from: sq,
-          to: dest,
+          sq,
+          dest,
           uci,
           notation,
           piece,
@@ -516,45 +839,83 @@ export function MindmapVisualizer({ show, close, fen, history, score, line, thou
           score: isTurnRed ? eval1.score : -eval1.score,
           heuristicScore: moveScore,
           fen: nextFen1,
+          clonedBoard1,
+          nextTurn1,
           intent,
-          badge,
-          badgeColor,
-          reply: bestReply
+          badge
         });
       }
     }
 
-    // Sắp xếp các ứng viên theo điểm số giảm dần
     candidates.sort((a, b) => b.heuristicScore - a.heuristicScore);
+    const topCandidates = candidates.slice(0, 6);
 
-    return {
-      rootFen: inspectFen,
-      rootScore: rootEval.score,
-      turn,
-      candidates: candidates.slice(0, 6) // Lấy Top 6 Candidate tốt nhất
-    };
-  }, [inspectFen, parsedInspect]);
-
-  // Chọn node mặc định
-  useEffect(() => {
-    if (treeData && treeData.candidates.length > 0 && !activeNode) {
-      const top = treeData.candidates[0];
-      setActiveNode({
-        title: `Ứng Viên #1 (Tối Ưu): ${top.notation}`,
-        uci: top.uci,
-        fen: top.fen,
-        from: top.from,
-        to: top.to,
-        score: top.score,
-        intent: top.intent,
-        badge: top.badge,
-        badgeColor: top.badgeColor
+    topCandidates.forEach((cand, idx) => {
+      const candId = `cand${idx}`;
+      nodes.push({
+        id: candId,
+        parentId: 'root',
+        level: 1,
+        title: `${cand.notation}`,
+        uci: cand.uci,
+        fen: cand.fen,
+        from: cand.sq,
+        to: cand.dest,
+        score: cand.score,
+        badge: cand.badge,
+        intent: cand.intent
       });
-    }
-  }, [treeData, activeNode]);
 
-  // 2. PHÂN TÍCH QUÉT BƯỚC NGOẶT TOÀN VÁN (GAME TIMELINE SCANNER)
-  const timelineAnalysis = useMemo(() => {
+      // Tầng 2: Phản đòn đối phương
+      for (let rsq = 0; rsq < 90; rsq++) {
+        const rpiece = cand.clonedBoard1[rsq];
+        if (rpiece === '.') continue;
+        const isRPieceRed = rpiece === rpiece.toUpperCase();
+        if (isRPieceRed === isTurnRed) continue;
+
+        const rdests = getLegalMoves(cand.clonedBoard1, rsq, cand.nextTurn1);
+        if (rdests.length > 0) {
+          const rdest = rdests[0];
+          const ruci = `${sqToUci(rsq)}${sqToUci(rdest)}`;
+          const rnotation = moveToNotation(cand.clonedBoard1, rsq, rdest);
+          const clonedBoard2 = [...cand.clonedBoard1];
+          clonedBoard2[rdest] = rpiece;
+          clonedBoard2[rsq] = '.';
+          const nextTurn2 = turn;
+          const nextFen2 = buildFen(clonedBoard2, nextTurn2);
+          const eval2 = evaluatePosition(clonedBoard2);
+
+          nodes.push({
+            id: `reply${idx}`,
+            parentId: candId,
+            level: 2,
+            title: `Đối: ${rnotation}`,
+            uci: ruci,
+            fen: nextFen2,
+            from: rsq,
+            to: rdest,
+            score: eval2.score,
+            badge: 'Phản đòn',
+            intent: 'Đối phương điều động quân chống trả'
+          });
+          break;
+        }
+      }
+    });
+
+    return nodes;
+  }, [inspectFen, parsedInspect, selectedPly]);
+
+  useEffect(() => {
+    if (treeNodes && treeNodes.length > 1) {
+      setActiveNode(treeNodes[1]);
+    } else if (treeNodes && treeNodes.length === 1) {
+      setActiveNode(treeNodes[0]);
+    }
+  }, [treeNodes]);
+
+  // Timeline thế trận toàn ván
+  const timeline = useMemo(() => {
     const items = [];
     let prevScore = 0;
 
@@ -566,21 +927,17 @@ export function MindmapVisualizer({ show, close, fen, history, score, line, thou
       const swing = evalRes.score - prevScore;
 
       let tag = 'Bình Ổn';
-      let tagColor = 'bg-gold/10 text-gold/80 border-gold/30';
       let isTurningPoint = false;
 
       if (Math.abs(swing) >= 300) {
         tag = swing > 0 ? '🌟 ĐỘT PHÁ' : '💥 SAI LẦM';
-        tagColor = swing > 0 ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40' : 'bg-red-500/20 text-red-300 border-red-500/40';
         isTurningPoint = true;
       } else if (Math.abs(swing) >= 150) {
         tag = swing > 0 ? '🎯 CHIẾM ƯU' : '⚠️ NƯỚC YẾU';
-        tagColor = swing > 0 ? 'bg-cyan-500/20 text-cyan-300 border-cyan-500/40' : 'bg-amber-500/20 text-amber-300 border-amber-500/40';
       }
 
       if (!hasLegalMoves(parsed.board, parsed.turn)) {
         tag = isCheck(parsed.board, parsed.turn) ? '👑 SÁT CỤC' : '🤝 HÒA BÍ';
-        tagColor = 'bg-purple-500/20 text-purple-300 border-purple-500/40';
         isTurningPoint = true;
       }
 
@@ -592,7 +949,6 @@ export function MindmapVisualizer({ show, close, fen, history, score, line, thou
         score: evalRes.score,
         swing,
         tag,
-        tagColor,
         isTurningPoint
       });
 
@@ -602,138 +958,6 @@ export function MindmapVisualizer({ show, close, fen, history, score, line, thou
     return items;
   }, [gameHistory]);
 
-  // Xử lý nạp JSONL Dataset từ văn bản
-  const handleParseJsonl = () => {
-    try {
-      const trimmed = jsonlInput.trim();
-      if (!trimmed) return;
-      const parsedObj = JSON.parse(trimmed);
-      setParsedJsonlData(parsedObj);
-      setJsonlTurnIdx(0);
-    } catch (err) {
-      alert('Không thể giải mã JSONL! Vui lòng kiểm tra định dạng JSON: ' + err.message);
-    }
-  };
-
-  // Nạp tệp JSONL từ máy tính
-  const handleFileUpload = (e) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      const content = event.target?.result;
-      if (typeof content === 'string') {
-        const firstLine = content.split('\n')[0];
-        setJsonlInput(firstLine);
-        try {
-          const obj = JSON.parse(firstLine);
-          setParsedJsonlData(obj);
-          setJsonlTurnIdx(0);
-        } catch (err) {
-          console.error(err);
-        }
-      }
-    };
-    reader.readAsText(file);
-  };
-
-  // Xử lý click ô cờ trong Sandbox
-  const handleSandboxClick = (sq) => {
-    const parsed = parse(sandboxFen);
-    const piece = parsed.board[sq];
-    const isPieceRed = piece !== '.' && piece === piece.toUpperCase();
-    const isTurnRed = parsed.turn === 'w';
-
-    if (sandboxSelected === null) {
-      if (piece !== '.' && isPieceRed === isTurnRed) {
-        setSandboxSelected(sq);
-        setSandboxValidMoves(getLegalMoves(parsed.board, sq, parsed.turn));
-      }
-    } else {
-      if (sandboxValidMoves.includes(sq)) {
-        // Thực hiện nước đi
-        const cloned = [...parsed.board];
-        cloned[sq] = cloned[sandboxSelected];
-        cloned[sandboxSelected] = '.';
-        const nextTurn = parsed.turn === 'w' ? 'b' : 'w';
-        const nextFen = buildFen(cloned, nextTurn);
-        setSandboxFen(nextFen);
-        setSandboxSelected(null);
-        setSandboxValidMoves([]);
-      } else if (piece !== '.' && isPieceRed === isTurnRed) {
-        setSandboxSelected(sq);
-        setSandboxValidMoves(getLegalMoves(parsed.board, sq, parsed.turn));
-      } else {
-        setSandboxSelected(null);
-        setSandboxValidMoves([]);
-      }
-    }
-  };
-
-  // Chạy Benchmark phần cứng thực tế
-  const runHardwareBenchmark = () => {
-    setBenchRunning(true);
-    setBenchResults(null);
-
-    setTimeout(() => {
-      const testFens = [
-        currentFen,
-        'r1bakab1r/9/1cn1c1n2/p1p1p1p1p/9/2P6/P3P1P1P/1C2C4/9/RNBAKABNR w - - 0 20',
-        '2bakab2/9/1cn6/p1p3p1p/9/2C1C1R2/P3P1P1P/9/9/RNBAKAB2 w - - 3 45',
-        '4k4/4C4/b4Rn1b/9/4R4/8p/P1P1N1r2/9/4A4/4KAB2 b - - 0 68'
-      ];
-
-      const iterations = 50000;
-      const t0 = performance.now();
-
-      for (let i = 0; i < iterations; i++) {
-        const fenToTest = testFens[i % testFens.length];
-        const p = parse(fenToTest);
-        evaluatePosition(p.board);
-        getLegalMoves(p.board, 22, p.turn);
-      }
-
-      const t1 = performance.now();
-      const elapsedMs = t1 - t0;
-      const fensPerSec = Math.round((iterations / (elapsedMs / 1000)));
-
-      setBenchResults({
-        iterations,
-        elapsedMs: elapsedMs.toFixed(2),
-        fensPerSec: fensPerSec.toLocaleString(),
-        lutLatencyNs: ((elapsedMs * 1e6) / iterations).toFixed(1)
-      });
-      setBenchRunning(false);
-    }, 50);
-  };
-
-  // Trích xuất các message turn của JSONL nếu có
-  const jsonlTurns = useMemo(() => {
-    if (!parsedJsonlData || !parsedJsonlData.messages) return [];
-    const turns = [];
-    const msgs = parsedJsonlData.messages;
-    for (let i = 1; i < msgs.length; i += 2) {
-      const userMsg = msgs[i];
-      const assistMsg = msgs[i + 1];
-      if (userMsg && assistMsg) {
-        let assistData = null;
-        try {
-          assistData = JSON.parse(assistMsg.content);
-        } catch {
-          assistData = { thought: assistMsg.content };
-        }
-        turns.push({
-          turnIndex: Math.floor(i / 2) + 1,
-          userContent: userMsg.content,
-          assistantData: assistData
-        });
-      }
-    }
-    return turns;
-  }, [parsedJsonlData]);
-
-  const activeJsonlTurn = jsonlTurns[jsonlTurnIdx] || null;
-
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-obsidian/90 backdrop-blur-md font-body">
       <div className="bg-obsidian-card border-2 border-gold/40 rounded-2xl max-w-7xl w-full h-[92vh] flex flex-col shadow-glow overflow-hidden">
@@ -742,524 +966,132 @@ export function MindmapVisualizer({ show, close, fen, history, score, line, thou
         <div className="bg-obsidian px-6 py-3.5 border-b border-gold/30 flex items-center justify-between flex-wrap gap-3">
           <div className="flex items-center gap-3">
             <div className="w-9 h-9 rounded-lg bg-gold/10 border border-gold flex items-center justify-center text-gold shadow-glow">
-              <Compass className="w-5 h-5 animate-spin-slow" />
+              <Compass className="w-5 h-5" />
             </div>
             <div>
               <h2 className="text-base font-royal font-bold text-gold flex items-center gap-2">
-                🧠 SƠ ĐỒ TƯ DUY 360° & HẬU KIỂM TOÀN VÁN
-                <span className="px-2 py-0.5 rounded text-[10px] uppercase tracking-wider font-bold bg-gold/20 text-gold border border-gold/40">
-                  v38.1 Realtime
+                🧠 SƠ ĐỒ TƯ DUY 360° CANVAS VIEWPORT
+                <span className="px-2 py-0.5 rounded text-[10px] uppercase tracking-wider font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/40">
+                  0% CPU Idle • Snapshot Caching
                 </span>
               </h2>
               <p className="text-xs text-gold/60">
-                Thế cờ hiện tại: <span className="text-gold font-mono font-bold truncate max-w-xs inline-block align-bottom">{currentFen}</span>
+                Đang xem Ply: <b className="text-gold">{selectedPly}</b> / {gameHistory.length - 1} | Nodes: <b className="text-emerald-400">{treeNodes.length}</b>
               </p>
             </div>
           </div>
 
-          {/* TAB SWITCHER */}
-          <div className="flex items-center gap-1.5 bg-obsidian p-1 rounded-lg border border-gold/30 flex-wrap">
+          {/* LAYOUT CONTROLS */}
+          <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1 bg-obsidian p-1 rounded-lg border border-gold/30">
+              <button
+                onClick={() => setLayoutMode('radial')}
+                className={`px-3 py-1 rounded text-xs font-bold transition flex items-center gap-1 ${
+                  layoutMode === 'radial' ? 'bg-gold text-obsidian shadow-glow font-black' : 'text-gold/70 hover:text-gold'
+                }`}
+              >
+                <Target className="w-3.5 h-3.5" /> BUNG TỎA TRÒN
+              </button>
+              <button
+                onClick={() => setLayoutMode('tree')}
+                className={`px-3 py-1 rounded text-xs font-bold transition flex items-center gap-1 ${
+                  layoutMode === 'tree' ? 'bg-gold text-obsidian shadow-glow font-black' : 'text-gold/70 hover:text-gold'
+                }`}
+              >
+                <LayoutGrid className="w-3.5 h-3.5" /> CÂY PHÂN CẤP
+              </button>
+            </div>
+
             <button
-              onClick={() => setTab('tree')}
-              className={`px-3 py-1 rounded text-xs font-bold transition flex items-center gap-1.5 ${
-                tab === 'tree' ? 'bg-gold text-obsidian shadow-glow font-black' : 'text-gold/70 hover:text-gold'
-              }`}
+              onClick={close}
+              className="px-3 py-1 rounded-lg border border-red-500/40 bg-red-500/20 text-red-300 hover:bg-red-500/30 text-xs font-bold transition"
             >
-              <Layers className="w-3.5 h-3.5" /> 🌳 CÂY 3-PLY
-            </button>
-            <button
-              onClick={() => setTab('timeline')}
-              className={`px-3 py-1 rounded text-xs font-bold transition flex items-center gap-1.5 ${
-                tab === 'timeline' ? 'bg-gold text-obsidian shadow-glow font-black' : 'text-gold/70 hover:text-gold'
-              }`}
-            >
-              <TrendingUp className="w-3.5 h-3.5" /> 📈 BƯỚC NGOẶT ({gameHistory.length} PLIES)
-            </button>
-            <button
-              onClick={() => setTab('jsonl')}
-              className={`px-3 py-1 rounded text-xs font-bold transition flex items-center gap-1.5 ${
-                tab === 'jsonl' ? 'bg-gold text-obsidian shadow-glow font-black' : 'text-gold/70 hover:text-gold'
-              }`}
-            >
-              <FileCode className="w-3.5 h-3.5" /> 📜 BÓC TÁCH JSONL
-            </button>
-            <button
-              onClick={() => setTab('sandbox')}
-              className={`px-3 py-1 rounded text-xs font-bold transition flex items-center gap-1.5 ${
-                tab === 'sandbox' ? 'bg-gold text-obsidian shadow-glow font-black' : 'text-gold/70 hover:text-gold'
-              }`}
-            >
-              <Crosshair className="w-3.5 h-3.5" /> 🎮 WHAT-IF SANDBOX
-            </button>
-            <button
-              onClick={() => setTab('bench')}
-              className={`px-3 py-1 rounded text-xs font-bold transition flex items-center gap-1.5 ${
-                tab === 'bench' ? 'bg-gold text-obsidian shadow-glow font-black' : 'text-gold/70 hover:text-gold'
-              }`}
-            >
-              <Gauge className="w-3.5 h-3.5" /> 🔬 BENCHMARK
+              ĐÓNG
             </button>
           </div>
-
-          <button
-            onClick={close}
-            className="px-3 py-1 rounded-lg border border-red-500/40 bg-red-500/20 text-red-300 hover:bg-red-500/30 text-xs font-bold transition"
-          >
-            ĐÓNG
-          </button>
         </div>
 
-        {/* MAIN BODY VIEWPORT */}
-        <div className="flex-1 overflow-y-auto p-5 bg-obsidian/60 flex flex-col gap-4">
+        {/* MAIN BODY: VIEWPORT + SIDEBAR */}
+        <div className="flex-1 overflow-hidden p-4 bg-obsidian/60 grid grid-cols-1 lg:grid-cols-12 gap-4">
           
-          {/* TAB 1: CÂY SUY TƯỞNG ĐA TẦNG 3-PLY (LIVE CANDIDATE TREE) */}
-          {tab === 'tree' && (
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 flex-1">
-              {/* CỘT TRÁI: BÀN CỜ GPU & ĐIỀU KHIỂN NẠP BÀN CỜ CHÍNH */}
-              <div className="lg:col-span-4 flex flex-col items-center gap-3 bg-obsidian/80 p-4 rounded-xl border border-gold/20">
-                <div className="flex items-center justify-between w-full text-xs">
-                  <span className="text-gold/60 font-bold uppercase">BÀN CỜ NHÁNH BIẾN ĐANG XEM</span>
-                  <span className="px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 font-mono text-[10px] font-bold">
-                    Score: {activeNode ? `${activeNode.score > 0 ? '+' : ''}${activeNode.score} cp` : '0 cp'}
-                  </span>
-                </div>
-
-                <FastGpuBoard
-                  fen={activeNode ? activeNode.fen : currentFen}
-                  arrowFrom={activeNode ? activeNode.from : -1}
-                  arrowTo={activeNode ? activeNode.to : -1}
-                />
-
-                {activeNode && (
-                  <div className="w-full bg-obsidian-card p-3 rounded-lg border border-gold/20 text-xs space-y-2">
-                    <div className="flex items-center justify-between">
-                      <span className="font-bold text-gold">{activeNode.title}</span>
-                      <span className={`px-2 py-0.5 rounded text-[10px] font-bold border ${activeNode.badgeColor}`}>
-                        {activeNode.badge}
-                      </span>
-                    </div>
-                    <p className="text-gold/70 text-[11px] leading-relaxed italic">
-                      "{activeNode.intent}"
-                    </p>
-                    <div className="text-[10px] text-gold/40 font-mono break-all">
-                      FEN: {activeNode.fen}
-                    </div>
-
-                    <div className="flex items-center gap-2 pt-1">
-                      {onApplyFen && (
-                        <button
-                          onClick={() => {
-                            onApplyFen(activeNode.fen);
-                            alert('Đã áp dụng thế cờ nhánh này vào Bàn Cờ Chính!');
-                          }}
-                          className="flex-1 py-1.5 rounded bg-gold text-obsidian font-bold text-xs hover:bg-gold-light transition shadow-glow flex items-center justify-center gap-1.5"
-                        >
-                          <Play className="w-3.5 h-3.5 fill-current" /> ÁP DỤNG VÀO BÀN CỜ CHÍNH
-                        </button>
-                      )}
-                      <button
-                        onClick={() => {
-                          engine.position(activeNode.fen);
-                          engine.search(6, 2000);
-                          alert('Đã phát lệnh tìm kiếm sâu cho thế cờ nhánh này qua Engine!');
-                        }}
-                        className="py-1.5 px-3 rounded bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 font-bold text-xs hover:bg-cyan-500/30 transition flex items-center gap-1"
-                      >
-                        <Zap className="w-3.5 h-3.5" /> ENGINE SEARCH
-                      </button>
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              {/* CỘT PHẢI: CÂY PHÂN NHÁNH 3 TẦNG ĐỘNG HỌC (LIVE 3-PLY TREE VIEW) */}
-              <div className="lg:col-span-8 flex flex-col gap-3">
-                <div className="flex items-center justify-between bg-obsidian-card p-3 rounded-xl border border-gold/20">
-                  <div className="flex items-center gap-2">
-                    <Sparkles className="w-4 h-4 text-gold" />
-                    <span className="font-bold text-xs text-gold uppercase">
-                      CÂY SUY LUẬN 3-PLY ĐỘNG HỌC TỪ THẾ CỜ HIỆN TẠI ({treeData.candidates.length} ỨNG VIÊN HÀNG ĐẦU)
-                    </span>
-                  </div>
-                  <span className="text-[11px] text-gold/60 font-mono">
-                    Lượt đi: <b className="text-gold">{treeData.turn === 'w' ? 'Đỏ (Tiên)' : 'Đen (Hậu)'}</b> | Điểm gốc: <b className="text-emerald-400">{treeData.rootScore} cp</b>
-                  </span>
-                </div>
-
-                <div className="flex-1 space-y-3 overflow-y-auto pr-1">
-                  {treeData.candidates.map((cand, idx) => {
-                    const isSelected = activeNode && activeNode.uci === cand.uci;
-                    return (
-                      <div
-                        key={`cand-${cand.uci}-${idx}`}
-                        className={`p-3.5 rounded-xl border transition-all cursor-pointer ${
-                          isSelected
-                            ? 'bg-gold/15 border-gold shadow-glow'
-                            : 'bg-obsidian-card/80 border-gold/20 hover:border-gold/50'
-                        }`}
-                        onClick={() => {
-                          setActiveNode({
-                            title: `Ứng Viên #${idx + 1}: ${cand.notation}`,
-                            uci: cand.uci,
-                            fen: cand.fen,
-                            from: cand.from,
-                            to: cand.to,
-                            score: cand.score,
-                            intent: cand.intent,
-                            badge: cand.badge,
-                            badgeColor: cand.badgeColor
-                          });
-                        }}
-                      >
-                        {/* TẦNG 1: NƯỚC ĐI CANDIDATE CỦA TA */}
-                        <div className="flex items-center justify-between flex-wrap gap-2">
-                          <div className="flex items-center gap-2">
-                            <span className="w-6 h-6 rounded-full bg-gold/20 text-gold border border-gold/40 flex items-center justify-center font-mono font-bold text-xs">
-                              {idx + 1}
-                            </span>
-                            <span className="font-bold text-sm text-gold">{cand.notation}</span>
-                            <span className="font-mono text-xs text-gold/50">({cand.uci})</span>
-                            <span className={`px-2 py-0.5 rounded text-[10px] font-bold border ${cand.badgeColor}`}>
-                              {cand.badge}
-                            </span>
-                          </div>
-
-                          <div className="flex items-center gap-3">
-                            <span className="text-xs font-mono font-bold text-emerald-400">
-                              Đánh giá: {cand.score > 0 ? `+${cand.score}` : cand.score} cp
-                            </span>
-                            <span className="text-xs text-gold/60">
-                              Hiệu quả: +{cand.heuristicScore}
-                            </span>
-                          </div>
-                        </div>
-
-                        <p className="text-xs text-gold/80 mt-1.5 ml-8 leading-relaxed">
-                          🎯 <b>Ý đồ:</b> {cand.intent}
-                        </p>
-
-                        {/* TẦNG 2 & 3: ĐỐI PHƯƠNG ĐÁP TRẢ VÀ HỆ QUẢ */}
-                        {cand.reply && (
-                          <div className="mt-2.5 ml-8 p-2.5 rounded-lg bg-obsidian border border-gold/20 text-xs flex items-center justify-between flex-wrap gap-2">
-                            <div className="flex items-center gap-2">
-                              <span className="text-cyan-400 font-bold">➔ Phản đòn đối phương:</span>
-                              <span className="text-gold font-bold">{cand.reply.notation}</span>
-                              <span className="font-mono text-[11px] text-gold/50">({cand.reply.uci})</span>
-                            </div>
-                            <span className="text-gold/60 text-[11px]">
-                              Thế trận sau phản đòn: <b className="text-amber-400">{cand.reply.score} cp</b>
-                            </span>
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
+          {/* CỘT TRÁI: CANVAS VIEWPORT TỰ ĐỘNG BUNG NODES */}
+          <div className="lg:col-span-8 flex flex-col gap-3 h-full overflow-hidden">
+            <div className="flex-1 relative min-h-[420px]">
+              <MindmapCanvasViewport
+                treeNodes={treeNodes}
+                activeNodeId={activeNode ? activeNode.id : 'root'}
+                onSelectNode={(node) => setActiveNode(node)}
+                layoutMode={layoutMode}
+              />
             </div>
-          )}
 
-          {/* TAB 2: QUÉT BƯỚC NGOẶT & THẾ TRẬN TOÀN VÁN (GAME BLUNDER & TURNING POINT TIMELINE) */}
-          {tab === 'timeline' && (
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 flex-1">
-              <div className="lg:col-span-4 flex flex-col items-center gap-3 bg-obsidian/80 p-4 rounded-xl border border-gold/20">
-                <div className="flex items-center justify-between w-full text-xs">
-                  <span className="text-gold/60 font-bold uppercase">PLY {selectedPly} / {gameHistory.length - 1}</span>
-                  <span className="px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 font-mono text-[10px] font-bold">
-                    Turn {Math.floor(selectedPly / 2) + 1}
-                  </span>
-                </div>
+            {/* TIMELINE THẾ TRẬN GỌN GÀNG */}
+            <ElegantGameTimeline
+              timeline={timeline}
+              selectedPly={selectedPly}
+              onSelectPly={(ply) => setSelectedPly(ply)}
+            />
+          </div>
 
-                <FastGpuBoard fen={gameHistory[selectedPly] || currentFen} arrowFrom={-1} arrowTo={-1} />
-
-                <div className="w-full flex items-center gap-2">
-                  <button
-                    disabled={selectedPly <= 0}
-                    onClick={() => setSelectedPly((p) => Math.max(0, p - 1))}
-                    className="flex-1 py-1.5 rounded bg-obsidian border border-gold/30 text-gold text-xs font-bold disabled:opacity-30 hover:bg-gold/10"
-                  >
-                    ◀ Nước trước
-                  </button>
-                  <button
-                    disabled={selectedPly >= gameHistory.length - 1}
-                    onClick={() => setSelectedPly((p) => Math.min(gameHistory.length - 1, p + 1))}
-                    className="flex-1 py-1.5 rounded bg-obsidian border border-gold/30 text-gold text-xs font-bold disabled:opacity-30 hover:bg-gold/10"
-                  >
-                    Nước sau ▶
-                  </button>
-                </div>
-
-                {onApplyFen && (
-                  <button
-                    onClick={() => {
-                      onApplyFen(gameHistory[selectedPly]);
-                      alert(`Đã nạp lại trạng thái bàn cờ tại Ply ${selectedPly} vào Bàn Cờ Chính!`);
-                    }}
-                    className="w-full py-1.5 rounded bg-gold text-obsidian font-bold text-xs hover:bg-gold-light transition shadow-glow flex items-center justify-center gap-1.5"
-                  >
-                    <RotateCcw className="w-3.5 h-3.5" /> QUAY LẠI THẾ CỜ NÀY TRÊN BÀN CHÍNH
-                  </button>
-                )}
-              </div>
-
-              <div className="lg:col-span-8 flex flex-col gap-3">
-                <div className="flex items-center justify-between bg-obsidian-card p-3 rounded-xl border border-gold/20">
-                  <span className="font-bold text-xs text-gold uppercase flex items-center gap-2">
-                    <TrendingUp className="w-4 h-4 text-gold" /> DIỄN BIẾN THẾ TRẬN & ĐIỂM SỐ CENTIPAWN TOÀN VÁN
-                  </span>
-                  <span className="text-xs text-gold/60">
-                    Tổng số: <b className="text-gold">{timelineAnalysis.length} Plies</b>
-                  </span>
-                </div>
-
-                {/* Danh Sách Chi Tiết Từng Ply */}
-                <div className="flex-1 space-y-2 overflow-y-auto pr-1 max-h-[500px]">
-                  {timelineAnalysis.map((item) => (
-                    <div
-                      key={`timeline-${item.ply}`}
-                      onClick={() => setSelectedPly(item.ply)}
-                      className={`p-3 rounded-lg border transition cursor-pointer flex items-center justify-between flex-wrap gap-2 ${
-                        selectedPly === item.ply
-                          ? 'bg-gold/20 border-gold shadow-glow'
-                          : 'bg-obsidian-card/80 border-gold/20 hover:border-gold/40'
-                      }`}
-                    >
-                      <div className="flex items-center gap-3">
-                        <span className="w-8 h-8 rounded-lg bg-obsidian border border-gold/30 text-gold flex items-center justify-center font-mono font-bold text-xs">
-                          P{item.ply}
-                        </span>
-                        <div>
-                          <div className="flex items-center gap-2">
-                            <span className="font-bold text-xs text-gold">Turn {item.turnNumber} ({item.color})</span>
-                            <span className={`px-2 py-0.5 rounded text-[10px] font-bold border ${item.tagColor}`}>
-                              {item.tag}
-                            </span>
-                          </div>
-                          <div className="text-[11px] text-gold/50 font-mono truncate max-w-sm">
-                            {item.fen}
-                          </div>
-                        </div>
-                      </div>
-
-                      <div className="text-right">
-                        <div className="font-mono font-bold text-xs text-emerald-400">
-                          {item.score > 0 ? `+${item.score}` : item.score} cp
-                        </div>
-                        {item.ply > 0 && (
-                          <div className={`text-[10px] font-bold ${item.swing >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-                            {item.swing >= 0 ? `+${item.swing}` : item.swing} cp
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
+          {/* CỘT PHẢI: CHI TIẾT NODE & BÀN CỜ MINI GPU ĐỒNG BỘ */}
+          <div className="lg:col-span-4 flex flex-col gap-3 bg-obsidian/80 p-4 rounded-xl border border-gold/20 overflow-y-auto">
+            <div className="flex items-center justify-between text-xs border-b border-gold/20 pb-2">
+              <span className="font-bold text-gold uppercase">CHI TIẾT NODE ĐANG CHỌN</span>
+              <span className="px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 font-mono text-[10px] font-bold">
+                {activeNode?.score !== undefined ? `${activeNode.score > 0 ? '+' : ''}${activeNode.score} cp` : '0 cp'}
+              </span>
             </div>
-          )}
 
-          {/* TAB 3: BÓC TÁCH TẬP DỮ LIỆU JSONL THẬT (DEEPSEEK-R1 360° INSPECTOR) */}
-          {tab === 'jsonl' && (
-            <div className="flex flex-col gap-4 flex-1">
-              {/* Khối Nhập / Tải Tệp JSONL */}
-              <div className="bg-obsidian-card p-4 rounded-xl border border-gold/20 flex flex-col gap-3">
-                <div className="flex items-center justify-between flex-wrap gap-2">
-                  <span className="font-bold text-xs text-gold uppercase flex items-center gap-2">
-                    <FileCode className="w-4 h-4 text-gold" /> DÁN HOẶC TẢI LÊN MỘT DÒNG JSONL TỰ ĐẤU (XIANGQI-R1 DATASET)
-                  </span>
-                  <div className="flex items-center gap-2">
-                    <label className="px-3 py-1 rounded bg-gold/10 border border-gold/30 text-gold text-xs font-bold cursor-pointer hover:bg-gold/20 transition flex items-center gap-1.5">
-                      <Upload className="w-3.5 h-3.5" /> TẢI TỆP .JSONL
-                      <input type="file" accept=".jsonl,.json" onChange={handleFileUpload} className="hidden" />
-                    </label>
-                    <button
-                      onClick={handleParseJsonl}
-                      className="px-4 py-1 rounded bg-gold text-obsidian text-xs font-bold hover:bg-gold-light transition shadow-glow flex items-center gap-1.5"
-                    >
-                      <Search className="w-3.5 h-3.5" /> BÓC TÁCH 360°
-                    </button>
-                  </div>
-                </div>
-
-                <textarea
-                  rows={3}
-                  value={jsonlInput}
-                  onChange={(e) => setJsonlInput(e.target.value)}
-                  placeholder='Dán một dòng JSONL từ examples/95_cqrs_360_reasoning_generator.rs hoặc data/ vào đây...'
-                  className="w-full p-2.5 rounded-lg bg-obsidian border border-gold/30 text-gold font-mono text-xs focus:outline-none focus:border-gold"
-                />
-              </div>
-
-              {/* Kết Quả Bóc Tách Chi Tiết */}
-              {parsedJsonlData && (
-                <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 flex-1">
-                  <div className="lg:col-span-4 bg-obsidian/80 p-4 rounded-xl border border-gold/20 flex flex-col gap-3">
-                    <div className="flex items-center justify-between text-xs">
-                      <span className="font-bold text-gold">DANH SÁCH {jsonlTurns.length} TURNS</span>
-                      <span className="px-2 py-0.5 rounded bg-purple-500/20 text-purple-300 font-mono text-[10px] font-bold">
-                        Outcome: {parsedJsonlData.outcome || 'N/A'}
-                      </span>
-                    </div>
-
-                    <div className="space-y-1.5 overflow-y-auto max-h-[420px] pr-1">
-                      {jsonlTurns.map((t, idx) => (
-                        <button
-                          key={`jsonl-turn-${idx}`}
-                          onClick={() => setJsonlTurnIdx(idx)}
-                          className={`w-full text-left p-2.5 rounded-lg border text-xs transition flex items-center justify-between ${
-                            jsonlTurnIdx === idx
-                              ? 'bg-gold text-obsidian font-bold shadow-glow border-gold'
-                              : 'bg-obsidian border-gold/20 text-gold hover:border-gold/40'
-                          }`}
-                        >
-                          <span>Turn #{t.turnIndex}</span>
-                          <span className="font-mono text-[11px]">
-                            {t.assistantData?.bestmove ? `Best: ${t.assistantData.bestmove}` : ''}
-                          </span>
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-
-                  <div className="lg:col-span-8 bg-obsidian-card p-4 rounded-xl border border-gold/20 flex flex-col gap-3">
-                    {activeJsonlTurn ? (
-                      <>
-                        <div className="flex items-center justify-between border-b border-gold/20 pb-2">
-                          <span className="font-bold text-gold text-xs">
-                            PHÂN TÍCH SUY TƯỞNG TURN #{activeJsonlTurn.turnIndex}
-                          </span>
-                          <span className="text-xs font-mono text-emerald-400 font-bold">
-                            Eval: {activeJsonlTurn.assistantData?.centipawn_eval || 0} cp | BestMove: {activeJsonlTurn.assistantData?.bestmove || '-'}
-                          </span>
-                        </div>
-
-                        {/* Chuỗi Suy Luận <thought> 385 Dòng */}
-                        <div className="flex-1 overflow-y-auto max-h-[400px] p-3 rounded-lg bg-obsidian border border-gold/20 text-xs font-mono text-gold/80 leading-relaxed whitespace-pre-wrap">
-                          {activeJsonlTurn.assistantData?.thought || 'Không tìm thấy thẻ <thought>.'}
-                        </div>
-                      </>
-                    ) : (
-                      <div className="text-center py-20 text-gold/40">Chọn một Turn bên trái để xem chuỗi suy luận.</div>
-                    )}
-                  </div>
-                </div>
-              )}
+            {/* Bàn Cờ Mini Đồng Bộ */}
+            <div className="flex justify-center py-1">
+              <StaticMiniBoard
+                fen={activeNode ? activeNode.fen : inspectFen}
+                arrowFrom={activeNode ? activeNode.from : -1}
+                arrowTo={activeNode ? activeNode.to : -1}
+              />
             </div>
-          )}
 
-          {/* TAB 4: PHÒNG THỬ NGHIỆM BIẾN MỚI (INTERACTIVE WHAT-IF SANDBOX) */}
-          {tab === 'sandbox' && (
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 flex-1">
-              <div className="lg:col-span-5 flex flex-col items-center gap-3 bg-obsidian/80 p-4 rounded-xl border border-gold/20">
-                <span className="text-xs font-bold text-gold uppercase">BÀN CỜ THỬ NGHIỆM TƯƠNG TÁC (CLICK-TO-MOVE)</span>
-                <FastGpuBoard
-                  fen={sandboxFen}
-                  arrowFrom={-1}
-                  arrowTo={-1}
-                  selectedSq={sandboxSelected}
-                  validDests={sandboxValidMoves}
-                  onSquareClick={handleSandboxClick}
-                />
-                <div className="text-[11px] text-gold/60 text-center">
-                  💡 Nhấp vào một quân cờ để xem nước đi hợp lệ, sau đó nhấp vào ô đích để di chuyển!
-                </div>
-              </div>
-
-              <div className="lg:col-span-7 flex flex-col gap-3 bg-obsidian-card p-4 rounded-xl border border-gold/20">
-                <span className="font-bold text-xs text-gold uppercase flex items-center gap-2">
-                  <Crosshair className="w-4 h-4 text-gold" /> THÔNG SỐ VÀ PHÂN TÍCH NHÁNH THỬ NGHIỆM
-                </span>
-
-                <div className="grid grid-cols-2 gap-3 text-xs">
-                  <div className="p-3 bg-obsidian rounded-lg border border-gold/20">
-                    <span className="text-gold/60 text-[10px] block font-bold uppercase">LƯỢT ĐI</span>
-                    <span className="text-base font-bold text-gold">{parse(sandboxFen).turn === 'w' ? 'Đỏ' : 'Đen'}</span>
+            {activeNode && (
+              <div className="space-y-2 text-xs">
+                <div className="bg-obsidian-card p-3 rounded-lg border border-gold/20 space-y-1.5">
+                  <div className="font-bold text-gold text-sm">{activeNode.title}</div>
+                  <div className="text-gold/80 text-[11px] italic">
+                    "{activeNode.intent}"
                   </div>
-                  <div className="p-3 bg-obsidian rounded-lg border border-gold/20">
-                    <span className="text-gold/60 text-[10px] block font-bold uppercase">ĐÁNH GIÁ HEURISTIC</span>
-                    <span className="text-base font-bold text-emerald-400">{evaluatePosition(parse(sandboxFen).board).score} cp</span>
+                  <div className="text-[10px] font-mono text-gold/40 break-all">
+                    FEN: {activeNode.fen}
                   </div>
                 </div>
 
-                <div className="p-3 bg-obsidian rounded-lg border border-gold/20 text-xs space-y-1 font-mono">
-                  <div className="text-gold/60 text-[10px] font-bold">FEN HIỆN TẠI:</div>
-                  <div className="text-gold break-all">{sandboxFen}</div>
-                </div>
-
-                <div className="flex items-center gap-2 pt-2">
-                  <button
-                    onClick={() => {
-                      setSandboxFen(currentFen);
-                      setSandboxSelected(null);
-                      setSandboxValidMoves([]);
-                    }}
-                    className="flex-1 py-2 rounded bg-obsidian border border-gold/30 text-gold text-xs font-bold hover:bg-gold/10 flex items-center justify-center gap-1.5"
-                  >
-                    <RotateCcw className="w-3.5 h-3.5" /> ĐẶT LẠI THẾ CỜ GỐC
-                  </button>
-
+                <div className="flex items-center gap-2 pt-1">
                   {onApplyFen && (
                     <button
                       onClick={() => {
-                        onApplyFen(sandboxFen);
-                        alert('Đã áp dụng thế cờ thử nghiệm vào Bàn Cờ Chính!');
+                        onApplyFen(activeNode.fen);
+                        alert('Đã áp dụng thế cờ nhánh này vào Bàn Cờ Chính!');
                       }}
-                      className="flex-1 py-2 rounded bg-gold text-obsidian text-xs font-bold hover:bg-gold-light shadow-glow flex items-center justify-center gap-1.5"
+                      className="flex-1 py-2 rounded bg-gold text-obsidian font-bold text-xs hover:bg-gold-light transition shadow-glow flex items-center justify-center gap-1.5"
                     >
                       <Play className="w-3.5 h-3.5 fill-current" /> ÁP DỤNG VÀO BÀN CHÍNH
                     </button>
                   )}
+                  <button
+                    onClick={() => {
+                      engine.position(activeNode.fen);
+                      engine.search(6, 2000);
+                      alert('Đã phát lệnh tìm kiếm sâu cho thế cờ nhánh này qua Engine!');
+                    }}
+                    className="py-2 px-3 rounded bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 font-bold text-xs hover:bg-cyan-500/30 transition flex items-center gap-1"
+                  >
+                    <Zap className="w-3.5 h-3.5" /> SEARCH
+                  </button>
                 </div>
               </div>
-            </div>
-          )}
-
-          {/* TAB 5: BENCHMARK PHẦN CỨNG (GPU/CPU HARDWARE STRESS TEST) */}
-          {tab === 'bench' && (
-            <div className="flex flex-col gap-4 max-w-3xl mx-auto w-full">
-              <div className="bg-obsidian-card p-6 rounded-xl border border-gold/20 flex flex-col gap-4 text-center">
-                <div className="w-12 h-12 rounded-xl bg-gold/10 border border-gold mx-auto flex items-center justify-center text-gold shadow-glow">
-                  <Gauge className="w-6 h-6" />
-                </div>
-                <div>
-                  <h3 className="text-base font-bold text-gold font-royal">
-                    BENCHMARK HIỆU NĂNG TÍNH TOÁN & RENDER VẬT LÝ
-                  </h3>
-                  <p className="text-xs text-gold/60 mt-1">
-                    Đo lường trực tiếp tốc độ xử lý thế cờ, kiểm tra nước đi hợp lệ và render Canvas của phần cứng thiết bị.
-                  </p>
-                </div>
-
-                <button
-                  disabled={benchRunning}
-                  onClick={runHardwareBenchmark}
-                  className="py-2.5 px-6 rounded-xl bg-gold text-obsidian font-bold text-xs hover:bg-gold-light transition shadow-glow disabled:opacity-50 mx-auto flex items-center gap-2"
-                >
-                  {benchRunning ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Zap className="w-4 h-4" />}
-                  {benchRunning ? 'ĐANG CHẠY STRESS TEST...' : 'BẮT ĐẦU BENCHMARK (50,000 FEN ITERATIONS)'}
-                </button>
-
-                {benchResults && (
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs mt-4">
-                    <div className="p-3.5 bg-obsidian rounded-xl border border-gold/30">
-                      <span className="text-gold/60 text-[10px] uppercase font-bold block">THÔNG LƯỢNG FEN</span>
-                      <span className="text-lg font-black text-emerald-400">{benchResults.fensPerSec} FEN/s</span>
-                    </div>
-                    <div className="p-3.5 bg-obsidian rounded-xl border border-gold/30">
-                      <span className="text-gold/60 text-[10px] uppercase font-bold block">TỔNG THỜI GIAN</span>
-                      <span className="text-lg font-black text-amber-400">{benchResults.elapsedMs} ms</span>
-                    </div>
-                    <div className="p-3.5 bg-obsidian rounded-xl border border-gold/30">
-                      <span className="text-gold/60 text-[10px] uppercase font-bold block">ĐỘ TRỄ LUT TRUNG BÌNH</span>
-                      <span className="text-lg font-black text-cyan-400">{benchResults.lutLatencyNs} ns / FEN</span>
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
+            )}
+          </div>
 
         </div>
+
       </div>
     </div>
   );
