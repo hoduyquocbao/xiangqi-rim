@@ -356,8 +356,27 @@ impl Server {
         ];
 
         let total_stages = stages.len();
+        let checkpoint_path = "data/campaign_checkpoint.json";
+
+        // 1. Tự động nạp Checkpoint đã lưu từ trước (Resume Capability)
+        if let Some(loaded_st) = crate::server::campaign::State::load_checkpoint(checkpoint_path) {
+            println!("[CAMPAIGN CHECKPOINT] 🎯 Phát hiện Lịch sử Ký ức: Đã hoàn thành các giai đoạn: {:?}", loaded_st.completed_stages);
+            let mut st = self.campaign.lock().unwrap();
+            st.completed_stages = loaded_st.completed_stages;
+        }
 
         for (stage_id, stage_title, depth_limit, breadth_limit, openings) in stages {
+            // Kiểm tra xem Giai đoạn này đã hoàn tất trong Checkpoint chưa
+            {
+                let st = self.campaign.lock().unwrap();
+                if st.completed_stages.contains(&stage_id) {
+                    println!("\n===============================================================================");
+                    println!(" ⏭️ [BỎ QUA GIAI ĐOẠN {}/{}: {}] Đã hoàn tất 100% trong lịch sử Checkpoint.", stage_id, total_stages, stage_title);
+                    println!("===============================================================================");
+                    continue;
+                }
+            }
+
             let stage_start = std::time::Instant::now();
             let total_openings = openings.len();
 
@@ -384,6 +403,15 @@ impl Server {
             let mut stage_mates = 0usize;
 
             for (op_idx, (name, seed)) in openings.iter().enumerate() {
+                // Kiểm tra xem Khai cuộc này đã làm xong chưa
+                {
+                    let st = self.campaign.lock().unwrap();
+                    if st.done.contains(&name.to_string()) {
+                        println!(" ⏭️ [BỎ QUA MỤC TIÊU: {}] Đã hoàn tất trong Checkpoint.", name);
+                        continue;
+                    }
+                }
+
                 let op_start = std::time::Instant::now();
 
                 {
@@ -651,9 +679,11 @@ impl Server {
                     let _ = std::io::stdout().flush();
                 }
 
+                // Ghi nhận hoàn thành mục tiêu và lưu vết Checkpoint đĩa
                 {
                     let mut st = self.campaign.lock().unwrap();
                     st.done.push(name.to_string());
+                    st.save_checkpoint(checkpoint_path);
                 }
 
                 println!(
@@ -671,6 +701,13 @@ impl Server {
             let stage_dur = stage_start.elapsed();
             let final_shards = shard.count();
 
+            // Ghi nhận hoàn thành 100% Giai đoạn vào Checkpoint vĩnh cửu
+            {
+                let mut st = self.campaign.lock().unwrap();
+                st.completed_stages.push(stage_id);
+                st.save_checkpoint(checkpoint_path);
+            }
+
             println!("\n===============================================================================");
             println!("  🏆 [GIAI ĐOẠN {}/5 HOÀN TẤT 100%] {}", stage_id, stage_title);
             println!("===============================================================================");
@@ -686,13 +723,14 @@ impl Server {
             thread::sleep(Duration::from_millis(500));
         }
 
-        // TẤT CẢ 5 GIAI ĐOẠN ĐÃ HOÀN TẤT: CHUYỂN SANG STANDBY
+        // TẤT CẢ 5 GIAI ĐOẠN ĐÃ HOÀN TẤT: CHUYỂN SANG STANDBY VÀ LƯU CHECKPOINT VĨNH CỬU
         {
             let mut st = self.campaign.lock().unwrap();
             st.status = "STANDBY".to_string();
             st.title = "Đã Hoàn Tất Toàn Bộ 5 Đại Giai Đoạn Khai Thác".to_string();
             st.progress = 100.0;
             st.eta = 0.0;
+            st.save_checkpoint(checkpoint_path);
         }
 
         println!("💎 [SYSTEM COMPLETED] ĐÃ HOÀN TẤT TRỌN VẸN TOÀN BỘ 5 ĐẠI GIAI ĐOẠN CHIẾN DỊCH!");
