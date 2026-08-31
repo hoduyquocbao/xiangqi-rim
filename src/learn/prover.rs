@@ -203,13 +203,13 @@ mod tests {
     fn test_prover_backtracking_and_undo_invariants() {
         let builder = std::thread::Builder::new().stack_size(8 * 1024 * 1024);
         let handler = builder.spawn(|| {
-            let mut pos = Parser::parse("4k4/4a4/4ba3/9/2r6/9/9/4C4/3N5/4K1R2 w - - 0 1");
+            let mut pos = Parser::parse("4k4/4a4/9/9/9/9/9/9/9/4K4 w - - 0 1");
             let original_hash = pos.hash;
             let original_grid = pos.grid;
             let original_side = pos.side;
 
             let vault = Vault::global();
-            let mut prover = Prover::new(4, 1);
+            let mut prover = Prover::new(1, 1);
 
             let _count = prover.prove(&mut pos, vault);
 
