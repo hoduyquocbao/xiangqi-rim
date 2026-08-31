@@ -201,20 +201,24 @@ mod tests {
 
     #[test]
     fn test_prover_backtracking_and_undo_invariants() {
-        let mut pos = Parser::parse("4k4/4a4/4ba3/9/2r6/9/9/4C4/3N5/4K1R2 w - - 0 1");
-        let original_hash = pos.hash;
-        let original_grid = pos.grid;
-        let original_side = pos.side;
+        let builder = std::thread::Builder::new().stack_size(8 * 1024 * 1024);
+        let handler = builder.spawn(|| {
+            let mut pos = Parser::parse("4k4/4a4/4ba3/9/2r6/9/9/4C4/3N5/4K1R2 w - - 0 1");
+            let original_hash = pos.hash;
+            let original_grid = pos.grid;
+            let original_side = pos.side;
 
-        let vault = Vault::global();
-        let mut prover = Prover::new(4, 1);
+            let vault = Vault::global();
+            let mut prover = Prover::new(4, 1);
 
-        let count = prover.prove(&mut pos, vault);
+            let _count = prover.prove(&mut pos, vault);
 
-        // Sau khi vét cạn toàn bộ cây và Undo, bàn cờ PHẢI nguyên vẹn 100%
-        assert_eq!(pos.hash, original_hash, "Hash phải bảo toàn sau khi Undo!");
-        assert_eq!(pos.grid, original_grid, "Grid phải bảo toàn sau khi Undo!");
-        assert_eq!(pos.side, original_side, "Side phải bảo toàn sau khi Undo!");
-        assert!(prover.backtracks.get() > 0, "Phải thực hiện ít nhất 1 lần Backtrack Undo!");
+            // Sau khi vét cạn toàn bộ cây và Undo, bàn cờ PHẢI nguyên vẹn 100%
+            assert_eq!(pos.hash, original_hash, "Hash phải bảo toàn sau khi Undo!");
+            assert_eq!(pos.grid, original_grid, "Grid phải bảo toàn sau khi Undo!");
+            assert_eq!(pos.side, original_side, "Side phải bảo toàn sau khi Undo!");
+            assert!(prover.backtracks.get() > 0, "Phải thực hiện ít nhất 1 lần Backtrack Undo!");
+        }).unwrap();
+        handler.join().unwrap();
     }
 }
