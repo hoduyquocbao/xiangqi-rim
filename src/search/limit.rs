@@ -158,19 +158,39 @@ impl Timer {
         // Tính toán khoảng thời gian `optimum` (Soft Limit) và `maximum` (Hard Limit)
         if limit.exact > 0 {
             let hard = limit.exact.saturating_sub(Self::SAFETY);
-            let soft = (hard * 7) / 10;
+            let soft = (hard * 85) / 100;
             self.optimum = soft;
             self.maximum = hard;
         } else if limit.time > 0 {
-            let remaining = limit.time.saturating_sub(Self::SAFETY);
-            let horizon = if limit.moves > 0 { limit.moves as u64 } else { 30 };
-            let opt = (remaining / horizon) + (limit.inc * 3 / 4);
-            let max = (remaining / 5) + limit.inc;
-            self.optimum = opt;
-            self.maximum = max;
+            let remaining = limit.time.saturating_sub(Self::SAFETY).max(1);
+            let horizon = if limit.moves > 0 { (limit.moves as u64).min(25) } else { 20 };
+            let opt = (remaining / horizon) + (limit.inc * 4 / 5);
+            let max = (remaining * 2 / 5) + limit.inc;
+            // Bảo vệ an toàn tuyệt đối chống rụng kim (Timeout): Maximum KHÔNG BAO GIỜ vượt quá remaining thực tế
+            self.maximum = max.min(remaining).max(1);
+            self.optimum = opt.min(self.maximum).max(1);
         } else {
             self.optimum = u64::MAX;
             self.maximum = u64::MAX;
+        }
+    }
+
+    /// Khởi tạo đồng hồ bấm giờ `Timer` với hệ số phân bổ thời gian động (Dynamic Time Allocation)
+    /// dựa trên mức độ phức tạp của thế cờ và tình trạng bị chiếu khẩn cấp.
+    #[inline(always)]
+    pub fn init_dynamic(&mut self, limit: &Limits, side: u8, check: bool, complexity: u8) {
+        self.init(limit, side);
+        if self.optimum != u64::MAX && self.maximum != u64::MAX {
+            let mut factor = 100u64;
+            // Nếu đang bị chiếu khẩn cấp: tăng thêm 35% thời gian để tìm đường thoát
+            if check {
+                factor += 35;
+            }
+            // Nếu thế cờ phức tạp giằng co (nhiều quân lớn): tăng thêm theo complexity (0..50%)
+            factor += (complexity as u64).min(50);
+
+            let scaled_opt = (self.optimum * factor) / 100;
+            self.optimum = scaled_opt.min(self.maximum.saturating_sub(Self::SAFETY));
         }
     }
 
@@ -188,7 +208,7 @@ impl Timer {
                 return true;
             }
         }
-        if (nodes & 1023) == 0 {
+        if (nodes & 255) == 0 {
             if self.limit.nodes > 0 && nodes >= self.limit.nodes {
                 self.abort.store(true, Ordering::Relaxed);
                 return true;

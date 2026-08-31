@@ -94,8 +94,8 @@ fn test_header_boundary_split_offsets() {
 fn test_mpsc_variable_length_concurrency() {
     let capacity = 8192;
     let buf = Arc::new(Buffer::allocate(capacity, false).expect("Allocate buffer"));
-    let producers = 32;
-    let items = 1_000;
+    let producers = if cfg!(debug_assertions) { 8 } else { 32 };
+    let items = if cfg!(debug_assertions) { 200 } else { 1_000 };
     let total_expected = (producers * items) as u64;
 
     let done = Arc::new(AtomicUsize::new(0));
@@ -186,9 +186,9 @@ fn test_mpsc_variable_length_concurrency() {
 fn test_mpmc_variable_length_concurrency() {
     let capacity = 8192;
     let buf = Arc::new(Buffer::allocate(capacity, false).expect("Allocate buffer"));
-    let num_producers = 32;
-    let num_consumers = 32;
-    let items_per_prod = 1_000;
+    let num_producers = if cfg!(debug_assertions) { 8 } else { 32 };
+    let num_consumers = if cfg!(debug_assertions) { 8 } else { 32 };
+    let items_per_prod = if cfg!(debug_assertions) { 200 } else { 1_000 };
     let total_expected = (num_producers * items_per_prod) as u64;
 
     let producers_done = Arc::new(AtomicUsize::new(0));

@@ -132,19 +132,17 @@ impl Network {
             Box::from_raw(ptr)
         };
 
-        // Xavier initialization cho Feature Transformer
-        let scale = 1.0f32 / (DIM as f32).sqrt();
-        let mut seed = 42u64;
-        net.feature = vec![[0.0f32; DIM]; TOTAL];
-        for i in 0..TOTAL {
-            for j in 0..DIM {
-                seed = seed.wrapping_mul(6364136223846793005).wrapping_add(1);
-                let val = ((seed >> 33) as f32 / (u32::MAX as f32) - 0.5) * 2.0 * scale;
-                net.feature[i][j] = val;
-            }
-        }
+        // Khởi tạo bias Feature Transformer
+        net.bias = [0.0f32; DIM];
 
-        // Xavier initialization cho Hidden Layer
+        // Khởi tạo thưa (Sparse Embedding): 100% trọng số Feature Transformer khởi tạo ở mức 0.0
+        net.feature = vec![[0.0f32; DIM]; TOTAL];
+        let mut seed = 42u64;
+
+        // Khởi tạo offset Hidden Layer ở mức 0.5 để đảm bảo toàn bộ 32 nơ-ron nằm trong dải kích hoạt [0, 1]
+        net.offset = [0.5f32; HIDDEN];
+
+        // Xavier initialization cho Hidden Layer (mean 0, variance 1/512)
         let scale = 1.0f32 / (BOTH as f32).sqrt();
         for i in 0..HIDDEN {
             for j in 0..BOTH {
@@ -154,7 +152,7 @@ impl Network {
             }
         }
 
-        // Xavier initialization cho Output Layer
+        // Xavier initialization cho Output Layer (mean 0, variance 1/32)
         let scale = 1.0f32 / (HIDDEN as f32).sqrt();
         for i in 0..HIDDEN {
             seed = seed.wrapping_mul(6364136223846793005).wrapping_add(1);
@@ -233,38 +231,39 @@ impl Network {
         rate: f32,
     ) -> f32 {
         let target = datum.target as f32;
-        let error = predicted - target;
-        let loss = error * error;
+        let error_cp = predicted - target;
+        let loss = error_cp * error_cp;
 
-        // Gradient đầu ra: d_loss/d_predicted = 2 * error
-        let grad = 2.0 * error * rate;
+        let error_norm = error_cp / 400.0;
+        // Gradient chuẩn hóa cho output layer: d_loss/d_score = 2 * error * rate (kẹp gradient max 0.05)
+        let grad = (2.0 * error_norm * rate).clamp(-0.05, 0.05);
 
-        // Gradient cho Output Layer
-        let scaled = grad / 400.0;
-        self.anchor -= scaled;
+        let decay = 1.0f32 - 1e-4f32 * rate;
+
+        // Gradient cho Output Layer: Không áp dụng L2 weight decay lên anchor bias, kẹp biên an toàn [-10.0, 10.0]
+        self.anchor = (self.anchor - grad).clamp(-10.0, 10.0);
         let mut hidden_grad = [0.0f32; HIDDEN];
         for i in 0..HIDDEN {
-            self.output[i] -= scaled * state.post[i];
-            // Gradient qua ClipReLU: 0 nếu pre < 0 hoặc pre > 1
-            if state.pre[i] > 0.0 && state.pre[i] < 1.0 {
-                hidden_grad[i] = scaled * self.output[i];
-            }
+            self.output[i] = ((self.output[i] * decay) - grad * state.post[i]).clamp(-1.0, 1.0);
+            let slope = if state.pre[i] >= 0.0 && state.pre[i] <= 1.0 {
+                1.0f32
+            } else {
+                0.1f32 // LeakyReLU leak 0.1 hồi sinh nơ-ron chết (Anti-Dying ReLU)
+            };
+            hidden_grad[i] = (grad * self.output[i] * slope).clamp(-0.05, 0.05);
         }
 
-        // Gradient cho Hidden Layer
+        // Gradient cho Hidden Layer: Không áp dụng L2 weight decay lên offset bias, kẹp biên chống bão hòa [-1.0, 1.0]
         let mut clipped_grad = [0.0f32; BOTH];
         for i in 0..HIDDEN {
-            if hidden_grad[i] == 0.0 {
-                continue;
-            }
-            self.offset[i] -= hidden_grad[i];
+            self.offset[i] = (self.offset[i] - hidden_grad[i]).clamp(-1.0, 1.0);
             for j in 0..BOTH {
-                self.hidden[i][j] -= hidden_grad[i] * state.clipped[j];
+                self.hidden[i][j] = ((self.hidden[i][j] * decay) - hidden_grad[i] * state.clipped[j]).clamp(-0.15, 0.15);
                 clipped_grad[j] += hidden_grad[i] * self.hidden[i][j];
             }
         }
 
-        // Gradient qua Feature Transformer ClipReLU
+        // Gradient qua Feature Transformer ClipReLU với LeakyReLU leak (0.1)
         let (us_acc, them_acc) = if datum.side == 0 {
             (&state.red, &state.black)
         } else {
@@ -273,17 +272,16 @@ impl Network {
         let mut feature_grad_us = [0.0f32; DIM];
         let mut feature_grad_them = [0.0f32; DIM];
         for j in 0..DIM {
-            if us_acc[j] > 0.0 && us_acc[j] < 1.0 {
-                feature_grad_us[j] = clipped_grad[j];
-            }
-            if them_acc[j] > 0.0 && them_acc[j] < 1.0 {
-                feature_grad_them[j] = clipped_grad[DIM + j];
-            }
+            let slope_us = if us_acc[j] >= 0.0 && us_acc[j] <= 1.0 { 1.0f32 } else { 0.1f32 };
+            feature_grad_us[j] = (clipped_grad[j] * slope_us).clamp(-0.05, 0.05);
+
+            let slope_them = if them_acc[j] >= 0.0 && them_acc[j] <= 1.0 { 1.0f32 } else { 0.1f32 };
+            feature_grad_them[j] = (clipped_grad[DIM + j] * slope_them).clamp(-0.05, 0.05);
         }
 
-        // Cập nhật bias Feature Transformer
+        // Cập nhật bias Feature Transformer: Kẹp biên an toàn [-1.0, 1.0]
         for j in 0..DIM {
-            self.bias[j] -= feature_grad_us[j] + feature_grad_them[j];
+            self.bias[j] = (self.bias[j] - (feature_grad_us[j] + feature_grad_them[j])).clamp(-1.0, 1.0);
         }
 
         // Cập nhật trọng số Feature Transformer cho phe mình (us)
@@ -293,7 +291,7 @@ impl Network {
             let idx = us_features[i] as usize;
             if idx < TOTAL {
                 for j in 0..DIM {
-                    self.feature[idx][j] -= feature_grad_us[j];
+                    self.feature[idx][j] = ((self.feature[idx][j] * decay) - feature_grad_us[j]).clamp(-0.25, 0.25);
                 }
             }
         }
@@ -305,7 +303,7 @@ impl Network {
             let idx = them_features[i] as usize;
             if idx < TOTAL {
                 for j in 0..DIM {
-                    self.feature[idx][j] -= feature_grad_them[j];
+                    self.feature[idx][j] = ((self.feature[idx][j] * decay) - feature_grad_them[j]).clamp(-0.25, 0.25);
                 }
             }
         }
@@ -316,24 +314,25 @@ impl Network {
     /// Lượng tử hóa (Quantize) trọng số f32 → i16/i8 cho inference SIMD tốc độ cao.
     /// Xuất ra tệp nhị phân tương thích với Nnue::load() trong eval module.
     pub fn quantize(&self, path: &str) -> std::io::Result<()> {
-        let mut file = std::fs::File::create(path)?;
+        let file = std::fs::File::create(path)?;
+        let mut writer = std::io::BufWriter::with_capacity(1024 * 1024, file);
 
         // Magic header "XRNN" + Version 1
-        file.write_all(b"XRNN")?;
-        file.write_all(&1u32.to_le_bytes())?;
+        writer.write_all(b"XRNN")?;
+        writer.write_all(&1u32.to_le_bytes())?;
 
         // Feature Transformer bias: 256 × i16
         let scale_ft = 127.0f32;
         for j in 0..DIM {
             let val = (self.bias[j] * scale_ft).round().clamp(-32768.0, 32767.0) as i16;
-            file.write_all(&val.to_le_bytes())?;
+            writer.write_all(&val.to_le_bytes())?;
         }
 
         // Feature Transformer weights: TOTAL × DIM × i16
         for i in 0..TOTAL {
             for j in 0..DIM {
                 let val = (self.feature[i][j] * scale_ft).round().clamp(-32768.0, 32767.0) as i16;
-                file.write_all(&val.to_le_bytes())?;
+                writer.write_all(&val.to_le_bytes())?;
             }
         }
 
@@ -342,7 +341,7 @@ impl Network {
         for i in 0..HIDDEN {
             for j in 0..BOTH {
                 let val = (self.hidden[i][j] * scale_hl).round().clamp(-128.0, 127.0) as i8;
-                file.write_all(&[val as u8])?;
+                writer.write_all(&[val as u8])?;
             }
         }
 
@@ -350,24 +349,25 @@ impl Network {
         let scale_hb = scale_ft * scale_hl;
         for i in 0..HIDDEN {
             let val = (self.offset[i] * scale_hb).round().clamp(-2147483648.0, 2147483647.0) as i32;
-            file.write_all(&val.to_le_bytes())?;
+            writer.write_all(&val.to_le_bytes())?;
         }
 
         // Output Layer weights: HIDDEN × i8
         let scale_ol = 64.0f32;
         for i in 0..HIDDEN {
             let val = (self.output[i] * scale_ol).round().clamp(-128.0, 127.0) as i8;
-            file.write_all(&[val as u8])?;
+            writer.write_all(&[val as u8])?;
         }
 
-        // Output Layer bias: i32
-        let scale_ob = scale_hl * scale_ol;
-        let anchor = (self.anchor * scale_ob * 400.0).round().clamp(-2147483648.0, 2147483647.0) as i32;
-        file.write_all(&anchor.to_le_bytes())?;
+        // Output Layer bias: i32 (scale = 127.0 * 64.0 = 8128.0)
+        let scale_ob = 127.0f32 * 64.0f32;
+        let anchor = (self.anchor * scale_ob).round().clamp(-2147483648.0, 2147483647.0) as i32;
+        writer.write_all(&anchor.to_le_bytes())?;
 
-        // Output scale: i32 (mặc định 16 cho tương thích)
+        // Output scale: i32 (mặc định 16)
         let scale_val = 16i32;
-        file.write_all(&scale_val.to_le_bytes())?;
+        writer.write_all(&scale_val.to_le_bytes())?;
+        writer.flush()?;
 
         println!("[NNUE TRAINER] Đã xuất trọng số lượng tử hóa: {}", path);
         Ok(())
@@ -375,41 +375,43 @@ impl Network {
 
     /// Nạp trọng số f32 từ tệp nhị phân checkpoint.
     pub fn save(&self, path: &str) -> std::io::Result<()> {
-        let mut file = std::fs::File::create(path)?;
-        file.write_all(b"XRNF")?;
-        file.write_all(&1u32.to_le_bytes())?;
+        let file = std::fs::File::create(path)?;
+        let mut writer = std::io::BufWriter::with_capacity(1024 * 1024, file);
+        writer.write_all(b"XRNF")?;
+        writer.write_all(&1u32.to_le_bytes())?;
 
         // Bias
         for j in 0..DIM {
-            file.write_all(&self.bias[j].to_le_bytes())?;
+            writer.write_all(&self.bias[j].to_le_bytes())?;
         }
 
         // Feature weights (lớn — ~64MB)
         for i in 0..TOTAL {
             for j in 0..DIM {
-                file.write_all(&self.feature[i][j].to_le_bytes())?;
+                writer.write_all(&self.feature[i][j].to_le_bytes())?;
             }
         }
 
         // Hidden weights
         for i in 0..HIDDEN {
             for j in 0..BOTH {
-                file.write_all(&self.hidden[i][j].to_le_bytes())?;
+                writer.write_all(&self.hidden[i][j].to_le_bytes())?;
             }
         }
 
         // Hidden bias
         for i in 0..HIDDEN {
-            file.write_all(&self.offset[i].to_le_bytes())?;
+            writer.write_all(&self.offset[i].to_le_bytes())?;
         }
 
         // Output weights
         for i in 0..HIDDEN {
-            file.write_all(&self.output[i].to_le_bytes())?;
+            writer.write_all(&self.output[i].to_le_bytes())?;
         }
 
         // Output bias
-        file.write_all(&self.anchor.to_le_bytes())?;
+        writer.write_all(&self.anchor.to_le_bytes())?;
+        writer.flush()?;
 
         Ok(())
     }

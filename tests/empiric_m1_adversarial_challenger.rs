@@ -9,13 +9,14 @@
 // 5. Stream desynchronization & partial pull corruption bug demonstration.
 // ============================================================================
 
-use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::thread;
 use std::time::Instant;
-use xiangrust::gpu::{Buffer, Guard, Status, Storable, Validatable};
+use xiangrust::gpu::{Buffer, Guard, Status, Storable};
 
 /// Tagged payload struct for data integrity verification
+#[allow(dead_code)]
 #[derive(Clone, Copy, Debug)]
 struct PacketHeader {
     producer: u32,

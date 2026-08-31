@@ -494,3 +494,208 @@ pub fn cannon(from: u8, occupied: Bitboard, enemy: Bitboard) -> Bitboard {
     target
 }
 
+/// Tính toán Bitboard CHỈ ĂN QUÂN cho Xe tại ô `from` nhắm vào quân đối phương `enemy`.
+#[inline(always)]
+pub fn rook_captures(from: u8, occupied: Bitboard, enemy: Bitboard) -> Bitboard {
+    let sq = from as usize;
+    let mut target = Bitboard::empty();
+
+    // North (d = 0)
+    let b0 = RAY[0][sq] & occupied;
+    if b0.active() {
+        let hit = Square(b0.lsb_idx() as u8);
+        if enemy.test(hit) {
+            target.set(hit);
+        }
+    }
+
+    // South (d = 1)
+    let b1 = RAY[1][sq] & occupied;
+    if b1.active() {
+        let hit = Square(b1.msb_idx() as u8);
+        if enemy.test(hit) {
+            target.set(hit);
+        }
+    }
+
+    // East (d = 2)
+    let b2 = RAY[2][sq] & occupied;
+    if b2.active() {
+        let hit = Square(b2.lsb_idx() as u8);
+        if enemy.test(hit) {
+            target.set(hit);
+        }
+    }
+
+    // West (d = 3)
+    let b3 = RAY[3][sq] & occupied;
+    if b3.active() {
+        let hit = Square(b3.msb_idx() as u8);
+        if enemy.test(hit) {
+            target.set(hit);
+        }
+    }
+
+    target
+}
+
+/// Tính toán Bitboard CHỈ ĐI YÊN LẶNG cho Xe tại ô `from` vào các ô trống.
+#[inline(always)]
+pub fn rook_quiets(from: u8, occupied: Bitboard) -> Bitboard {
+    let sq = from as usize;
+    let mut target = Bitboard::empty();
+
+    // North (d = 0)
+    let r0 = RAY[0][sq];
+    let b0 = r0 & occupied;
+    if !b0.active() {
+        target |= r0;
+    } else {
+        let hit = b0.lsb_idx();
+        target |= (r0 ^ RAY[0][hit]) ^ Bitboard::mask(Square(hit as u8));
+    }
+
+    // South (d = 1)
+    let r1 = RAY[1][sq];
+    let b1 = r1 & occupied;
+    if !b1.active() {
+        target |= r1;
+    } else {
+        let hit = b1.msb_idx();
+        target |= (r1 ^ RAY[1][hit]) ^ Bitboard::mask(Square(hit as u8));
+    }
+
+    // East (d = 2)
+    let r2 = RAY[2][sq];
+    let b2 = r2 & occupied;
+    if !b2.active() {
+        target |= r2;
+    } else {
+        let hit = b2.lsb_idx();
+        target |= (r2 ^ RAY[2][hit]) ^ Bitboard::mask(Square(hit as u8));
+    }
+
+    // West (d = 3)
+    let r3 = RAY[3][sq];
+    let b3 = r3 & occupied;
+    if !b3.active() {
+        target |= r3;
+    } else {
+        let hit = b3.msb_idx();
+        target |= (r3 ^ RAY[3][hit]) ^ Bitboard::mask(Square(hit as u8));
+    }
+
+    target
+}
+
+/// Tính toán Bitboard CHỈ ĂN QUÂN cho Pháo tại ô `from` nhảy qua ngòi cản.
+#[inline(always)]
+pub fn cannon_captures(from: u8, occupied: Bitboard, enemy: Bitboard) -> Bitboard {
+    let sq = from as usize;
+    let mut target = Bitboard::empty();
+
+    // North (d = 0)
+    let b0 = RAY[0][sq] & occupied;
+    if b0.active() {
+        let mount = b0.lsb_idx();
+        let behind = RAY[0][mount] & occupied;
+        if behind.active() {
+            let victim = Square(behind.lsb_idx() as u8);
+            if enemy.test(victim) {
+                target.set(victim);
+            }
+        }
+    }
+
+    // South (d = 1)
+    let b1 = RAY[1][sq] & occupied;
+    if b1.active() {
+        let mount = b1.msb_idx();
+        let behind = RAY[1][mount] & occupied;
+        if behind.active() {
+            let victim = Square(behind.msb_idx() as u8);
+            if enemy.test(victim) {
+                target.set(victim);
+            }
+        }
+    }
+
+    // East (d = 2)
+    let b2 = RAY[2][sq] & occupied;
+    if b2.active() {
+        let mount = b2.lsb_idx();
+        let behind = RAY[2][mount] & occupied;
+        if behind.active() {
+            let victim = Square(behind.lsb_idx() as u8);
+            if enemy.test(victim) {
+                target.set(victim);
+            }
+        }
+    }
+
+    // West (d = 3)
+    let b3 = RAY[3][sq] & occupied;
+    if b3.active() {
+        let mount = b3.msb_idx();
+        let behind = RAY[3][mount] & occupied;
+        if behind.active() {
+            let victim = Square(behind.msb_idx() as u8);
+            if enemy.test(victim) {
+                target.set(victim);
+            }
+        }
+    }
+
+    target
+}
+
+/// Tính toán Bitboard CHỈ ĐI YÊN LẶNG cho Pháo tại ô `from` trượt trên các ô trống trước ngòi.
+#[inline(always)]
+pub fn cannon_quiets(from: u8, occupied: Bitboard) -> Bitboard {
+    let sq = from as usize;
+    let mut target = Bitboard::empty();
+
+    // North (d = 0)
+    let r0 = RAY[0][sq];
+    let b0 = r0 & occupied;
+    if !b0.active() {
+        target |= r0;
+    } else {
+        let mount = b0.lsb_idx();
+        target |= (r0 ^ RAY[0][mount]) ^ Bitboard::mask(Square(mount as u8));
+    }
+
+    // South (d = 1)
+    let r1 = RAY[1][sq];
+    let b1 = r1 & occupied;
+    if !b1.active() {
+        target |= r1;
+    } else {
+        let mount = b1.msb_idx();
+        target |= (r1 ^ RAY[1][mount]) ^ Bitboard::mask(Square(mount as u8));
+    }
+
+    // East (d = 2)
+    let r2 = RAY[2][sq];
+    let b2 = r2 & occupied;
+    if !b2.active() {
+        target |= r2;
+    } else {
+        let mount = b2.lsb_idx();
+        target |= (r2 ^ RAY[2][mount]) ^ Bitboard::mask(Square(mount as u8));
+    }
+
+    // West (d = 3)
+    let r3 = RAY[3][sq];
+    let b3 = r3 & occupied;
+    if !b3.active() {
+        target |= r3;
+    } else {
+        let mount = b3.msb_idx();
+        target |= (r3 ^ RAY[3][mount]) ^ Bitboard::mask(Square(mount as u8));
+    }
+
+    target
+}
+
+

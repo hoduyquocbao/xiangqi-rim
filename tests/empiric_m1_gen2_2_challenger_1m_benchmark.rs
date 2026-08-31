@@ -14,7 +14,7 @@ use std::thread;
 use std::time::Instant;
 
 use xiangrust::board::Parser;
-use xiangrust::book::endgame::{DRAW, LOSS, WIN};
+use xiangrust::book::endgame::DRAW;
 use xiangrust::book::opening::ENTRIES;
 use xiangrust::book::{Book, Endgame};
 
@@ -54,7 +54,8 @@ fn benchmark_book_probe_1m() {
 
     assert_eq!(hits, 500_000);
     assert_eq!(misses, 500_000);
-    assert!(ns_per_op < 300.0, "Book::probe exceeded latency threshold: {:.2} ns/op", ns_per_op);
+    let threshold = if cfg!(debug_assertions) { 2000.0 } else { 300.0 };
+    assert!(ns_per_op < threshold, "Book::probe exceeded latency threshold: {:.2} ns/op", ns_per_op);
 }
 
 /// Benchmark 2: `Endgame::eval` over 1,000,000 sequential iterations across 10 standard endgame positions.

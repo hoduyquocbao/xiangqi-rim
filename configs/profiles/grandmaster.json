@@ -1,0 +1,84 @@
+{
+  "name": "grandmaster",
+  "version": "2.0.0",
+  "king": {
+    "floor_lvl2_mg": -180,
+    "floor_lvl2_eg": -260,
+    "floor_lvl3_mg": -320,
+    "floor_lvl3_eg": -480,
+    "advisor_mg": 110,
+    "advisor_eg": 140,
+    "bishop_mg": 110,
+    "bishop_eg": 160
+  },
+  "knight": {
+    "edge_mg": -150,
+    "edge_eg": -200,
+    "pinned_mg": -80,
+    "pinned_eg": -130,
+    "restricted_mg": -35,
+    "restricted_eg": -55,
+    "river_mg": 70,
+    "river_eg": 110,
+    "outpost_mg": 160,
+    "outpost_eg": 260
+  },
+  "rook": {
+    "open_mg": 25,
+    "open_eg": 35,
+    "patrol_mg": 20,
+    "patrol_eg": 25,
+    "flank_mg": 15,
+    "flank_eg": 20,
+    "order_open": 25000,
+    "order_flank": 12000,
+    "order_edge_penalty": -30000
+  },
+  "pawn": {
+    "river_mg": 50,
+    "river_eg": 90,
+    "deep_mg": 90,
+    "deep_eg": 160,
+    "escorted_mg": 120,
+    "escorted_eg": 200,
+    "enemy_unblocked_mg": -100,
+    "enemy_unblocked_eg": -180
+  },
+  "trap": {
+    "trapped_knight_mg": -250,
+    "trapped_knight_eg": -350,
+    "trapped_rook_mg": -300,
+    "trapped_rook_eg": -400,
+    "trapped_cannon_mg": -180,
+    "trapped_cannon_eg": -240,
+    "constriction_penalty": -35
+  },
+  "endgame": {
+    "win_score": 4000,
+    "draw_score": 0,
+    "loss_score": -4000,
+    "knight_vs_advisor": 3800,
+    "rook_knight_vs_rook_guards": 3900,
+    "double_cannons_vs_broken": 4000
+  },
+  "order": {
+    "killer_one": 900000,
+    "killer_two": 800000,
+    "counter_move": 700000,
+    "mvv_lva_scale": 100
+  },
+  "prune": {
+    "rfp_base": 150,
+    "nmp_base": 3,
+    "singular_margin": 200,
+    "probcut_margin": 200
+  },
+  "time": {
+    "base_ms": 3500,
+    "min_ms": 1500,
+    "max_ms": 12000,
+    "check_multiplier": 1.5,
+    "tactical_multiplier": 1.8,
+    "endgame_multiplier": 2.2
+  }
+}

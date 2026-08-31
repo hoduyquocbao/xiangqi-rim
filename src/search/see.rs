@@ -58,16 +58,14 @@ impl See {
 
             // Tìm quân tấn công ô `to` nhỏ nhất của phe `side` trên Bitboard `occ`
             let attacker = Self::smallest_attacker(pos, to, side, occ);
-            if attacker.is_none() {
+            if let Some((att_sq, _att_piece, val)) = attacker {
+                occ.clear(Square(att_sq as u8));
+                attacker_val = val;
+                side ^= 1;
+                depth += 1;
+            } else {
                 break;
             }
-
-            let (att_sq, _att_piece, val) = attacker.unwrap();
-            occ.clear(Square(att_sq as u8));
-
-            attacker_val = val;
-            side ^= 1;
-            depth += 1;
 
             if depth >= 32 {
                 break;
@@ -113,16 +111,14 @@ impl See {
             gain[depth] = attacker_val - gain[depth - 1];
 
             let attacker = Self::smallest_attacker(pos, to, side, occ);
-            if attacker.is_none() {
+            if let Some((att_sq, _att_piece, val)) = attacker {
+                occ.clear(Square(att_sq as u8));
+                attacker_val = val;
+                side ^= 1;
+                depth += 1;
+            } else {
                 break;
             }
-
-            let (att_sq, _att_piece, val) = attacker.unwrap();
-            occ.clear(Square(att_sq as u8));
-
-            attacker_val = val;
-            side ^= 1;
-            depth += 1;
 
             if depth >= 32 {
                 break;

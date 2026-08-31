@@ -18,6 +18,8 @@ pub mod diversity;
 pub mod hybrid;
 /// Module con `limit` quản lý thời gian và tín hiệu Abort
 pub mod limit;
+/// Module con `multipv` tìm kiếm đa biến thể chính phục vụ phân tích
+pub mod multipv;
 /// Module con `order` sắp xếp thứ tự ưu tiên nước đi
 pub mod order;
 /// Module con `prune` tỉa nhánh thuật toán
@@ -39,6 +41,7 @@ pub use core::Core;
 pub use diversity::{Diversity, PRIMES};
 pub use hybrid::HybridEngine;
 pub use limit::{Limits, Result, Timer};
+pub use multipv::{Candidate, Multi};
 pub use order::{History, Killer, Order, Picker, Stage, VALUES};
 pub use pruning::Pruner;
 pub use prune::Prune;
@@ -53,6 +56,7 @@ use std::sync::atomic::Ordering;
 use std::sync::Arc;
 use crate::board::Position;
 use crate::eval::Eval;
+use crate::learn::Harvest;
 use crate::tt::Table;
 
 /// Struct `Search` quản lý toàn bộ phiên tìm kiếm, căn lề bộ nhớ 64-byte (`#[repr(C, align(64))]`).
@@ -74,11 +78,24 @@ pub struct Search {
     pub result: Result,
     /// Mảng lưu vết Zobrist Hashes của toàn bộ các nước đi đã đấu trong ván cờ
     pub past_hashes: Vec<u64>,
+    /// Bộ thu hoạch tri thức tự động nén bitwise 64-byte
+    pub harvest: Option<Harvest>,
 }
 
 impl Search {
     /// Khởi tạo một Engine Tìm kiếm mới với dung lượng bộ nhớ băm `mb` Megabytes.
     pub fn new(mb: usize) -> Self {
+        let auto_harvest = if cfg!(test) {
+            std::env::var("HARVEST").map(|v| v == "1").unwrap_or(false)
+        } else {
+            std::env::var("HARVEST").map(|v| v != "0").unwrap_or(true)
+        };
+        let harvest = if auto_harvest {
+            Some(Harvest::default())
+        } else {
+            None
+        };
+
         Self {
             pos: Position::empty(),
             eval: Eval::new(),
@@ -88,11 +105,23 @@ impl Search {
             timer: Timer::new(),
             result: Result::new(),
             past_hashes: Vec::with_capacity(256),
+            harvest,
         }
     }
 
     /// Khởi tạo một Engine Tìm kiếm mới chia sẻ chung Transposition Table `tt` giữa các luồng.
     pub fn new_shared(tt: Arc<Table>) -> Self {
+        let auto_harvest = if cfg!(test) {
+            std::env::var("HARVEST").map(|v| v == "1").unwrap_or(false)
+        } else {
+            std::env::var("HARVEST").map(|v| v != "0").unwrap_or(true)
+        };
+        let harvest = if auto_harvest {
+            Some(Harvest::default())
+        } else {
+            None
+        };
+
         Self {
             pos: Position::empty(),
             eval: Eval::new(),
@@ -102,11 +131,23 @@ impl Search {
             timer: Timer::new(),
             result: Result::new(),
             past_hashes: Vec::with_capacity(256),
+            harvest,
         }
     }
 
     /// Khởi tạo một Engine Tìm kiếm mới trực tiếp trên Heap (Box) với 0-byte stack overhead.
     pub fn new_boxed(mb: usize) -> Box<Self> {
+        let auto_harvest = if cfg!(test) {
+            std::env::var("HARVEST").map(|v| v == "1").unwrap_or(false)
+        } else {
+            std::env::var("HARVEST").map(|v| v != "0").unwrap_or(true)
+        };
+        let harvest = if auto_harvest {
+            Some(Harvest::default())
+        } else {
+            None
+        };
+
         unsafe {
             let layout = std::alloc::Layout::new::<Self>();
             let ptr = std::alloc::alloc_zeroed(layout) as *mut Self;
@@ -118,6 +159,7 @@ impl Search {
             std::ptr::write(&mut (*ptr).timer, Timer::new());
             std::ptr::write(&mut (*ptr).result, Result::new());
             std::ptr::write(&mut (*ptr).past_hashes, Vec::with_capacity(256));
+            std::ptr::write(&mut (*ptr).harvest, harvest);
             Box::from_raw(ptr)
         }
     }
@@ -179,7 +221,10 @@ impl Search {
     pub fn go_with_history(&mut self, pos: &Position, limits: &Limits, past: &[u64]) -> Result {
         self.pos = *pos;
         self.eval.reset(&self.pos);
-        self.timer.init(limits, self.pos.side);
+        let in_check = self.pos.check != 0;
+        let complexity = ((self.pos.counts[1] + self.pos.counts[2] + self.pos.counts[3]
+            + self.pos.counts[8] + self.pos.counts[9] + self.pos.counts[10]) as u8) * 4;
+        self.timer.init_dynamic(limits, self.pos.side, in_check, complexity);
         self.result = Result::new();
 
         // 0. Tra cứu nhanh Opening Book 0ms khai cuộc mà không tốn CPU search
@@ -190,6 +235,21 @@ impl Search {
             self.result.depth = 1;
             self.result.time = 0;
             return self.result.clone();
+        }
+
+        // 0.1 Tra cứu 10,013,297 Shards NVMe O(1) < 50ns đại kiện tướng
+        if let Some((raw_mv, s_score)) = crate::learn::Shard::default().probe(pos.hash) {
+            let mv = crate::movegen::types::Move::from_raw(raw_mv);
+            if mv.valid() {
+                self.result.best = mv;
+                self.result.score = s_score as i32;
+                self.result.nodes = 1;
+                self.result.depth = limits.depth.max(8);
+                self.result.time = 0;
+                // Đồng thời pre-inject vào Transposition Table để các tầng sâu kế thừa
+                self.tt.save(pos.hash, limits.depth.max(8), crate::tt::Bound::Exact.raw(), mv, s_score);
+                return self.result.clone();
+            }
         }
 
         // 1. Chạy vòng lặp độ sâu lặp tăng dần (Iterative Deepening Search Loop)
@@ -221,12 +281,60 @@ impl Search {
         self.result.time = self.timer.start.elapsed().as_millis() as u64;
         self.timer.abort.store(false, Ordering::Relaxed);
 
+        // Tự động thu hoạch và bảo tồn thế cờ tính toán vào kho tri thức vĩnh cửu
+        if let Some(ref mut h) = self.harvest {
+            if self.result.best.valid() {
+                let ply = past.len();
+                h.push(pos, self.result.best, self.result.score, self.result.depth, "RIM", ply);
+            }
+        }
+
         self.result.clone()
+    }
+
+    /// Xả toàn bộ tri thức trong bộ đệm xuống tệp nhị phân bitwise và Shards NVMe
+    pub fn flush(&mut self, outcome: &str) -> usize {
+        if let Some(ref mut h) = self.harvest {
+            return h.flush(outcome);
+        }
+        0
+    }
+
+    /// Tìm kiếm đa biến thể Multi-PV (Top N nước đi ứng viên hàng đầu) phục vụ phân tích thế cờ.
+    pub fn search_multipv(&mut self, pos: &Position, count: usize, depth: u8) -> Vec<Candidate> {
+        self.pos = *pos;
+        self.eval.reset(&self.pos);
+        self.timer.start = std::time::Instant::now();
+        self.timer.optimum = u64::MAX;
+        self.timer.maximum = u64::MAX;
+        self.timer.abort.store(false, Ordering::Relaxed);
+
+        Multi::search(
+            &mut self.pos,
+            &mut self.eval,
+            Some(&self.tt),
+            &mut self.history,
+            &mut self.killer,
+            &self.timer,
+            None,
+            if self.past_hashes.is_empty() { None } else { Some(&self.past_hashes) },
+            count,
+            depth,
+        )
     }
 
     /// Phát tín hiệu ngắt dừng ngay lập tức phiên tìm kiếm hiện tại (`stop`).
     pub fn halt(&self) {
         self.timer.halt();
+    }
+}
+
+impl Drop for Search {
+    /// Tự động xả toàn bộ tri thức còn lại khi Search kết thúc vòng đời
+    fn drop(&mut self) {
+        if let Some(ref mut h) = self.harvest {
+            let _ = h.flush("AutoSave");
+        }
     }
 }
 
@@ -248,6 +356,7 @@ mod tests {
         assert_eq!(std::mem::align_of::<Timer>(), 64);
         assert_eq!(std::mem::align_of::<Result>(), 64);
         assert_eq!(std::mem::align_of::<Pv>(), 64);
+        assert_eq!(std::mem::align_of::<Candidate>(), 64);
         assert_eq!(std::mem::align_of::<History>(), 64);
         assert_eq!(std::mem::align_of::<Killer>(), 64);
         assert_eq!(std::mem::align_of::<Picker>(), 64);
@@ -256,14 +365,38 @@ mod tests {
     /// Kiểm thử phiên tìm kiếm cơ bản trên vị trí khởi đầu ở độ sâu 4.
     #[test]
     fn initial() {
-        let pos = Parser::parse(Parser::DEFAULT);
-        let mut search = Search::new(16);
-        let mut limits = Limits::new();
-        limits.depth = 4;
+        let handle = std::thread::Builder::new()
+            .stack_size(16 * 1024 * 1024)
+            .spawn(|| {
+                let pos = Parser::parse(Parser::DEFAULT);
+                let mut search = Search::new_boxed(16);
+                let mut limits = Limits::new();
+                limits.depth = 4;
 
-        let result = search.go(&pos, &limits);
-        assert!(result.best.valid(), "Search BẮT BUỘC trả về nước đi hợp lệ!");
-        assert!(result.nodes > 0, "Search BẮT BUỘC đã duyệt > 0 nút!");
+                let result = search.go(&pos, &limits);
+                assert!(result.best.valid(), "Search BẮT BUỘC trả về nước đi hợp lệ!");
+                assert!(result.nodes > 0, "Search BẮT BUỘC đã duyệt > 0 nút!");
+            })
+            .unwrap();
+        handle.join().unwrap();
+    }
+
+    /// Kiểm thử tìm kiếm đa biến thể Multi-PV (Top 3 biến thể ứng viên).
+    #[test]
+    fn multipv() {
+        let handle = std::thread::Builder::new()
+            .stack_size(16 * 1024 * 1024)
+            .spawn(|| {
+                let pos = Parser::parse(Parser::DEFAULT);
+                let mut search = Search::new_boxed(16);
+                let candidates = search.search_multipv(&pos, 3, 3);
+                assert_eq!(candidates.len(), 3, "Multi-PV BẮT BUỘC trả về đủ 3 ứng viên!");
+                for cand in &candidates {
+                    assert!(cand.step.valid(), "Nước đi của ứng viên BẮT BUỘC hợp lệ!");
+                }
+            })
+            .unwrap();
+        handle.join().unwrap();
     }
 
     /// Kiểm thử tìm kiếm ăn quân Quiescence Search không bị nổ score hay văng lỗi.
@@ -279,4 +412,5 @@ mod tests {
         assert!(score.abs() < 2000, "Điểm Quiesce BẮT BUỘC nằm trong ranh giới thực tế!");
     }
 }
+
 

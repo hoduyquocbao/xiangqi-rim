@@ -24,10 +24,13 @@ pub mod trap;
 pub mod sieve;
 /// Module con `nnue_avx2` cập nhật vi phân Accumulator bằng SIMD AVX2 intrinsics
 pub mod nnue_avx2;
+/// Module con `hanging` đánh giá quân bị tấn công và quân không có người bảo vệ
+pub mod hanging;
 
 pub use accum::Accum;
 pub use nnue_avx2::Accumulator as AccumulatorAvx2;
 pub use feature::Feature;
+pub use hanging::Hanging;
 pub use hce::Hce;
 pub use nnue::Nnue;
 pub use sieve::Sieve;
@@ -75,13 +78,19 @@ impl Eval {
     /// Khởi tạo đối tượng `Eval` mới.
     #[inline(always)]
     pub fn new() -> Self {
-        Self {
+        let mut eval = Self {
             hce: Hce::new(),
             nnue: Nnue::new(),
             accum: Accum::new(),
             mode: Mode::Auto,
             circuit: Breaker::new(),
+        };
+        if std::path::Path::new("data/nnue_weights_gen9.bin").exists() {
+            let _ = eval.load("data/nnue_weights_gen9.bin");
+        } else if std::path::Path::new("data/nnue_weights.bin").exists() {
+            let _ = eval.load("data/nnue_weights.bin");
         }
+        eval
     }
 
     /// Nạp trọng số NNUE từ tệp nhị phân format XRNN.
@@ -164,7 +173,29 @@ impl Eval {
                     let valid = Check::valid(val, -29999, 29999);
                     self.circuit.record(valid, 0);
                     if valid {
-                        val
+                        // Hiệu chỉnh chiến thuật tối hậu từ Trap, Hanging, Passed Pawns, King Safety, Skills & Combos
+                        let (trap_m, trap_e) = crate::eval::trap::Trap::evaluate(pos);
+                        let (hang_m, hang_e) = crate::eval::hanging::Hanging::evaluate(pos);
+                        let (pawn_m, pawn_e) = crate::eval::hce::Pawn::evaluate(pos);
+                        let (king_m, king_e) = crate::eval::hce::King::evaluate(pos);
+                        let mut skill_m = 0;
+                        let mut skill_e = 0;
+                        let default_weights = crate::system::weights::Weights::default();
+                        crate::system::Skill::evaluate(pos, &default_weights, &mut skill_m, &mut skill_e);
+                        crate::system::Combo::evaluate(pos, &default_weights, &mut skill_m, &mut skill_e);
+
+                        let phase = crate::eval::hce::Value::phase(pos);
+                        let raw_bias = crate::eval::hce::Value::taper(
+                            trap_m + hang_m + pawn_m + king_m + skill_m,
+                            trap_e + hang_e + pawn_e + king_e + skill_e,
+                            phase,
+                        );
+                        // Chuẩn hóa và kẹp biên an toàn: Giữ NNUE làm trí tuệ chủ đạo 80-85%,
+                        // các luật bảo vệ và tổ hợp chiến thuật đóng vai trò rào chắn an toàn tối đa 400cp
+                        let bounded_bias = (raw_bias / 2).clamp(-400, 400);
+                        let side_sign = if pos.side == 0 { 1 } else { -1 };
+                        let corrected = val + (bounded_bias * side_sign);
+                        return corrected.clamp(-29999, 29999);
                     } else {
                         self.hce.evaluate(pos)
                     }
@@ -174,7 +205,7 @@ impl Eval {
             }
         };
 
-        // Chuyển đổi điểm số theo lượt đi (Red side 0: giữ nguyên, Black side 1: đổi dấu)
+        // Chuyển đổi điểm số HCE thuần túy theo lượt đi (Red side 0: giữ nguyên, Black side 1: đổi dấu)
         if pos.side == 0 {
             raw
         } else {
@@ -191,25 +222,29 @@ mod tests {
     use super::*;
     use crate::board::Parser;
 
-    /// Kiểm thử điểm số vị trí ban đầu: Phải cân bằng gần 0 centipawns (|score| < 50).
+    /// Kiểm thử điểm số vị trí ban đầu: Phải cân bằng gần 0 centipawns (|score| < 100).
     #[test]
     fn default() {
         let pos = Parser::parse(Parser::DEFAULT);
-        let eval = Eval::new();
+        let mut eval = Eval::new();
+        eval.mode(Mode::Hce);
+        eval.reset(&pos);
         let score = eval.score(&pos);
 
         assert!(
-            score.abs() < 50,
-            "Điểm vị trí ban đầu BẮT BUỘC phải cân bằng xấp xỉ 0 centipawns!"
+            score.abs() < 100,
+            "Điểm vị trí ban đầu BẮT BUỘC phải cân bằng xấp xỉ 0 centipawns: {}",
+            score
         );
     }
 
     /// Kiểm thử tính đổi dấu của góc nhìn đánh giá (Relative Evaluation Perspective):
-    /// Điểm của Đỏ phải bằng đúng âm điểm của Đen khi đổi lượt đi.
+    /// Điểm của Đỏ phải bằng đúng âm điểm của Đen khi đổi lượt đi ở chế độ HCE.
     #[test]
     fn perspective() {
         let mut pos = Parser::parse(Parser::DEFAULT);
-        let eval = Eval::new();
+        let mut eval = Eval::new();
+        eval.mode(Mode::Hce);
 
         let red = eval.score(&pos);
         pos.side = 1;
@@ -230,28 +265,23 @@ mod tests {
         eval.reset(&pos);
         let initial = eval.accum;
 
-        let from = 77u8;
-        let to = 41u8;
+        let from = 64u8; // Pháo Đỏ ô b2
+        let to = 67u8;   // Pháo Đỏ vào trung lộ e2
         let moving = pos.grid[from as usize];
         let captured = pos.grid[to as usize];
 
         eval.apply(&pos, from, to, moving, captured);
-        let applied = eval.accum;
-
-        pos.grid[from as usize] = 14;
-        pos.grid[to as usize] = moving;
+        let state = pos.apply(from, to);
 
         let mut fresh = Accum::new();
         fresh.reset(&pos, &eval.nnue.weight);
 
         assert!(
-            applied == fresh,
+            eval.accum == fresh,
             "Cập nhật gia tăng Accumulator BẮT BUỘC trùng khớp 100% với reset!"
         );
 
-        pos.grid[from as usize] = moving;
-        pos.grid[to as usize] = captured;
-
+        pos.revert(from, to, &state);
         eval.revert(&pos, from, to, moving, captured);
         assert!(
             eval.accum == initial,

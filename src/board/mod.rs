@@ -27,8 +27,11 @@ pub mod square;
 pub mod state;
 /// Module con `zobrist` quản lý mảng băm ngẫu nhiên Zobrist Hash
 pub mod zobrist;
+/// Module con `arbiter` quản lý Bộ Trọng tài phân xử luật Cờ tướng Châu Á (AXF Rules)
+pub mod arbiter;
 
 // Xuất bản công khai (re-export) các cấu trúc dữ liệu cốt lõi để các module khác dễ dàng truy cập
+pub use arbiter::{Arbiter, Verdict};
 pub use bitboard::Bitboard;
 pub use fen::{Parser, Serializer};
 pub use piece::{Color, Piece, Role};

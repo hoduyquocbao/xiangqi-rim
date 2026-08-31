@@ -102,4 +102,159 @@ impl BitboardMoveGen {
             }
         }
     }
+
+    /// Phương thức `generate_captures`: Sinh CHỈ các nước đi ĂN QUÂN (Captures Only) bằng Bitboard O(1).
+    /// Triệt tiêu 100% việc duyệt các ô trống không cần thiết.
+    #[inline(always)]
+    pub fn generate_captures(pos: &Position, list: &mut List) {
+        let side = pos.side as usize;
+        let enemy = pos.color[side ^ 1];
+        let occupied = pos.occupied;
+
+        // 1. Tướng ăn quân
+        let king_sq = pos.king[side];
+        if king_sq < 90 {
+            let mut targets = lookup::king(side, king_sq as usize) & enemy;
+            while let Some(to_sq) = targets.pop() {
+                list.push(Move::new(king_sq, to_sq.0));
+            }
+        }
+
+        // 2. Sĩ ăn quân
+        let mut advisors = pos.piece[side * 7 + 1];
+        while let Some(from_sq) = advisors.pop() {
+            let mut targets = lookup::advisor(side, from_sq.index()) & enemy;
+            while let Some(to_sq) = targets.pop() {
+                list.push(Move::new(from_sq.0, to_sq.0));
+            }
+        }
+
+        // 3. Tượng ăn quân
+        let mut elephants = pos.piece[side * 7 + 2];
+        while let Some(from_sq) = elephants.pop() {
+            let mut targets = lookup::elephant(side, from_sq.index()) & enemy;
+            while let Some(to_sq) = targets.pop() {
+                let eye_sq = lookup::eye(from_sq.index(), to_sq.index());
+                if eye_sq < 90 && !occupied.test(Square(eye_sq)) {
+                    list.push(Move::new(from_sq.0, to_sq.0));
+                }
+            }
+        }
+
+        // 4. Mã ăn quân
+        let mut knights = pos.piece[side * 7 + 3];
+        while let Some(from_sq) = knights.pop() {
+            let mut targets = lookup::knight(from_sq.index()) & enemy;
+            while let Some(to_sq) = targets.pop() {
+                let leg_sq = lookup::leg(from_sq.index(), to_sq.index());
+                if leg_sq < 90 && !occupied.test(Square(leg_sq)) {
+                    list.push(Move::new(from_sq.0, to_sq.0));
+                }
+            }
+        }
+
+        // 5. Xe ăn quân
+        let mut rooks = pos.piece[side * 7 + 4];
+        while let Some(from_sq) = rooks.pop() {
+            let mut targets = lookup::rook_captures(from_sq.0, occupied, enemy);
+            while let Some(to_sq) = targets.pop() {
+                list.push(Move::new(from_sq.0, to_sq.0));
+            }
+        }
+
+        // 6. Pháo ăn quân
+        let mut cannons = pos.piece[side * 7 + 5];
+        while let Some(from_sq) = cannons.pop() {
+            let mut targets = lookup::cannon_captures(from_sq.0, occupied, enemy);
+            while let Some(to_sq) = targets.pop() {
+                list.push(Move::new(from_sq.0, to_sq.0));
+            }
+        }
+
+        // 7. Tốt ăn quân
+        let mut pawns = pos.piece[side * 7 + 6];
+        while let Some(from_sq) = pawns.pop() {
+            let mut targets = lookup::pawn(side, from_sq.index()) & enemy;
+            while let Some(to_sq) = targets.pop() {
+                list.push(Move::new(from_sq.0, to_sq.0));
+            }
+        }
+    }
+
+    /// Phương thức `generate_quiets`: Sinh CHỈ các nước đi YÊN LẶNG (Quiet Moves Only) vào các ô trống.
+    #[inline(always)]
+    pub fn generate_quiets(pos: &Position, list: &mut List) {
+        let side = pos.side as usize;
+        let occupied = pos.occupied;
+        let empty = !occupied;
+
+        // 1. Tướng đi yên lặng
+        let king_sq = pos.king[side];
+        if king_sq < 90 {
+            let mut targets = lookup::king(side, king_sq as usize) & empty;
+            while let Some(to_sq) = targets.pop() {
+                list.push(Move::new(king_sq, to_sq.0));
+            }
+        }
+
+        // 2. Sĩ đi yên lặng
+        let mut advisors = pos.piece[side * 7 + 1];
+        while let Some(from_sq) = advisors.pop() {
+            let mut targets = lookup::advisor(side, from_sq.index()) & empty;
+            while let Some(to_sq) = targets.pop() {
+                list.push(Move::new(from_sq.0, to_sq.0));
+            }
+        }
+
+        // 3. Tượng đi yên lặng
+        let mut elephants = pos.piece[side * 7 + 2];
+        while let Some(from_sq) = elephants.pop() {
+            let mut targets = lookup::elephant(side, from_sq.index()) & empty;
+            while let Some(to_sq) = targets.pop() {
+                let eye_sq = lookup::eye(from_sq.index(), to_sq.index());
+                if eye_sq < 90 && !occupied.test(Square(eye_sq)) {
+                    list.push(Move::new(from_sq.0, to_sq.0));
+                }
+            }
+        }
+
+        // 4. Mã đi yên lặng
+        let mut knights = pos.piece[side * 7 + 3];
+        while let Some(from_sq) = knights.pop() {
+            let mut targets = lookup::knight(from_sq.index()) & empty;
+            while let Some(to_sq) = targets.pop() {
+                let leg_sq = lookup::leg(from_sq.index(), to_sq.index());
+                if leg_sq < 90 && !occupied.test(Square(leg_sq)) {
+                    list.push(Move::new(from_sq.0, to_sq.0));
+                }
+            }
+        }
+
+        // 5. Xe đi yên lặng
+        let mut rooks = pos.piece[side * 7 + 4];
+        while let Some(from_sq) = rooks.pop() {
+            let mut targets = lookup::rook_quiets(from_sq.0, occupied);
+            while let Some(to_sq) = targets.pop() {
+                list.push(Move::new(from_sq.0, to_sq.0));
+            }
+        }
+
+        // 6. Pháo đi yên lặng
+        let mut cannons = pos.piece[side * 7 + 5];
+        while let Some(from_sq) = cannons.pop() {
+            let mut targets = lookup::cannon_quiets(from_sq.0, occupied);
+            while let Some(to_sq) = targets.pop() {
+                list.push(Move::new(from_sq.0, to_sq.0));
+            }
+        }
+
+        // 7. Tốt đi yên lặng
+        let mut pawns = pos.piece[side * 7 + 6];
+        while let Some(from_sq) = pawns.pop() {
+            let mut targets = lookup::pawn(side, from_sq.index()) & empty;
+            while let Some(to_sq) = targets.pop() {
+                list.push(Move::new(from_sq.0, to_sq.0));
+            }
+        }
+    }
 }

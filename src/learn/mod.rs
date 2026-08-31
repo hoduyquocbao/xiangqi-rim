@@ -41,14 +41,46 @@ pub mod nnue;
 /// Module `shard`: Bảng chỉ mục 1,024 phân mảnh vĩnh cửu (1024-Shard NVMe Index)
 pub mod shard;
 
+/// Module `trap_storage`: Lưu trữ bẫy chiến thuật động XRTP v1
+pub mod trap_storage;
+
+/// Module `bundle`: Container nén tri thức hợp nhất XRKB v1 (MIME: application/x-xiangqi-bundle)
+pub mod bundle;
+
+/// Module `harvest`: Thu hoạch và bảo toàn tri thức tự động từ mọi ván đấu đối kháng
+pub mod harvest;
+
+/// Module `frame`: Khung thế cờ nén bitwise 64-byte
+pub mod frame;
+
+/// Module `archive`: Lưu trữ container nhị phân XRKB tốc độ tối đa
+pub mod archive;
+
+/// Module `miner`: Trình khai thác vét cạn toàn bộ cây biến thể khai cuộc Depth 20
+pub mod miner;
+
+/// Module `hunter`: Động cơ săn sát cục chiếu bí đa tầng & Dynamic Task Queue
+pub mod hunter;
+
+/// Module `prover`: Động cơ chứng minh & vét cạn cây quyết định bằng Backtracking Undo
+pub mod prover;
+
 // Re-export các cấu trúc dữ liệu cốt lõi để các module bên ngoài và ví dụ dễ dàng truy cập
 pub use adapt::Adapt;
+pub use archive::Archive;
 pub use audit::{Audit, Report as AuditReport};
 pub use blunder::{Blunder, Fault};
+pub use bundle::{Bundle, Header as BundleHeader, Unpacked as UnpackedBundle};
+pub use frame::Frame;
 pub use gym::{Gym, Match, Status};
+pub use harvest::Harvest;
+pub use hunter::{Hunter, MateInfo, Task as HunterTask};
+pub use miner::{Event as MinerEvent, Miner, Node as MinerNode};
 pub use nnue::{Datum, Forward, Network};
+pub use prover::{Proof, Prover};
 pub use replay::{Replay, Sample};
 pub use shard::{Entry10B, Shard};
 pub use store::{Header, Record, Store};
 pub use trace::{Entry, Trace};
 pub use trainer::{Stats, Trainer};
+pub use trap_storage::{TrapRecord, TrapStorage};

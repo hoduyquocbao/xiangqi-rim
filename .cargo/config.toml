@@ -1,16 +1,18 @@
-# ============================================================================
-# CẤU HÌNH GIA TỐC BIÊN DỊCH BỨT PHÁ TỐC ĐỘ CARGO & RUSTC (MAX PERFORMANCE)
-# ============================================================================
-# Tự động nhận diện số luồng CPU (nproc), kích hoạt target-cpu=native và bộ đệm Incremental.
-# ============================================================================
-
+# Cấu hình biên dịch tối ưu cho Xiangqi-RIM trên macOS / Unix
 [build]
-# Tự động nhận diện số luồng CPU hệ thống (nproc): 2 luồng trên Colab, 8 luồng trên MacBook (Tránh CPU Context Switch)
-# Ép rustc tối ưu trực tiếp cho tập lệnh CPU phần cứng native (AVX2 / FMA / SIMD)
-rustflags = ["-C", "target-cpu=native"]
+# Tận dụng toàn bộ nhân CPU vật lý cho biên dịch
+jobs = 4
 
-[env]
-# Bật cờ Cargo Incremental Compilation siêu tốc
-CARGO_INCREMENTAL = "1"
-# Thiết lập độ sâu bản ghi log Cargo
-RUST_BACKTRACE = "1"
+[target.x86_64-apple-darwin]
+# Tối ưu hóa tập lệnh native CPU Intel Core i5 (AVX2, FMA, BMI2) và dead code stripping
+rustflags = [
+    "-C", "target-cpu=native",
+    "-C", "link-arg=-Wl,-dead_strip",
+]
+
+[target.aarch64-apple-darwin]
+# Tối ưu hóa cho Apple Silicon M-series nếu chuyển máy
+rustflags = [
+    "-C", "target-cpu=native",
+    "-C", "link-arg=-Wl,-dead_strip",
+]

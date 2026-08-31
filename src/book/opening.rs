@@ -83,15 +83,14 @@ impl Book {
     /// Zero-allocation: Không cấp phát struct trên stack, đạt hiệu năng tối thượng < 30ns.
     #[inline(always)]
     pub fn find_hash(entries: &[Entry], hash: u64) -> Option<Move> {
-        // 1. Kiểm tra Fast-Path: chỉ khóa đọc DYNAMIC.read() khi COUNT nguyên tử > 0 (Ordering::Relaxed)
+        // 1. Kiểm tra Fast-Path: Tra cứu nhị phân O(log N) trên DYNAMIC khi COUNT > 0
         if COUNT.load(Ordering::Relaxed) > 0 {
             if let Ok(guard) = DYNAMIC.read() {
-                for entry in guard.iter().rev() {
-                    if entry.hash == hash {
-                        let from = (entry.mv >> 8) as u8;
-                        let to = (entry.mv & 0xFF) as u8;
-                        return Some(Move::new(from, to));
-                    }
+                if let Ok(idx) = guard.binary_search_by_key(&hash, |entry| entry.hash) {
+                    let entry = &guard[idx];
+                    let from = (entry.mv >> 8) as u8;
+                    let to = (entry.mv & 0xFF) as u8;
+                    return Some(Move::new(from, to));
                 }
             }
         }
@@ -131,6 +130,16 @@ impl Book {
         None
     }
 
+    /// Nạp hàng loạt (Batch Load) mảng bản ghi khai cuộc vào bảng đệm động DYNAMIC với sắp xếp O(log N).
+    pub fn load_batch(mut entries: Vec<Entry>) {
+        entries.sort_unstable_by_key(|e| e.hash);
+        entries.dedup_by_key(|e| e.hash);
+        if let Ok(mut guard) = DYNAMIC.write() {
+            *guard = entries;
+            COUNT.store(guard.len(), Ordering::Release);
+        }
+    }
+
     /// Tìm kiếm nước đi khai cuộc dựa trên khóa băm Zobrist `hash`.
     /// Ưu tiên tra cứu trên bảng bộ nhớ đệm động `DYNAMIC` khi `COUNT > 0`,
     /// sau đó tra cứu nhị phân Binary Search O(log N) trên mảng tĩnh `entries`.
@@ -144,18 +153,20 @@ impl Book {
     /// Trả về `true` nếu đồng bộ thành công.
     pub fn sync(hash: u64, mv: u16, weight: u16) -> bool {
         if let Ok(mut guard) = DYNAMIC.write() {
-            for entry in guard.iter_mut() {
-                if entry.hash == hash {
-                    if weight > entry.weight {
-                        entry.mv = mv;
-                        entry.weight = weight;
+            match guard.binary_search_by_key(&hash, |e| e.hash) {
+                Ok(idx) => {
+                    if weight > guard[idx].weight {
+                        guard[idx].mv = mv;
+                        guard[idx].weight = weight;
                     }
                     return true;
                 }
+                Err(insert_idx) => {
+                    guard.insert(insert_idx, Entry::new(hash, mv, weight, "Học Thích Ứng (Online RL)"));
+                    COUNT.store(guard.len(), Ordering::Release);
+                    return true;
+                }
             }
-            guard.push(Entry::new(hash, mv, weight, "Học Thích Ứng (Online RL)"));
-            COUNT.store(guard.len(), Ordering::Release);
-            return true;
         }
         false
     }
@@ -261,6 +272,13 @@ const fn sort(array: &mut [Entry; 1024]) {
     }
 }
 
+/// Thực hiện nước đi trên mảng ô cờ `grid` ở const time.
+const fn make_move(mut g: [u8; 90], from: usize, to: usize) -> [u8; 90] {
+    g[to] = g[from];
+    g[from] = 14;
+    g
+}
+
 /// Hàm hỗ trợ sinh 1,024 bản ghi khai cuộc đã sắp xếp tăng dần theo `hash`.
 const fn build() -> [Entry; 1024] {
     let keys = crate::board::zobrist::Zobrist::new();
@@ -291,69 +309,202 @@ const fn build() -> [Entry; 1024] {
     let origin = hash(&base, 0, &keys);
     array[0] = Entry::new(origin, 0x1316, 1000, names[0]);
 
-    // 2. Các bản ghi cho các vị trí biến thể khai cuộc thực tế chuẩn xác
-    let mut g1 = base;
-    g1[19] = 14;
-    g1[22] = 5;
-    let h1 = hash(&g1, 1, &keys);
-    array[1] = Entry::new(h1, 0x5845, 950, names[1]); // Black plays 1... H8+7 (h9g7)
+    let mut count = 1;
 
-    let mut g2 = base;
-    g2[25] = 14;
-    g2[22] = 5;
-    let h2 = hash(&g2, 1, &keys);
-    array[2] = Entry::new(h2, 0x5241, 940, names[4]); // Black plays 1... H2+3 (b9c7)
+    // Helper macro / logic trong const fn để thêm nhánh
+    // --- NHÁNH 1: PHÁO ĐẦU VS BÌNH PHONG MÃ TRỰC XA (14 Plies) ---
+    let g1 = make_move(base, 19, 22); // 1. C2=5 (b2e2)
+    array[count] = Entry::new(hash(&g1, 1, &keys), 0x5845, 980, names[1]); count += 1; // 1... H8+7 (h9g7)
 
-    let mut g3 = base;
-    g3[1] = 14;
-    g3[20] = 3;
-    let h3 = hash(&g3, 1, &keys);
-    array[3] = Entry::new(h3, 0x5241, 930, names[2]); // Black plays 1... H2+3 (b9c7)
+    let g2 = make_move(g1, 88, 69);
+    array[count] = Entry::new(hash(&g2, 0, &keys), 0x0114, 970, names[0]); count += 1; // 2. H2+3 (b0c2)
 
-    let mut g4 = base;
-    g4[7] = 14;
-    g4[24] = 3;
-    let h4 = hash(&g4, 1, &keys);
-    array[4] = Entry::new(h4, 0x5845, 920, names[10]); // Black plays 1... H8+7 (h9g7)
+    let g3 = make_move(g2, 1, 20);
+    array[count] = Entry::new(hash(&g3, 1, &keys), 0x5241, 960, names[1]); count += 1; // 2... H2+3 (b9c7)
 
-    let mut g5 = base;
-    g5[33] = 14;
-    g5[42] = 6;
-    let h5 = hash(&g5, 1, &keys);
-    array[5] = Entry::new(h5, 0x382F, 910, names[7]); // Black plays 1... P3+1 (g7g6)
+    let g4 = make_move(g3, 82, 65);
+    array[count] = Entry::new(hash(&g4, 0, &keys), 0x0001, 950, names[0]); count += 1; // 3. R1=2 (a0b0)
 
-    let mut g6 = base;
-    g6[29] = 14;
-    g6[38] = 6;
-    let h6 = hash(&g6, 1, &keys);
-    array[6] = Entry::new(h6, 0x382F, 900, names[2]); // Black plays 1... P3+1 (g7g6)
+    let g5 = make_move(g4, 0, 1);
+    array[count] = Entry::new(hash(&g5, 1, &keys), 0x5152, 940, names[1]); count += 1; // 3... R1=2 (a9b9)
 
-    let mut g7 = base;
-    g7[2] = 14;
-    g7[22] = 2;
-    let h7 = hash(&g7, 1, &keys);
-    array[7] = Entry::new(h7, 0x5845, 890, names[8]); // Black plays 1... H8+7 (h9g7)
+    let g6 = make_move(g5, 81, 82);
+    array[count] = Entry::new(hash(&g6, 0, &keys), 0x212A, 930, names[0]); count += 1; // 4. P7+1 (g3g4)
 
-    let mut g8 = base;
-    g8[6] = 14;
-    g8[22] = 2;
-    let h8 = hash(&g8, 1, &keys);
-    array[8] = Entry::new(h8, 0x5241, 880, names[6]); // Black plays 1... H2+3 (b9c7)
+    let g7 = make_move(g6, 33, 42);
+    array[count] = Entry::new(hash(&g7, 1, &keys), 0x3C33, 920, names[1]); count += 1; // 4... P7+1 (g6g5)
 
-    let mut g9 = base;
-    g9[19] = 14;
-    g9[23] = 5;
-    let h9 = hash(&g9, 1, &keys);
-    array[9] = Entry::new(h9, 0x4043, 870, names[3]); // Black plays 1... C8=5 (b7e7)
+    let g8 = make_move(g7, 60, 51);
+    array[count] = Entry::new(hash(&g8, 0, &keys), 0x0137, 910, names[0]); count += 1; // 5. R2+6 (b0b6)
 
-    let mut g10 = base;
-    g10[25] = 14;
-    g10[21] = 5;
-    let h10 = hash(&g10, 1, &keys);
-    array[10] = Entry::new(h10, 0x4643, 860, names[9]); // Black plays 1... C2=5 (h7e7)
+    let g9 = make_move(g8, 1, 55);
+    array[count] = Entry::new(hash(&g9, 1, &keys), 0x4037, 900, names[1]); count += 1; // 5... C8-1 (b7b8)
 
-    // 3. Sinh 1013 phần tử còn lại có Zobrist hash giả định phân bố ngẫu nhiên đồng đều độc lập
-    let mut i = 11;
+    let g10 = make_move(g9, 64, 55);
+    array[count] = Entry::new(hash(&g10, 0, &keys), 0x0718, 890, names[0]); count += 1; // 6. H8+7 (h0g2)
+
+    let g11 = make_move(g10, 7, 24);
+    array[count] = Entry::new(hash(&g11, 1, &keys), 0x5343, 880, names[1]); count += 1; // 6... E3+5 (c9e7)
+
+    let g12 = make_move(g11, 83, 67);
+    array[count] = Entry::new(hash(&g12, 0, &keys), 0x0807, 870, names[0]); count += 1; // 7. R9=8 (i0h0)
+
+    let g13 = make_move(g12, 8, 7);
+    array[count] = Entry::new(hash(&g13, 1, &keys), 0x5950, 860, names[1]); count += 1; // 7... R9+1 (i9i8)
+
+    // --- NHÁNH 1B: PHÁO ĐẦU VS BÌNH PHONG MÃ HOÀNH XA (12 Plies) ---
+    let gh1 = make_move(g6, 33, 42); // 4. P7+1 (g3g4)
+    let gh2 = make_move(gh1, 81, 72); // 4... R1+1 (a9a8)
+    array[count] = Entry::new(hash(&gh2, 0, &keys), 0x0718, 930, names[1]); count += 1; // 5. H8+7 (h0g2)
+
+    let gh3 = make_move(gh2, 7, 24);
+    array[count] = Entry::new(hash(&gh3, 1, &keys), 0x484B, 920, names[1]); count += 1; // 5... R1=4 (a8d8)
+
+    let gh4 = make_move(gh3, 72, 75);
+    array[count] = Entry::new(hash(&gh4, 0, &keys), 0x0807, 910, names[0]); count += 1; // 6. R9=8 (i0h0)
+
+    let gh5 = make_move(gh4, 8, 7);
+    array[count] = Entry::new(hash(&gh5, 1, &keys), 0x3C33, 900, names[1]); count += 1; // 6... P7+1 (g6g5)
+
+    // --- NHÁNH 2: PHÁO ĐẦU VS THUẬN PHÁO HOÀNH XA (12 Plies) ---
+    let gt1 = make_move(g1, 64, 67); // 1... C8=5 (b7e7)
+    array[count] = Entry::new(hash(&gt1, 0, &keys), 0x0114, 960, names[4]); count += 1; // 2. H2+3 (b0c2)
+
+    let gt2 = make_move(gt1, 1, 20);
+    array[count] = Entry::new(hash(&gt2, 1, &keys), 0x5241, 950, names[4]); count += 1; // 2... H2+3 (b9c7)
+
+    let gt3 = make_move(gt2, 82, 65);
+    array[count] = Entry::new(hash(&gt3, 0, &keys), 0x0001, 940, names[4]); count += 1; // 3. R1=2 (a0b0)
+
+    let gt4 = make_move(gt3, 0, 1);
+    array[count] = Entry::new(hash(&gt4, 1, &keys), 0x5152, 930, names[4]); count += 1; // 3... R1=2 (a9b9)
+
+    let gt5 = make_move(gt4, 81, 82);
+    array[count] = Entry::new(hash(&gt5, 0, &keys), 0x0718, 920, names[4]); count += 1; // 4. H8+7 (h0g2)
+
+    let gt6 = make_move(gt5, 7, 24);
+    array[count] = Entry::new(hash(&gt6, 1, &keys), 0x5845, 910, names[4]); count += 1; // 4... H8+7 (h9g7)
+
+    let gt7 = make_move(gt6, 88, 69);
+    array[count] = Entry::new(hash(&gt7, 0, &keys), 0x0807, 900, names[4]); count += 1; // 5. R9=8 (i0h0)
+
+    let gt8 = make_move(gt7, 8, 7);
+    array[count] = Entry::new(hash(&gt8, 1, &keys), 0x5958, 890, names[4]); count += 1; // 5... R9=8 (i9h9)
+
+    let gt9 = make_move(gt8, 89, 88);
+    array[count] = Entry::new(hash(&gt9, 0, &keys), 0x0137, 880, names[4]); count += 1; // 6. R2+6 (b0b6)
+
+    let gt10 = make_move(gt9, 1, 55);
+    array[count] = Entry::new(hash(&gt10, 1, &keys), 0x3C33, 870, names[4]); count += 1; // 6... P7+1 (g6g5)
+
+    // --- NHÁNH 3: TIẾN THẤT BINH CUỘC (P7+1) (12 Plies) ---
+    let gb1 = make_move(base, 33, 42); // 1. P7+1 (g3g4)
+    array[count] = Entry::new(hash(&gb1, 1, &keys), 0x3C33, 950, names[7]); count += 1; // 1... P7+1 (g6g5)
+
+    let gb2 = make_move(gb1, 60, 51);
+    array[count] = Entry::new(hash(&gb2, 0, &keys), 0x0718, 940, names[7]); count += 1; // 2. H8+7 (h0g2)
+
+    let gb3 = make_move(gb2, 7, 24);
+    array[count] = Entry::new(hash(&gb3, 1, &keys), 0x5845, 930, names[7]); count += 1; // 2... H8+7 (h9g7)
+
+    let gb4 = make_move(gb3, 88, 69);
+    array[count] = Entry::new(hash(&gb4, 0, &keys), 0x1316, 920, names[7]); count += 1; // 3. C2=5 (b2e2)
+
+    let gb5 = make_move(gb4, 19, 22);
+    array[count] = Entry::new(hash(&gb5, 1, &keys), 0x5241, 910, names[7]); count += 1; // 3... H2+3 (b9c7)
+
+    let gb6 = make_move(gb5, 82, 65);
+    array[count] = Entry::new(hash(&gb6, 0, &keys), 0x0807, 900, names[7]); count += 1; // 4. R9=8 (i0h0)
+
+    let gb7 = make_move(gb6, 8, 7);
+    array[count] = Entry::new(hash(&gb7, 1, &keys), 0x5958, 890, names[7]); count += 1; // 4... R9=8 (i9h9)
+
+    let gb8 = make_move(gb7, 89, 88);
+    array[count] = Entry::new(hash(&gb8, 0, &keys), 0x0114, 880, names[7]); count += 1; // 5. H2+3 (b0c2)
+
+    let gb9 = make_move(gb8, 1, 20);
+    array[count] = Entry::new(hash(&gb9, 1, &keys), 0x382F, 870, names[7]); count += 1; // 5... P3+1 (c6c5)
+
+    let gb10 = make_move(gb9, 56, 47);
+    array[count] = Entry::new(hash(&gb10, 0, &keys), 0x0001, 860, names[7]); count += 1; // 6. R1=2 (a0b0)
+
+    let gb11 = make_move(gb10, 0, 1);
+    array[count] = Entry::new(hash(&gb11, 1, &keys), 0x5343, 850, names[7]); count += 1; // 6... E3+5 (c9e7)
+
+    // --- NHÁNH 4: KHỞI MÃ CUỘC (H8+7) (12 Plies) ---
+    let gk1 = make_move(base, 7, 24); // 1. H8+7 (h0g2)
+    array[count] = Entry::new(hash(&gk1, 1, &keys), 0x5845, 950, names[2]); count += 1; // 1... H8+7 (h9g7)
+
+    let gk2 = make_move(gk1, 88, 69);
+    array[count] = Entry::new(hash(&gk2, 0, &keys), 0x212A, 940, names[2]); count += 1; // 2. P7+1 (g3g4)
+
+    let gk3 = make_move(gk2, 33, 42);
+    array[count] = Entry::new(hash(&gk3, 1, &keys), 0x5241, 930, names[2]); count += 1; // 2... H2+3 (b9c7)
+
+    let gk4 = make_move(gk3, 82, 65);
+    array[count] = Entry::new(hash(&gk4, 0, &keys), 0x0807, 920, names[2]); count += 1; // 3. R9=8 (i0h0)
+
+    let gk5 = make_move(gk4, 8, 7);
+    array[count] = Entry::new(hash(&gk5, 1, &keys), 0x5958, 910, names[2]); count += 1; // 3... R9=8 (i9h9)
+
+    let gk6 = make_move(gk5, 89, 88);
+    array[count] = Entry::new(hash(&gk6, 0, &keys), 0x1316, 900, names[2]); count += 1; // 4. C2=5 (b2e2)
+
+    let gk7 = make_move(gk6, 19, 22);
+    array[count] = Entry::new(hash(&gk7, 1, &keys), 0x4043, 890, names[2]); count += 1; // 4... C8=5 (b7e7)
+
+    let gk8 = make_move(gk7, 64, 67);
+    array[count] = Entry::new(hash(&gk8, 0, &keys), 0x0114, 880, names[2]); count += 1; // 5. H2+3 (b0c2)
+
+    let gk9 = make_move(gk8, 1, 20);
+    array[count] = Entry::new(hash(&gk9, 1, &keys), 0x5152, 870, names[2]); count += 1; // 5... R1=2 (a9b9)
+
+    // --- NHÁNH 5: PHI TƯỢNG CUỘC (E3+5) (8 Plies) ---
+    let ge1 = make_move(base, 2, 22); // 1. E3+5 (c0e2)
+    array[count] = Entry::new(hash(&ge1, 1, &keys), 0x5845, 930, names[8]); count += 1; // 1... H8+7 (h9g7)
+
+    let ge2 = make_move(ge1, 88, 69);
+    array[count] = Entry::new(hash(&ge2, 0, &keys), 0x0718, 920, names[8]); count += 1; // 2. H8+7 (h0g2)
+
+    let ge3 = make_move(ge2, 7, 24);
+    array[count] = Entry::new(hash(&ge3, 1, &keys), 0x5241, 910, names[8]); count += 1; // 2... H2+3 (b9c7)
+
+    let ge4 = make_move(ge3, 82, 65);
+    array[count] = Entry::new(hash(&ge4, 0, &keys), 0x212A, 900, names[8]); count += 1; // 3. P7+1 (g3g4)
+
+    let ge5 = make_move(ge4, 33, 42);
+    array[count] = Entry::new(hash(&ge5, 1, &keys), 0x3C33, 890, names[8]); count += 1; // 3... P7+1 (g6g5)
+
+    let ge6 = make_move(ge5, 60, 51);
+    array[count] = Entry::new(hash(&ge6, 0, &keys), 0x0807, 880, names[8]); count += 1; // 4. R9=8 (i0h0)
+
+    let ge7 = make_move(ge6, 8, 7);
+    array[count] = Entry::new(hash(&ge7, 1, &keys), 0x5958, 870, names[8]); count += 1; // 4... R9=8 (i9h9)
+
+    // --- NHÁNH 6: QUÁ CUNG PHÁO (C2=6) (8 Plies) ---
+    let gq1 = make_move(base, 19, 23); // 1. C2=6 (b2f2)
+    array[count] = Entry::new(hash(&gq1, 1, &keys), 0x5845, 920, names[3]); count += 1; // 1... H8+7 (h9g7)
+
+    let gq2 = make_move(gq1, 88, 69);
+    array[count] = Entry::new(hash(&gq2, 0, &keys), 0x0114, 910, names[3]); count += 1; // 2. H2+3 (b0c2)
+
+    let gq3 = make_move(gq2, 1, 20);
+    array[count] = Entry::new(hash(&gq3, 1, &keys), 0x382F, 900, names[3]); count += 1; // 2... P3+1 (c6c5)
+
+    let gq4 = make_move(gq3, 56, 47);
+    array[count] = Entry::new(hash(&gq4, 0, &keys), 0x0001, 890, names[3]); count += 1; // 3. R1=2 (a0b0)
+
+    let gq5 = make_move(gq4, 0, 1);
+    array[count] = Entry::new(hash(&gq5, 1, &keys), 0x5152, 880, names[3]); count += 1; // 3... R1=2 (a9b9)
+
+    let gq6 = make_move(gq5, 81, 82);
+    array[count] = Entry::new(hash(&gq6, 0, &keys), 0x0718, 870, names[3]); count += 1; // 4. H8+7 (h0g2)
+
+    let gq7 = make_move(gq6, 7, 24);
+    array[count] = Entry::new(hash(&gq7, 1, &keys), 0x5958, 860, names[3]); count += 1; // 4... R9=8 (i9h9)
+
+    // Điền các phần tử còn lại có Zobrist hash giả định phân bố ngẫu nhiên đồng đều
+    let mut i = count;
     while i < 1024 {
         let val = (origin.wrapping_add(i as u64)).wrapping_mul(0x9E3779B97F4A7C15);
         let mv = mvs_red[i % 8];

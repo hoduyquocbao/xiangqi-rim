@@ -292,7 +292,7 @@ Mỗi mẫu là 1 dòng JSON (JSONL) theo chuẩn JRCP 2.0 Conversation:
     {{"role": "assistant", "content": "...JRCP 2.0 Structured Output JSON..."}}
   ],
   "move": "b2e2",
-  "eval": 0,
+  "score": 0,
   "outcome": "draw",
   "phase": "opening",
   "depth": 4,

@@ -22,14 +22,14 @@ use xiangrust::movegen::types::Move;
 use xiangrust::search::{Limits, Search};
 
 /// Hằng số phiên bản ứng dụng APP_VERSION
-pub const APP_VERSION: &str = "v9.9.0-tournament-200-shards-benchmark";
+pub const APP_VERSION: &str = "v10.9.9-tournament-25m-shards";
 /// Hằng số dấu thời gian đóng gói APP_BUILD_STAMP
-pub const APP_BUILD_STAMP: &str = "2026-08-24 01:33:00 ICT";
+pub const APP_BUILD_STAMP: &str = "2026-08-25 07:05:00 ICT";
 
 fn main() {
     println!("===============================================================================");
-    println!(" 🏆 XIANGQI-RIM OFFICIAL TOURNAMENT ELO BENCHMARK (200 GAMES DEPTH 5)");
-    println!("    Engine 1: Xiangqi-RIM Grandmaster (1,024 Shards NVMe Pre-Injected + NNUE Gen 6)");
+    println!(" 🏆 XIANGQI-RIM OFFICIAL TOURNAMENT ELO BENCHMARK (25M SHARDS NVME + NNUE)");
+    println!("    Engine 1: Xiangqi-RIM Grandmaster (25.37M Shards NVMe Pre-Injected + NNUE Gen 7)");
     println!("    Engine 2: Hand-Crafted Evaluation (HCE Baseline)");
     println!("===============================================================================");
 
@@ -109,11 +109,31 @@ fn main() {
 
             let mut limits = Limits::new();
             limits.depth = depth;
+            // Giới hạn thời gian tối đa mỗi nước đi để tránh nghẽn tìm kiếm sâu
+            if let Ok(ms) = std::env::var("TIME_MS").and_then(|v| v.parse::<u64>().map_err(|_| std::env::VarError::NotPresent)) {
+                limits.time = ms;
+            } else {
+                limits.time = 50; // Mặc định 50ms / nước cho giải đấu siêu tốc
+            }
 
             let mut steps = 0u32;
             let mut winner = None; // None: Hòa, Some(true): RIM thắng, Some(false): HCE thắng
+            let mut history: Vec<u64> = Vec::with_capacity(256);
 
             while steps < 200 {
+                // Kiểm tra hòa lặp nước cờ (3-fold repetition check)
+                history.push(pos.hash);
+                let mut reps = 0u32;
+                for h in history.iter().rev().skip(1) {
+                    if *h == pos.hash {
+                        reps += 1;
+                    }
+                }
+                if reps >= 2 {
+                    winner = None;
+                    break;
+                }
+
                 let is_red_turn = pos.side == 0;
                 let current_is_rim = (is_red_turn && rim_is_red) || (!is_red_turn && !rim_is_red);
 
@@ -160,7 +180,7 @@ fn main() {
 
             let done = games_completed.fetch_add(1, Ordering::Relaxed) + 1;
 
-            if done % 10 == 0 || done == total_games {
+            if done % 5 == 0 || done == total_games {
                 let w = rim_wins.load(Ordering::Relaxed);
                 let l = hce_wins.load(Ordering::Relaxed);
                 let d = draws.load(Ordering::Relaxed);

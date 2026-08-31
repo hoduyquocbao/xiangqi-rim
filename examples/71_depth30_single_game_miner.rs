@@ -105,9 +105,10 @@ fn main() {
             best_mv.to / 9
         );
 
+        let actual_depth = search_res.depth;
         let sample_json = format!(
             "{{\"fen\":\"{}\",\"best_move\":\"{}\",\"score\":{},\"depth\":{}}}\n",
-            fen_str, uci_move, search_res.score, target_depth
+            fen_str, uci_move, search_res.score, actual_depth
         );
         let _ = writer.write_all(sample_json.as_bytes());
         sample_count += 1;
@@ -118,8 +119,8 @@ fn main() {
         let side_str = if pos.side == 0 { "RED" } else { "BLACK" };
 
         println!(
-            "  🚀 [DEPTH 30 MINER STREAM] Ply {:2}/20 | Side: {:5} | Score: {:5} cp | Ply Time: {:5.2}s | Game Time: {:6.2}s | OS RAM: {:.2} MB",
-            ply, side_str, search_res.score, ply_elapsed, game_elapsed, ram_rss
+            "  🚀 [MINER STREAM] Ply {:2}/20 | Side: {:5} | Depth: {:2} (Target: {:2}) | Score: {:5} cp | Ply Time: {:5.2}s | Game Time: {:6.2}s | OS RAM: {:.2} MB",
+            ply, side_str, actual_depth, target_depth, search_res.score, ply_elapsed, game_elapsed, ram_rss
         );
         let _ = stdout().flush();
 

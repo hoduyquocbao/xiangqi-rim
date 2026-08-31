@@ -78,9 +78,9 @@ REPO = "hoduyquocbao/xiangqi-nnue-dataset"
 # ============================================================================
 # APPLICATION SEMANTIC VERSIONING & BUILD METADATA
 # ============================================================================
-APP_VERSION = "v6.0.0-production"
-APP_BUILD_STAMP = "2026-08-10 18:45:00 ICT"
-APP_RELEASE_NOTES = "R16 Release: Refactored Xiangqi piece geometry rules (King/Advisor Palace bounds, Elephant River bounds, Knight leg/bounds, Rook self-attack, Cannon 0/1-screen capture/move, Pawn bottom row), fixed 32D JRCP 5.0 algorithms (forks grid mutation, discovered/checkmate truncation, flying general safety), and added 100% edge case unit test suite."
+APP_VERSION = "v24.24.0-production-nnue-gen9-live-arena"
+APP_BUILD_STAMP = "2026-08-28 12:18:00 ICT"
+APP_RELEASE_NOTES = "NNUE Gen 9 Platinum + Active Knowledge Harvesting (1024 Shards NVMe) + Structured Pipe-Plus ASCII Grid + Trade Pruning & Palace Breach."
 
 # ============================================================================
 # PERSISTENT DISK LOGGING & TELEMETRY INFRASTRUCTURE

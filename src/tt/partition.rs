@@ -52,6 +52,21 @@ impl Partition {
         }
     }
 
+    /// Nạp trước (Hardware Prefetch) cụm Cluster của ô băm vào L1 Data Cache bằng lệnh phần cứng _mm_prefetch.
+    #[inline(always)]
+    pub fn prefetch(&self, key: u64) {
+        #[cfg(target_arch = "x86_64")]
+        {
+            let idx = (key as usize) & self.mask;
+            if let Some(cluster) = self.items.get(idx) {
+                let ptr = cluster as *const Cluster as *const i8;
+                unsafe {
+                    core::arch::x86_64::_mm_prefetch(ptr, core::arch::x86_64::_MM_HINT_T0);
+                }
+            }
+        }
+    }
+
     /// Tra cứu nguyên tử thế cờ `key: u64` trong phân đoạn Partition này.
     #[inline(always)]
     pub fn probe(&self, key: u64) -> Option<Item> {

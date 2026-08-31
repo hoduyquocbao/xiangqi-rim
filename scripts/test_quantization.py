@@ -264,8 +264,8 @@ def test_output(f, result):
 
     # Output bias
     bias = struct.unpack("<i", f.read(4))[0]
-    # Reverse scale: bias_cp ≈ bias / (64 * 64 * 400) * 400 = bias / 4096
-    approx_cp = bias / (64.0 * 64.0)
+    # Reverse scale: bias_cp ≈ bias * 400.0 / (127.0 * 64.0)
+    approx_cp = (bias * 400.0) / (127.0 * 64.0)
     result.ok("Output Bias", f"raw={bias}, ≈{approx_cp:.1f} centipawn equivalent")
 
     # Output scale
@@ -287,7 +287,7 @@ def test_quantization_scales(result):
         "hidden_w":    64.0,               # self.hidden[i][j] * 64.0 → i8
         "hidden_b":    127.0 * 64.0,       # self.offset[i] * (127.0 * 64.0) → i32
         "output_w":    64.0,               # self.output[i] * 64.0 → i8
-        "output_b":    64.0 * 64.0 * 400.0,  # self.anchor * (64.0 * 64.0 * 400.0) → i32
+        "output_b":    127.0 * 64.0,       # self.anchor * (127.0 * 64.0) → i32
     }
 
     # Python community_colab.ipynb quantization:
@@ -297,7 +297,7 @@ def test_quantization_scales(result):
         "hidden_w":    64.0,               # val * 64.0 → i8
         "hidden_b":    127.0 * 64.0,       # val * 127.0 * 64.0 → i32
         "output_w":    64.0,               # val * 64.0 → i8
-        "output_b":    64.0 * 64.0 * 400.0,  # val * 64.0 * 64.0 * 400.0 → i32
+        "output_b":    127.0 * 64.0,       # val * 127.0 * 64.0 → i32
     }
 
     for key in rust_scales:

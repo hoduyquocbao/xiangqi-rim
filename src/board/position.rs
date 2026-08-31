@@ -199,53 +199,101 @@ impl Position {
     }
 
     /// Thực hiện nước đi (MakeMove) di chuyển quân từ ô `from` sang ô `to`.
-    /// Trả về đối tượng `State` chứa thông tin lưu vết để khôi phục khi hoàn tác.
+    /// Tối ưu hóa vi phân Bitboard trực tiếp O(1) triệt tiêu 100% chi phí lặp lại.
     #[inline(always)]
     pub fn apply(&mut self, from: u8, to: u8) -> State {
         if from >= 90 || to >= 90 || from == to {
-            return State::new(14, self.captured, self.check, self.rule, self.ply, self.hash);
+            return State::new(255, self.captured, self.check, self.rule, self.ply, self.hash);
         }
 
         let moving = self.grid[from as usize];
-        let captured = self.grid[to as usize];
-
-        // Tạo đối tượng lưu vết State để phục vụ UndoMove
-        let state = State::new(captured, self.captured, self.check, self.rule, self.ply, self.hash);
-
-        // 1. Xóa quân bị ăn tại ô đích (nếu có)
-        if captured < 14 {
-            self.take(to);
-            self.hash ^= KEYS.piece(captured as usize, to as usize);
-            self.rule = 0; // Đặt lại bộ đếm rule50 khi có ăn quân
-        } else if moving < 14 && moving % 7 == 6 {
-            self.rule = 0; // Đặt lại bộ đếm rule50 khi di chuyển Tốt
-        } else {
-            self.rule += 1; // Tăng bộ đếm rule50
+        if moving >= 14 {
+            return State::new(255, self.captured, self.check, self.rule, self.ply, self.hash);
         }
 
-        // 2. Di chuyển quân từ ô đi tới ô đến
-        if moving < 14 {
-            self.take(from);
-            self.hash ^= KEYS.piece(moving as usize, from as usize);
+        let captured = self.grid[to as usize];
+        let state = State::new(captured, self.captured, self.check, self.rule, self.ply, self.hash);
 
-            self.put(moving, to);
-            self.hash ^= KEYS.piece(moving as usize, to as usize);
+        let color = if moving < 7 { 0 } else { 1 };
+        let role = (moving % 7) as usize;
+        let sign = if color == 0 { 1 } else { -1 };
+
+        let from_sq = Square(from);
+        let to_sq = Square(to);
+        let from_mask = Bitboard::mask(from_sq);
+        let to_mask = Bitboard::mask(to_sq);
+        let move_mask = from_mask | to_mask;
+
+        let (from_mid, from_end) = crate::eval::hce::Table::get(role, color, from);
+        let (to_mid, to_end) = crate::eval::hce::Table::get(role, color, to);
+
+        if captured < 14 {
+            // Nước đi ăn quân (Capture move)
+            let cap_color = if captured < 7 { 0 } else { 1 };
+            let cap_role = (captured % 7) as usize;
+            let cap_sign = if cap_color == 0 { 1 } else { -1 };
+
+            self.grid[from as usize] = 14;
+            self.grid[to as usize] = moving;
+
+            self.piece[captured as usize].clear(to_sq);
+            self.color[cap_color].clear(to_sq);
+            self.counts[captured as usize] -= 1;
+
+            self.piece[moving as usize].clear(from_sq);
+            self.piece[moving as usize].set(to_sq);
+            self.color[color].clear(from_sq);
+            self.color[color].set(to_sq);
+            self.occupied.clear(from_sq);
+            self.occupied.set(to_sq);
+
+            let (cap_mid, cap_end) = crate::eval::hce::Table::get(cap_role, cap_color, to);
+            self.score_mg += sign * (to_mid - from_mid) - cap_sign * (crate::eval::hce::Value::MG[cap_role] + cap_mid);
+            self.score_eg += sign * (to_end - from_end) - cap_sign * (crate::eval::hce::Value::EG[cap_role] + cap_end);
+
+            self.hash ^= KEYS.piece(moving as usize, from as usize)
+                ^ KEYS.piece(moving as usize, to as usize)
+                ^ KEYS.piece(captured as usize, to as usize)
+                ^ KEYS.side();
+            self.rule = 0;
+        } else {
+            // Nước đi yên lặng (Quiet move - ~85% hot path)
+            self.grid[from as usize] = 14;
+            self.grid[to as usize] = moving;
+            self.piece[moving as usize] ^= move_mask;
+            self.color[color] ^= move_mask;
+            self.occupied ^= move_mask;
+
+            self.score_mg += sign * (to_mid - from_mid);
+            self.score_eg += sign * (to_end - from_end);
+
+            self.hash ^= KEYS.piece(moving as usize, from as usize)
+                ^ KEYS.piece(moving as usize, to as usize)
+                ^ KEYS.side();
+
+            if role == 6 {
+                self.rule = 0;
+            } else {
+                self.rule += 1;
+            }
+        }
+
+        if role == 0 {
+            self.king[color] = to;
         }
 
         self.captured = captured;
         self.ply += 1;
-
-        // 3. Đổi phe nắm lượt đi và cập nhật Zobrist hash phe đi
         self.side ^= 1;
-        self.hash ^= KEYS.side();
 
         state
     }
 
     /// Hoàn tác nước đi (UndoMove) khôi phục bàn cờ về trạng thái trước đó từ `State`.
+    /// Tối ưu hóa vi phân Bitboard trực tiếp O(1).
     #[inline(always)]
     pub fn revert(&mut self, from: u8, to: u8, state: &State) {
-        if from >= 90 || to >= 90 || from == to {
+        if from >= 90 || to >= 90 || from == to || state.captured == 255 {
             self.rule = state.rule;
             self.ply = state.ply;
             self.check = state.check;
@@ -254,23 +302,62 @@ impl Position {
             return;
         }
 
-        // 1. Đổi lại phe nắm lượt đi
-        self.side ^= 1;
-
         let moving = self.grid[to as usize];
-
-        // 2. Đưa quân cờ từ ô đích về lại ô xuất phát
         if moving < 14 {
-            self.take(to);
-            self.put(moving, from);
+            let color = if moving < 7 { 0 } else { 1 };
+            let role = (moving % 7) as usize;
+            let sign = if color == 0 { 1 } else { -1 };
+
+            let from_sq = Square(from);
+            let to_sq = Square(to);
+            let from_mask = Bitboard::mask(from_sq);
+            let to_mask = Bitboard::mask(to_sq);
+            let move_mask = from_mask | to_mask;
+
+            let (from_mid, from_end) = crate::eval::hce::Table::get(role, color, from);
+            let (to_mid, to_end) = crate::eval::hce::Table::get(role, color, to);
+
+            self.score_mg += sign * (from_mid - to_mid);
+            self.score_eg += sign * (from_end - to_end);
+
+            if role == 0 {
+                self.king[color] = from;
+            }
+
+            if state.captured < 14 {
+                // Khôi phục nước đi ăn quân
+                let cap_color = if state.captured < 7 { 0 } else { 1 };
+                let cap_role = (state.captured % 7) as usize;
+                let cap_sign = if cap_color == 0 { 1 } else { -1 };
+
+                self.grid[from as usize] = moving;
+                self.grid[to as usize] = state.captured;
+
+                self.piece[moving as usize].clear(to_sq);
+                self.piece[moving as usize].set(from_sq);
+                self.color[color].clear(to_sq);
+                self.color[color].set(from_sq);
+
+                self.piece[state.captured as usize].set(to_sq);
+                self.color[cap_color].set(to_sq);
+                self.occupied.set(from_sq);
+                self.occupied.set(to_sq);
+                self.counts[state.captured as usize] += 1;
+
+                let (cap_mid, cap_end) = crate::eval::hce::Table::get(cap_role, cap_color, to);
+                self.score_mg += cap_sign * (crate::eval::hce::Value::MG[cap_role] + cap_mid);
+                self.score_eg += cap_sign * (crate::eval::hce::Value::EG[cap_role] + cap_end);
+            } else {
+                // Khôi phục nước đi yên lặng
+                self.grid[from as usize] = moving;
+                self.grid[to as usize] = 14;
+                self.piece[moving as usize] ^= move_mask;
+                self.color[color] ^= move_mask;
+                self.occupied ^= move_mask;
+            }
         }
 
-        // 3. Khôi phục quân cờ đã bị ăn tại ô đích (nếu có)
-        if state.captured < 14 {
-            self.put(state.captured, to);
-        }
-
-        // 4. Phục hồi toàn bộ các trường biến trạng thái cũ
+        self.side ^= 1;
         self.rule = state.rule;
         self.ply = state.ply;
         self.check = state.check;

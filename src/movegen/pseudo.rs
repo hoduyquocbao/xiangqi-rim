@@ -141,3 +141,18 @@ pub fn pseudo(pos: &Position, list: &mut List) {
     gen(pos, list);
 }
 
+/// Sinh các nước đi giả định CHỈ ĂN QUÂN (Captures Only - Pseudo-Legal) 0-overhead.
+#[inline(always)]
+pub fn captures(pos: &Position, list: &mut List) {
+    list.clear();
+    crate::movegen::bitboard_movegen::BitboardMoveGen::generate_captures(pos, list);
+}
+
+/// Sinh các nước đi giả định CHỈ YÊN LẶNG (Quiet Moves Only - Pseudo-Legal) 0-overhead.
+#[inline(always)]
+pub fn quiets(pos: &Position, list: &mut List) {
+    list.clear();
+    crate::movegen::bitboard_movegen::BitboardMoveGen::generate_quiets(pos, list);
+}
+
+

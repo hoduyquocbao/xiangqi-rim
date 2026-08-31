@@ -158,9 +158,15 @@ impl Trainer {
 
             let terminal = steps >= (self.limit as usize);
             let reward = if terminal {
-                0.0f32
+                if top > 300 {
+                    1.0f32
+                } else if top < -300 {
+                    -1.0f32
+                } else {
+                    0.0f32
+                }
             } else {
-                (top as f32) / 1000.0f32
+                ((top as f32) / 1000.0f32) + 0.005f32
             };
 
             let sample = Sample::new(

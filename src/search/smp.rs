@@ -27,6 +27,10 @@ pub struct LazySmp {
     pub hash_mb: usize,
     /// Instance Transposition Table dùng chung giữa các luồng
     pub tt: Table,
+    /// ThreadPool dùng chung tái sử dụng cho mọi lượt tìm kiếm
+    pub pool: rayon::ThreadPool,
+    /// Bộ đánh giá Eval chứa trọng số NNUE nạp sẵn
+    pub eval: crate::eval::Eval,
 }
 
 impl LazySmp {
@@ -34,15 +38,35 @@ impl LazySmp {
     pub fn new(threads: usize, hash_mb: usize) -> Self {
         let n = if threads == 0 { 4 } else { threads };
         let mb = hash_mb.min(16).max(1);
+        let pool = rayon::ThreadPoolBuilder::new()
+            .num_threads(n)
+            .build()
+            .unwrap();
+        let mut eval = crate::eval::Eval::new();
+        if std::path::Path::new("data/nnue_weights.bin").exists() {
+            let _ = eval.load("data/nnue_weights.bin");
+        }
         Self {
             threads: n,
             hash_mb: mb,
             tt: Table::new(mb),
+            pool,
+            eval,
         }
     }
 
     /// Thực thi tìm kiếm song song đa luồng Lazy SMP trên vị trí `pos` với giới hạn `limits`.
     pub fn go(&mut self, pos: &Position, limits: &Limits) -> Result {
+        self.go_with_past(pos, limits, None)
+    }
+
+    /// Thực thi tìm kiếm song song đa luồng Lazy SMP với mảng lịch sử băm `past_hashes`.
+    pub fn go_with_history(&mut self, pos: &Position, limits: &Limits, past_hashes: &[u64]) -> Result {
+        self.go_with_past(pos, limits, Some(past_hashes))
+    }
+
+    /// Thực thi tìm kiếm song song đa luồng Lazy SMP trên vị trí `pos` với giới hạn `limits` và `past`.
+    pub fn go_with_past(&mut self, pos: &Position, limits: &Limits, past: Option<&[u64]>) -> Result {
         let start = Instant::now();
         let total_nodes = Arc::new(AtomicU64::new(0));
         let abort = Arc::new(AtomicBool::new(false));
@@ -52,17 +76,12 @@ impl LazySmp {
 
         let workers = self.threads;
         let shared_tt = &self.tt;
-
-        // Sử dụng Rayon ThreadPool để chạy $N$ luồng song song
-        let pool = rayon::ThreadPoolBuilder::new()
-            .num_threads(workers)
-            .build()
-            .unwrap();
+        let shared_eval = &self.eval;
 
         let target_pos = pos.clone();
         let target_limits = *limits;
 
-        pool.install(|| {
+        self.pool.install(|| {
             rayon::scope(|s| {
                 for thread_id in 0..workers {
                     let nodes_counter = Arc::clone(&total_nodes);
@@ -86,7 +105,8 @@ impl LazySmp {
                         let mut killer = crate::search::Killer::new();
                         let mut timer = crate::search::Timer::new();
                         timer.init(&local_limits, local_pos.side);
-                        let mut eval = crate::eval::Eval::new();
+                        timer.bind(Arc::clone(&abort_flag));
+                        let mut eval = shared_eval.clone();
                         eval.reset(&local_pos);
 
                         let diversity = crate::search::Diversity::new(thread_id);
@@ -99,7 +119,7 @@ impl LazySmp {
                             &mut killer,
                             &timer,
                             Some(&diversity),
-                            None,
+                            past,
                         );
 
                         nodes_counter.fetch_add(nodes, Ordering::Relaxed);

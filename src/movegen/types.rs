@@ -56,7 +56,7 @@ impl Move {
 
 /// Struct `List` chứa danh sách các nước đi được sinh ra, căn lề bộ nhớ 64-byte.
 #[repr(C, align(64))]
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct List {
     /// Mảng lưu trữ tối đa 128 nước đi cố định (không cấp phát bộ nhớ động Heap)
     pub items: [Move; 128],

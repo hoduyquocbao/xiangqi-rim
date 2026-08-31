@@ -56,10 +56,10 @@ use xiangrust::search::{Limits, Search};
 use xiangrust::tt::Table;
 
 /// Số phiên bản của Máy phát Suy Luận CQRS-ES 360 Độ
-const APP_VERSION: &str = "v37.0.0-true-autonomous-360-dynamic-reasoning-engine";
+const APP_VERSION: &str = "v38.0.0-sota-reasoning-generator-nnue-fix";
 
 /// Dấu thời gian phát hành phiên bản máy phát suy luận
-const APP_BUILD_STAMP: &str = "2026-08-23 21:55:00 ICT";
+const APP_BUILD_STAMP: &str = "2026-08-25 22:15:00 ICT";
 
 /// Giá trị centipawn quy chuẩn của 7 loại quân cờ Tướng
 const VALUE: [i32; 7] = [0, 200, 200, 400, 900, 450, 100];
@@ -1673,7 +1673,7 @@ fn main() {
         let file = OpenOptions::new()
             .create(true)
             .write(true)
-            .append(true)
+            .truncate(true)
             .open(&current_path)
             .expect("Không thể tạo/mở tệp JSONL xuất dữ liệu suy luận");
         let mut writer = BufWriter::with_capacity(4 * 1024 * 1024, file);
@@ -1964,6 +1964,7 @@ fn main() {
 
                     let mut turns_data = Vec::with_capacity(max_plies);
                     let mut outcome_str: Option<&'static str> = None;
+                    let mut last_score = 0;
 
                     while game_ply < max_plies {
                         let mut moves = List::new();
@@ -2147,17 +2148,29 @@ fn main() {
                         history_hashes.push(pos.hash);
                         game_ply += 1;
 
-                        // 5. Kiểm tra Chấp nhận thua do chênh lệch điểm quá lớn (Resignation >= 2000 cp)
-                        if best_score >= 2000 {
+                        // 5. Kiểm tra Chấp nhận thua do chênh lệch điểm quá lớn (Resignation >= 800 cp hoặc Sát cục >= 25000 cp)
+                        last_score = best_score;
+                        if best_score >= 800 {
                             outcome_str = Some(if side == 0 { "red_win" } else { "black_win" });
                             break;
-                        } else if best_score <= -2000 {
+                        } else if best_score <= -800 {
                             outcome_str = Some(if side == 0 { "black_win" } else { "red_win" });
                             break;
                         }
                     }
 
-                    // Chỉ gửi ván cờ nếu có kết quả dứt điểm (Thắng/Thua)
+                    // Nếu chạm trần max_plies mà chưa ngắt, phân định theo ưu thế điểm số thực tế
+                    if outcome_str.is_none() && game_ply >= max_plies {
+                        if last_score >= 150 {
+                            outcome_str = Some(if (game_ply % 2) == 1 { "red_win" } else { "black_win" });
+                        } else if last_score <= -150 {
+                            outcome_str = Some(if (game_ply % 2) == 1 { "black_win" } else { "red_win" });
+                        } else {
+                            outcome_str = Some("draw");
+                        }
+                    }
+
+                    // Gửi ván cờ tới hàng đợi chuyển đổi
                     if let Some(outcome) = outcome_str {
                         let _ = game_sender_cloned.send(RawGameData {
                             game_id,
@@ -2167,7 +2180,6 @@ fn main() {
                         });
                         break;
                     }
-                    // Nếu chạm trần max_plies mà chưa phân định -> Tự động tái đấu ván mới
                 }
             }
         });

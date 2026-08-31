@@ -49,7 +49,7 @@ fn test_m4_gpu_device_and_guard_safety() {
 #[test]
 fn test_m4_gpu_continuous_execution_zero_panics() {
     let pos = Parser::parse(Parser::DEFAULT);
-    let sample = Sample::pack(&pos, 1);
+    let _sample = Sample::pack(&pos, 1);
 
     // Stress test 100 iterations of Gym submit and process
     let mut gym = Gym::init().expect("Gym init failed");

@@ -14,5 +14,9 @@ pub mod opening;
 /// Phân hệ cơ sở tri thức tàn cuộc thực dụng
 pub mod endgame;
 
+/// Phân hệ nạp và xuất bản sách khai cuộc động chuẩn XRBK v1
+pub mod loader;
+
 pub use endgame::{Endgame, Rule};
+pub use loader::{Header, Loader, Record};
 pub use opening::{Book, Entry};

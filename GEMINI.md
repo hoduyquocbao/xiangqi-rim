@@ -255,7 +255,36 @@ GAMES=10000 DEPTH=4 THREADS=4 cargo run --release --example 20_parallel_mine
   - **Quy Trình 3 Bước**: Mine Chunk $\rightarrow$ Upload HuggingFace Hub Dataset Repo $\rightarrow$ Xóa tệp đĩa cục bộ (`os.remove()`).
   - **Cam Kết**: Giữ dung lượng ổ đĩa SSD MacBook chiếm dụng luôn **< 100 MB**.
 
+### 7.15 GIAO THỨC KÍCH HOẠT KÝ ỨC BẮT BUỘC (MANDATORY ACTIVE MEMORY RETRIEVAL GATE)
+- **Ràng Buộc Sắt Khởi Tạo**: Trước khi chỉnh sửa code hoặc chạy lệnh, Gemini BẮT BUỘC phải trích dẫn ít nhất 2 bài học xương máu (`pain_points_*.md`) từ `.agents/memory/` kèm bảng đối chiếu rủi ro:
+  | Mã Bài Học (ID) | Rủi Ro Lịch Sử Đã Từng Gặp | Cơ Chế Phòng Vệ Vật Lý / Toán Học Trong Phiên Này |
 
+### 7.16 QUY CHUẨN YIELD DỮ LIỆU 4 CHIỀU KÍCH SEMANTIC (MANDATORY 4D SEMANTIC YIELDING CONTRACT)
+- **Ràng Buộc Sắt Báo Cáo Thông Số**: Mọi thông số định lượng kỹ thuật khi yield ra (Loss, Speed, NPS, Win Rate, Nodes) BẮT BUỘC phải được giải mã qua 4 tầng ngữ nghĩa:
+  1. 🧠 **Tầng 1 (Toán học)**: Đạo hàm, gradient flow, hàm kích hoạt, phổ trọng số.
+  2. ⚡ **Tầng 2 (Vật lý CPU/Cache)**: L1/L2/L3 cache, IPC, RAM footprint.
+  3. ♟️ **Tầng 3 (Chiến thuật cờ Tướng)**: Độ phân giải $[-50\text{cp}, +50\text{cp}]$, chống bẫy Hậu Thủ.
+  4. 🛡️ **Tầng 4 (An toàn hệ thống)**: Kháng bão hòa lượng tử hóa, triệt tiêu lặp nước AXF.
 
+### 7.17 QUY TẮC BẢO TOÀN CHECKPOINT & CẤM DÙNG LỆNH SHELL ĐỂ EDIT FILE (MANDATORY NATIVE EDITING & ZERO-SHELL-MUTATION PROTOCOL)
+- **Ràng Buộc Sắt Cho Gemini**:
+  - **TUYỆT ĐỐI CẤM** dùng các lệnh bash như `cat << 'EOF' > file`, `echo "..." > file`, `sed -i` để tạo hoặc sửa đổi file trong workspace!
+  - **LÝ DO**: Các lệnh shell tạo/sửa file trực tiếp sẽ **KHÔNG SINH RA CHECKPOINT** trong hệ thống IDE, làm mất khả năng xem Diff trực quan và **KHÔNG THỂ RESTORE / ROLLBACK PHIÊN BẢN** khi gặp lỗi!
+  - **BẮT BUỘC**:
+    1. Tạo file mới: dùng [`write_to_file`](file://).
+    2. Sửa file hiện có: dùng [`replace_file_content`](file://).
+
+### 7.18 QUY TẮC PHÂN TÁCH TUYỆT ĐỐI ĐỘNG CƠ TÍNH TOÁN VỚI DỊCH VỤ ĐỊNH DẠNG & CQRS-ES TELEMETRY DASHBOARD (MANDATORY DECOUPLED COMPUTE & TELEMETRY DISPLAY PROTOCOL)
+- **Ràng Buộc Sắt Cho Gemini**:
+  - Khi thiết kế các binary example, miner, hoặc benchmark trong Rust:
+    1. **Worker Threads**: Không bao giờ format JSON hoặc lock mutex `println!`. Chỉ bắn sự kiện thô vào `sync_channel` trong nanoseconds.
+    2. **Dedicated Telemetry Actor**: Bắt buộc tạo 1 luồng riêng biệt để drain channel, ghi `BufWriter` 8MB và xuất bản Dashboard 14 chiều kích chi tiết.
+    3. **Yield Toàn Bộ 14 Chiều Kích**: Thời gian bắt đầu, thời gian đã chạy, delta interval, luồng worker, plies, tỷ số sát cục Đỏ-Đen, 0% hòa AXF, tổng FENs, dung lượng đĩa SSD, instant & average FEN/s, queue depth.
+
+### 7.19 ĐIỀU KHOẢN TỐI THƯỢNG: BÁNH ĐÀ TRI THỨC TỰ TÍCH LŨY & TT VĨNH CỬU O(1) ĐỒNG BỘ 2 CHIỀU (MANDATORY PERPETUAL KNOWLEDGE FLYWHEEL & TWO-WAY TT DUMP/INGEST PROTOCOL)
+- **RÀNG BUỘC SẮT CHO GEMINI**:
+  1. **Khắc Sâu Mọi Thế Cờ Vào TT Vĩnh Cửu (O(1))**: Mọi engine, search loop, beam miner, hay selfplay runner khi thực thi BẮT BUỘC phải gọi `Shard::save_or_update()` hoặc `Vault::save_mate()` để lưu trực tiếp vào 1,024 Shards nhị phân `data/shards_10b/` (16 Bytes / Record) hoặc `data/vault/` (32 Bytes / Entry).
+  2. **Không Bao Giờ Bỏ Quên Mắt Xích O(1)**: NGHIÊM CẤM viết kịch bản khai thác chỉ sinh JSONL rồi xóa đi mà không đồng thời nạp vào kho O(1) nhị phân cục bộ.
+  3. **Hỗ Trợ Công Cụ Đồng Bộ 2 Chiều**: Luôn cung cấp và duy trì `ingest_jsonl_to_shards` (nạp FEN vào Shards O(1)) và `dump_shards_to_jsonl` (trích xuất Shards ra JSONL để train NNUE hoặc sync Cloud).
 
 

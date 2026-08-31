@@ -146,7 +146,7 @@ impl Shard {
         let entry_size = 16;
         let count = data.len() / entry_size;
 
-        for i in 0..count {
+        for i in (0..count).rev() {
             let offset = i * entry_size;
             if offset + entry_size <= data.len() {
                 let slice = &data[offset..offset + entry_size];

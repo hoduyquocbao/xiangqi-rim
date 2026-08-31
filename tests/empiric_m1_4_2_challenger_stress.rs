@@ -8,13 +8,13 @@
 // 4. Guard VRAM limit & underflow CAS safety under multi-threaded stress.
 // ============================================================================
 
-use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::thread;
-use std::time::{Duration, Instant};
-use xiangrust::gpu::{Buffer, Guard, Status, Storable, Validatable};
+use std::time::Duration;
+use xiangrust::gpu::{Buffer, Storable};
 
 /// Tagged packet for data integrity and sequence tracking
+#[allow(dead_code)]
 #[derive(Clone, Copy, Debug)]
 struct Packet {
     producer: u32,
@@ -22,6 +22,8 @@ struct Packet {
     checksum: u32,
     len: u32,
 }
+
+#[allow(dead_code)]
 
 fn make_packet(producer: u32, sequence: u32, len: usize) -> Vec<u8> {
     assert!(len >= 16);
@@ -37,6 +39,7 @@ fn make_packet(producer: u32, sequence: u32, len: usize) -> Vec<u8> {
     buf
 }
 
+#[allow(dead_code)]
 fn check_packet(buf: &[u8]) -> Result<Packet, String> {
     if buf.len() < 16 {
         return Err(format!("Buffer length {} < 16", buf.len()));

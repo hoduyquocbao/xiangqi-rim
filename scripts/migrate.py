@@ -121,7 +121,7 @@ def convert():
                         {"role": "assistant", "content": obj["assistant"]},
                     ],
                     "move": move,
-                    "eval": obj.get("eval", 0),
+                    "score": obj.get("score", obj.get("eval", 0)),
                     "outcome": obj.get("outcome", "unknown"),
                     "phase": obj.get("phase", "unknown"),
                     "depth": obj.get("depth", 0),

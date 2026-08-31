@@ -341,6 +341,23 @@ impl Accum {
         }
     }
 
+    /// Helper: Tái thiết lập trực tiếp góc nhìn (`side`) từ trạng thái bàn cờ đã hoàn tác `pos`.
+    #[inline(always)]
+    fn rebuild_direct(&mut self, pos: &Position, side: usize, king: u8, weight: &Weight) {
+        self.vals[side] = weight.bias;
+
+        let mut sq = 0u8;
+        while sq < 90 {
+            let piece = pos.grid[sq as usize];
+            if piece < 14 {
+                let idx = Feature::index(king, piece, sq, side as u8, side as u8);
+                let feat = weight.feature(idx);
+                Self::add(&mut self.vals[side], feat);
+            }
+            sq += 1;
+        }
+    }
+
     /// Tích lũy lại từ đầu toàn bộ các quân cờ trên bàn cờ cho cả 2 phe Đỏ và Đen.
     #[inline(always)]
     pub fn reset(&mut self, pos: &Position, weight: &Weight) {
@@ -446,7 +463,7 @@ impl Accum {
             let side = if moving < 7 { 0usize } else { 1usize };
             let other = side ^ 1;
 
-            self.rebuild(pos, side, pos.king[side], from, from, weight);
+            self.rebuild_direct(pos, side, pos.king[side], weight);
 
             let enemy = pos.king[other];
             let rem = Feature::index(enemy, moving, from, other as u8, other as u8);

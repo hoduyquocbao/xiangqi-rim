@@ -19,12 +19,12 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::RwLock;
 use crate::board::Position;
 
-/// Điểm số thắng tuyệt đối cho thế cờ tàn cuộc (+15000 centipawns)
-pub const WIN: i32 = 15000;
+/// Điểm số thắng thế áp đảo cho thế cờ tàn cuộc (+4000 centipawns)
+pub const WIN: i32 = 4000;
 /// Điểm số hòa cân bằng cho thế cờ tàn cuộc (0 centipawns)
 pub const DRAW: i32 = 0;
-/// Điểm số thua tuyệt đối cho thế cờ tàn cuộc (-15000 centipawns)
-pub const LOSS: i32 = -15000;
+/// Điểm số thua thế áp đảo cho thế cờ tàn cuộc (-4000 centipawns)
+pub const LOSS: i32 = -4000;
 
 /// Struct `Count` đếm số lượng các loại quân cờ của 2 bên.
 /// Căn lề bộ nhớ 16-byte (`#[repr(C, align(16))]`), kích thước đúng 16-byte.
@@ -70,27 +70,15 @@ impl Count {
 }
 
 /// Tính số lượng Tốt đã qua sông của một bên (`side`: 0 - Đỏ, 1 - Đen).
+/// Tối ưu hóa phần cứng bằng 1 chu kỳ xung nhịp CPU: Sử dụng lệnh `count_ones()` trực tiếp
+/// trên Bitboard 64-bit Split (Phe Đỏ: nửa trên `high`, Phe Đen: nửa dưới `low`).
 #[inline(always)]
 pub fn river(pos: &Position, side: u8) -> u8 {
-    let mut total = 0u8;
     if side == 0 {
-        let mut sq = 45;
-        while sq < 90 {
-            if pos.grid[sq] == 6 {
-                total += 1;
-            }
-            sq += 1;
-        }
+        pos.piece[6].high.count_ones() as u8
     } else {
-        let mut sq = 0;
-        while sq <= 44 {
-            if pos.grid[sq] == 13 {
-                total += 1;
-            }
-            sq += 1;
-        }
+        pos.piece[13].low.count_ones() as u8
     }
-    total
 }
 
 /// Struct `Rule` định nghĩa quy tắc tàn cuộc.
@@ -209,13 +197,21 @@ impl Endgame {
             return Some(score);
         }
 
-        // 2. Phân tích các quy tắc tàn cuộc lý thuyết chuẩn
-        let cnt = Count::parse(pos);
+        let side = pos.side as usize;
+        let foe = (1 - pos.side) as usize;
 
         // Tổng số quân tấn công bên ta (Mã, Xe, Pháo, Tốt)
-        let attack = cnt.hero[3] + cnt.hero[4] + cnt.hero[5] + cnt.hero[6];
+        let attack = pos.counts[side * 7 + 3] + pos.counts[side * 7 + 4] + pos.counts[side * 7 + 5] + pos.counts[side * 7 + 6];
         // Tổng số quân tấn công bên địch (Mã, Xe, Pháo, Tốt)
-        let danger = cnt.enemy[3] + cnt.enemy[4] + cnt.enemy[5] + cnt.enemy[6];
+        let danger = pos.counts[foe * 7 + 3] + pos.counts[foe * 7 + 4] + pos.counts[foe * 7 + 5] + pos.counts[foe * 7 + 6];
+
+        // Fast-Path O(1): Thoát nhanh nếu cả 2 bên đều còn nhiều quân công (Khai cuộc / Trung cuộc)
+        if (attack > 2 && danger > 2) || attack > 5 || danger > 5 {
+            return None;
+        }
+
+        // 2. Phân tích các quy tắc tàn cuộc lý thuyết chuẩn
+        let cnt = Count::parse(pos);
 
         // Số Tốt qua sông của bên địch
         let reach = river(pos, 1 - pos.side);
@@ -317,27 +313,43 @@ impl Endgame {
             }
         }
 
-        // 8. Đơn Xe vs Khuyết Sĩ Tượng
+        // 8. Đơn Xe vs Sĩ Tượng Toàn -> Hòa; Đơn Xe vs Khuyết Sĩ Tượng (Khuyết Sĩ hoặc Khuyết Tượng) -> Thắng
         if cnt.hero[4] == 1 && attack == 1 {
-            if danger == 0 && (cnt.enemy[1] < 2 || cnt.enemy[2] < 2) {
-                return Some(WIN);
+            if danger == 0 {
+                if cnt.enemy[1] == 2 && cnt.enemy[2] == 2 {
+                    return Some(DRAW);
+                } else if cnt.enemy[1] < 2 || cnt.enemy[2] < 2 {
+                    return Some(WIN);
+                }
             }
         }
         if cnt.enemy[4] == 1 && danger == 1 {
-            if attack == 0 && (cnt.hero[1] < 2 || cnt.hero[2] < 2) {
-                return Some(LOSS);
+            if attack == 0 {
+                if cnt.hero[1] == 2 && cnt.hero[2] == 2 {
+                    return Some(DRAW);
+                } else if cnt.hero[1] < 2 || cnt.hero[2] < 2 {
+                    return Some(LOSS);
+                }
             }
         }
 
-        // 9. Hai Mã vs Sĩ Tượng Toàn
+        // 9. Hai Mã vs Sĩ Tượng Toàn (Hòa) / Hai Mã vs Khuyết Sĩ Tượng (Thắng)
         if cnt.hero[3] == 2 && attack == 2 {
             if danger == 0 {
-                return Some(WIN);
+                if cnt.enemy[1] == 2 && cnt.enemy[2] == 2 {
+                    return Some(DRAW);
+                } else {
+                    return Some(WIN);
+                }
             }
         }
         if cnt.enemy[3] == 2 && danger == 2 {
             if attack == 0 {
-                return Some(LOSS);
+                if cnt.hero[1] == 2 && cnt.hero[2] == 2 {
+                    return Some(DRAW);
+                } else {
+                    return Some(LOSS);
+                }
             }
         }
 
@@ -349,6 +361,77 @@ impl Endgame {
         }
         if cnt.enemy[4] == 1 && cnt.enemy[5] == 1 && danger == 2 {
             if cnt.hero[4] == 1 && attack == 1 {
+                return Some(LOSS);
+            }
+        }
+
+        // 11. Đơn Xe vs Đơn Xe có Sĩ Tượng cân bằng -> Hòa
+        if cnt.hero[4] == 1 && attack == 1 && cnt.enemy[4] == 1 && danger == 1 {
+            if cnt.hero[1] >= 1 && cnt.enemy[1] >= 1 && cnt.hero[2] >= 1 && cnt.enemy[2] >= 1 {
+                return Some(DRAW);
+            }
+        }
+
+        // 12. Mã Tốt qua sông vs Khuyết Sĩ Tượng (Thắng) / vs Sĩ Tượng Toàn (Hòa)
+        if cnt.hero[3] == 1 && cnt.river >= 1 && attack == cnt.hero[3] + cnt.hero[6] {
+            if danger == 0 {
+                if cnt.enemy[1] < 2 || cnt.enemy[2] < 2 {
+                    return Some(WIN);
+                } else {
+                    return Some(DRAW);
+                }
+            }
+        }
+        if cnt.enemy[3] == 1 && reach >= 1 && danger == cnt.enemy[3] + cnt.enemy[6] {
+            if attack == 0 {
+                if cnt.hero[1] < 2 || cnt.hero[2] < 2 {
+                    return Some(LOSS);
+                } else {
+                    return Some(DRAW);
+                }
+            }
+        }
+
+        // 13. Hai Tốt qua sông vs Khuyết Sĩ Tượng (Thắng) / vs Sĩ Tượng Toàn (Hòa)
+        if cnt.hero[6] >= 2 && cnt.river >= 2 && attack == cnt.hero[6] {
+            if danger == 0 {
+                if cnt.enemy[1] < 2 || cnt.enemy[2] < 2 {
+                    return Some(WIN);
+                } else {
+                    return Some(DRAW);
+                }
+            }
+        }
+        if cnt.enemy[6] >= 2 && reach >= 2 && danger == cnt.enemy[6] {
+            if attack == 0 {
+                if cnt.hero[1] < 2 || cnt.hero[2] < 2 {
+                    return Some(LOSS);
+                } else {
+                    return Some(DRAW);
+                }
+            }
+        }
+
+        // 14. Pháo Mã vs Đơn Xe có Sĩ Tượng Toàn -> Hòa
+        if cnt.hero[5] == 1 && cnt.hero[3] == 1 && attack == 2 && cnt.enemy[4] == 1 && danger == 1 {
+            if cnt.hero[1] == 2 && cnt.hero[2] == 2 {
+                return Some(DRAW);
+            }
+        }
+        if cnt.enemy[5] == 1 && cnt.enemy[3] == 1 && danger == 2 && cnt.hero[4] == 1 && attack == 1 {
+            if cnt.enemy[1] == 2 && cnt.enemy[2] == 2 {
+                return Some(DRAW);
+            }
+        }
+
+        // 15. Xe Tốt qua sông vs Đơn Xe Khuyết Sĩ Tượng -> Thắng
+        if cnt.hero[4] == 1 && cnt.river >= 1 && attack == cnt.hero[4] + cnt.hero[6] && cnt.enemy[4] == 1 && danger == 1 {
+            if cnt.enemy[1] < 2 || cnt.enemy[2] < 2 {
+                return Some(WIN);
+            }
+        }
+        if cnt.enemy[4] == 1 && reach >= 1 && danger == cnt.enemy[4] + cnt.enemy[6] && cnt.hero[4] == 1 && attack == 1 {
+            if cnt.hero[1] < 2 || cnt.hero[2] < 2 {
                 return Some(LOSS);
             }
         }

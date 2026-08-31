@@ -10,9 +10,9 @@
 web/public/*.wasm
 
 # Data & Models
-/data/*.json
-/data/*.jsonl
-/data/*.bin
+data/
+/data/
+/data/*
 !/data/.gitkeep
 outputs/
 tools/*.jsonl
@@ -52,3 +52,7 @@ __pycache__/
 *.pyd
 .pytest_cache/
 *.py[cod]
+libpika.dylib
+pikafish.nnue
+scratch/
+metadata.json

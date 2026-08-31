@@ -88,6 +88,7 @@ impl Worker {
         limits: &Limits,
         tt: &Table,
         signal: &Signal,
+        past: Option<&[u64]>,
     ) {
         // 1. Tự động gán luồng hiện tại vào P-Cores bằng Affinity
         self.affinity.apply();
@@ -121,7 +122,60 @@ impl Worker {
             &mut self.killer,
             &self.timer,
             Some(&self.diversity),
-            None,
+            past,
+        );
+
+        self.best = best;
+        self.score = score;
+        self.nodes = nodes;
+        self.depth = completed_depth;
+        signal.nodes.fetch_add(nodes, std::sync::atomic::Ordering::Relaxed);
+    }
+
+    /// Thực hiện tìm kiếm PVS liên tục giữa các nước đi trong ván cờ,
+    /// bảo lưu 50% trọng số History Heuristics qua Soft-Decay thay vì xóa trắng.
+    #[inline(always)]
+    pub fn search_continuous(
+        &mut self,
+        pos: &Position,
+        limits: &Limits,
+        tt: &Table,
+        signal: &Signal,
+        past: Option<&[u64]>,
+    ) {
+        self.affinity.apply();
+
+        self.pos = *pos;
+        self.eval.reset(&self.pos);
+
+        let mut depth = limits.depth;
+        if depth == 0 {
+            depth = 64;
+        }
+
+        if self.index > 0 {
+            depth = self.diversity.depth(depth);
+        }
+
+        let mut local = *limits;
+        local.depth = depth;
+
+        self.timer.bind(Arc::clone(&signal.abort));
+        self.timer.init(&local, self.pos.side);
+        // Soft-Decay giữ lại 50% kinh nghiệm lịch sử giữa các nước đi
+        self.history.decay();
+        self.killer.clear();
+        self.nodes = 0;
+
+        let (best, score, nodes, completed_depth) = Core::iterate(
+            &mut self.pos,
+            &mut self.eval,
+            Some(tt),
+            &mut self.history,
+            &mut self.killer,
+            &self.timer,
+            Some(&self.diversity),
+            past,
         );
 
         self.best = best;

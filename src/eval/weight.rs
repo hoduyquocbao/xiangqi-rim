@@ -13,8 +13,11 @@ pub const TOTAL: usize = 65536;
 /// Kích thước không gian ẩn bộ tích lũy Accumulator = 256
 pub const DIM: usize = 256;
 
+use std::sync::Arc;
+
 /// Struct `Weight` lưu trữ ma trận định thiên bias và trọng số, căn lề 64-byte.
-/// Feature weights được lưu trên Heap (~32MB) thông qua `Box<[[i16; DIM]]>`.
+/// Feature weights được lưu trên Heap (~32MB) thông qua con trỏ đếm tham chiếu `Arc<Vec<[i16; DIM]>>`
+/// giúp chia sẻ ma trận giữa các luồng tìm kiếm song song với chi phí clone O(1) bằng 0 bytes phân bổ lại.
 #[repr(C, align(64))]
 #[derive(Clone, Debug)]
 pub struct Weight {
@@ -22,7 +25,7 @@ pub struct Weight {
     pub bias: [i16; DIM],
     /// Ma trận trọng số đặc trưng TOTAL×DIM trên Heap (~32MB)
     /// `None` khi chưa nạp trọng số (sử dụng mảng 0 mặc định)
-    pub matrix: Option<Box<Vec<[i16; DIM]>>>,
+    pub matrix: Option<Arc<Vec<[i16; DIM]>>>,
 }
 
 impl Default for Weight {

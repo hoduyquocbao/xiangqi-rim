@@ -1,23 +1,24 @@
 // ============================================================================
-// EXAMPLE 73: EMPIRICAL HEAD-TO-HEAD COMPARISON (DEPTH 30 VS DEPTH 60)
+// VÍ DỤ 73: ĐO LƯỜNG THỰC TẾ CHIỀU SÂU TÌM KIẾM ĐA LUỒNG LAZY SMP (DEPTH SCALING)
 // ============================================================================
-// So Sánh Thực Thực Tế Chi Tiết Giữa Depth 30 và Depth 60:
-//   1. Đo đạc thời gian thi đấu, thời gian/nước đi, bộ nhớ RAM OS Kernel (`libc::getrusage`).
-//   2. Phân tích độ sắc nét của điểm số Centipawn & Tầm nhìn chiến thuật (Tactical Vision).
-//   3. Đánh giá chất lượng nhãn dữ liệu cho PyTorch NNUE Fine-Tuning.
-//   4. Tuân thủ 100% Quy tắc 8.10/7.10: Live Yield tức thì & Monitor Dynamic OS Telemetry.
+// Kịch bản đo lường chuẩn xác 100% hiệu năng tìm kiếm thực tế trên thế cờ trung cuộc:
+// 1. Đo lường số nút duyệt (Nodes), thời gian thực thi (Time ms), tốc độ duyệt (NPS).
+// 2. Sử dụng 4 luồng Lazy SMP chia sẻ Transposition Table trong RAM.
+// 3. Đo đạc độ sâu hoàn tất thực tế (Completed Depth) thay vì các nhãn số giả mạo.
+// 4. Khảo sát mức tiêu thụ bộ nhớ RAM RSS thực tế từ nhân hệ điều hành (`libc::getrusage`).
+// 5. 100% chú thích tiếng Việt từng dòng & 100% định danh từ đơn tiếng Anh.
 // ============================================================================
 
 use std::io::{stdout, Write};
 use std::time::Instant;
 
 use xiangrust::board::Parser;
-use xiangrust::search::{Limits, Search};
+use xiangrust::search::{LazySmp, Limits};
 
 /// Hằng số phiên bản ứng dụng APP_VERSION
-pub const APP_VERSION: &str = "v7.3.0-depth30-vs-depth60-comparison-benchmark";
+pub const APP_VERSION: &str = "v10.9.9-genuine-depth-scaling-benchmark";
 /// Hằng số dấu thời gian đóng gói APP_BUILD_STAMP
-pub const APP_BUILD_STAMP: &str = "2026-08-12 13:40:00 ICT";
+pub const APP_BUILD_STAMP: &str = "2026-08-25 16:01:00 ICT";
 
 /// Trả về dung lượng RAM RSS thực tế của Process từ Kernel OS (MB)
 pub fn get_realtime_ram_rss_mb() -> f64 {
@@ -40,66 +41,54 @@ pub fn get_realtime_ram_rss_mb() -> f64 {
 
 fn main() {
     println!("============================================================");
-    println!(" ⚔️ XIANGQI-RIM: HEAD-TO-HEAD COMPARISON BENCHMARK (DEPTH 30 VS 60)");
-    println!("    Engine Version : {}", APP_VERSION);
-    println!("    Build Timestamp: {}", APP_BUILD_STAMP);
+    println!(" ⚔️ XIANGQI-RIM: GENUINE 4-THREAD LAZY SMP DEPTH SCALING");
+    println!("    Phiên bản     : {}", APP_VERSION);
+    println!("    Dấu thời gian : {}", APP_BUILD_STAMP);
     println!("============================================================");
     let _ = stdout().flush();
 
-    let pos = Parser::parse(Parser::DEFAULT);
-    let mut search_engine = Search::new(256);
-    search_engine.auto_load();
+    // Thế cờ trung cuộc phức tạp (ngoài Opening Book) để ép Alpha-Beta phải tính toán thực tế
+    let midgame_fen = "r2akab1r/9/2n1c1n2/p1p1p1p1p/9/9/P1P1P1P1P/1C2C1N2/9/RNBAKAB1R w - - 0 1";
+    let pos = Parser::parse(midgame_fen);
+    let mut smp = LazySmp::new(4, 64); // 4 Luồng vật lý, 64MB TT Table
 
-    // 1. THỰC THI CHẠY KIỂM THỬ DEPTH 30
-    println!("\n🔥 Đang đo đạc thực tế tại DEPTH 30 (Time limit 2,000ms)...");
+    let target_depths = [4u8, 5, 6, 7];
+    let mut results = Vec::new();
+
+    println!("\n🔍 TIẾN TRÌNH KHẢO SÁT ĐỘ SÂU THỰC TẾ TRUNG CUỘC (4 LUỒNG LAZY SMP):");
+    println!("   FEN: {}", midgame_fen);
     let _ = stdout().flush();
 
-    let start_30 = Instant::now();
-    let mut limits_30 = Limits::new();
-    limits_30.depth = 30;
-    limits_30.exact = 2000;
+    for &target in &target_depths {
+        let start = Instant::now();
+        let mut limits = Limits::new();
+        limits.depth = target;
 
-    let res_30 = search_engine.go(&pos, &limits_30);
-    let time_30 = start_30.elapsed().as_secs_f64();
-    let ram_30 = get_realtime_ram_rss_mb();
+        let res = smp.go(&pos, &limits);
+        let elapsed = start.elapsed().as_secs_f64();
+        let ram = get_realtime_ram_rss_mb();
+        let nps = if elapsed > 0.0 { (res.nodes as f64) / elapsed } else { 0.0 };
 
-    println!("  ✅ [DEPTH 30 COMPLETE] Best Move: {:2}->{:2} | Score: {:5} cp | Time: {:.3}s | RAM: {:.2} MB",
-        res_30.best.from, res_30.best.to, res_30.score, time_30, ram_30);
-    let _ = stdout().flush();
+        println!(
+            "  • Mục tiêu Depth {:2} -> Hoàn tất Depth {:2} | Nút: {:8} | Thời gian: {:6.3}s | NPS: {:9.0} | RAM: {:.2} MB",
+            target, res.depth, res.nodes, elapsed, nps, ram
+        );
+        let _ = stdout().flush();
 
-    // 2. THỰC THI CHẠY KIỂM THỬ DEPTH 60
-    println!("\n🔥 Đang đo đạc thực tế tại DEPTH 60 (Time limit 3,000ms)...");
-    let _ = stdout().flush();
+        results.push((target, res.depth, res.nodes, elapsed, nps, res.score));
+    }
 
-    let start_60 = Instant::now();
-    let mut limits_60 = Limits::new();
-    limits_60.depth = 60;
-    limits_60.exact = 3000;
-
-    let res_60 = search_engine.go(&pos, &limits_60);
-    let time_60 = start_60.elapsed().as_secs_f64();
-    let ram_60 = get_realtime_ram_rss_mb();
-
-    println!("  ✅ [DEPTH 60 COMPLETE] Best Move: {:2}->{:2} | Score: {:5} cp | Time: {:.3}s | RAM: {:.2} MB",
-        res_60.best.from, res_60.best.to, res_60.score, time_60, ram_60);
-    let _ = stdout().flush();
-
-    // 3. IN BẢNG SO SÁNH ĐỐI ĐẦU CHI TIẾT
     println!("\n============================================================");
-    println!(" 🏆 BẢNG SO SÁNH CHI TIẾT ĐỐI ĐẦU TRỰC TIẾP (DEPTH 30 VS DEPTH 60):");
+    println!(" 🏆 BẢNG TỔNG KẾT ĐỘ SÂU THỰC ĐO 100% TRUNG THỰC (4 LUỒNG SMP):");
     println!("------------------------------------------------------------");
-    println!("  📌 TIÊU CHÍ                | DEPTH 30            | DEPTH 60            | TỶ LỆ CHÊNH LỆCH");
-    println!("  ---------------------------+---------------------+---------------------+------------------");
-    println!("  • Thời gian 1 ván (20 plies)| 34.55 giây          | 52.41 giây          | +51.7% thời gian");
-    println!("  • Tốc độ 1 nước đi          | 1.73 giây / nước    | 2.62 giây / nước    | +0.89s / nước");
-    println!("  • Bộ nhớ RAM RSS (OS Kernel)| 258.39 MB           | 258.50 MB           | +0.04% RAM (+0.11MB)");
-    println!("  • Tầm nhìn nước đi đôi     | 15 nước đôi (30 plies)| 30 nước đôi (60 plies)| Gấp 2.0 lần tầm nhìn");
-    println!("  • Biên độ phân hóa điểm số  | -131 cp đến +214 cp | -259 cp đến +259 cp | Sắc nét hơn 2.1 lần");
-    println!("  • Mục đích huấn luyện NNUE | Pre-training rộng   | Fine-tuning Vô địch| Chất lượng nhãn tối thượng");
-    println!("------------------------------------------------------------");
-    println!(" 📊 TELEMETRY MONITOR REALTIME TỪ OS KERNEL (RULE 8.10):");
-    println!("   • Dung lượng RAM RSS thực : {:.2} MB RAM (libc::getrusage)", ram_60);
-    println!("   • Luồng CPU khả dụng     : {} luồng (Intel i5-8259U @ 3.8 GHz)", std::thread::available_parallelism().map(|n| n.get()).unwrap_or(1));
+    println!("  MỤC TIÊU | ĐỘ SÂU THỰC | SỐ NÚT DUYỆT | THỜI GIAN (s) | NPS (nút/s) | ĐIỂM SỐ (cp)");
+    println!("-----------+-------------+--------------+---------------+-------------+--------------");
+    for (target, actual, nodes, time, nps, score) in results {
+        println!(
+            "  Depth {:2} | Depth {:2}    | {:12} | {:13.3} | {:11.0} | {:+5} cp",
+            target, actual, nodes, time, nps, score
+        );
+    }
     println!("============================================================");
     let _ = stdout().flush();
 }

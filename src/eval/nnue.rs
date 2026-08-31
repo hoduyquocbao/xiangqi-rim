@@ -273,11 +273,7 @@ impl<const IN: usize> Output<IN> {
     #[inline(always)]
     pub fn evaluate(&self, input: &[i8; IN]) -> i32 {
         let sum = self.bias + unsafe { Simd::bytes(input, &self.weight) };
-        if self.scale != 0 {
-            sum / self.scale
-        } else {
-            sum
-        }
+        (sum * 25) / 508
     }
 }
 
@@ -341,11 +337,11 @@ impl Nnue {
         self.affine.forward(&transform.active, &mut hidden);
 
         // SIMD vectorize ClipReLU: Chuyển đổi 32 phần tử i32 → i8 kẹp [0, 127]
-        // thay vì vòng lặp scalar 32 bước
+        // Chia 64 (dịch phải 6 bit) để đưa từ thang điểm 8128.0 về 127.0
         let mut layer = [0i8; 32];
         Self::clip32(&hidden, &mut layer);
 
-        self.output.evaluate(&layer) * 4
+        self.output.evaluate(&layer)
     }
 
     /// SIMD vectorize ClipReLU cho hidden layer 32 phần tử i32 → i8 kẹp [0, 127].
@@ -364,9 +360,11 @@ impl Nnue {
                 // Xử lý 8 phần tử i32 thành 8 phần tử i16 (lặp 4 lần = 32 phần tử)
                 let mut i = 0usize;
                 while i < 32 {
-                    // Nạp 4 phần tử i32 và kẹp [0, 127]
-                    let v0 = vminq_s32(vmaxq_s32(vld1q_s32(src.as_ptr().add(i)), zero), ceil);
-                    let v1 = vminq_s32(vmaxq_s32(vld1q_s32(src.as_ptr().add(i + 4)), zero), ceil);
+                    // Nạp 4 phần tử i32, chia 64 (vshrq_n_s32) và kẹp [0, 127]
+                    let s0 = vshrq_n_s32(vld1q_s32(src.as_ptr().add(i)), 6);
+                    let s1 = vshrq_n_s32(vld1q_s32(src.as_ptr().add(i + 4)), 6);
+                    let v0 = vminq_s32(vmaxq_s32(s0, zero), ceil);
+                    let v1 = vminq_s32(vmaxq_s32(s1, zero), ceil);
                     // Thu hẹp i32 → i16 (2 thanh ghi × 4 = 8 phần tử i16)
                     let narrow16 = vcombine_s16(vmovn_s32(v0), vmovn_s32(v1));
                     // Thu hẹp i16 → i8 (8 phần tử → 8 phần tử i8)
@@ -388,15 +386,16 @@ impl Nnue {
                     let zero = _mm256_setzero_si256();
                     let ceil = _mm256_set1_epi32(127);
 
-                    // Nạp và kẹp 4 khối × 8 phần tử i32
-                    let v0 = _mm256_min_epi32(_mm256_max_epi32(
-                        _mm256_loadu_si256(src.as_ptr().add(0) as *const __m256i), zero), ceil);
-                    let v1 = _mm256_min_epi32(_mm256_max_epi32(
-                        _mm256_loadu_si256(src.as_ptr().add(8) as *const __m256i), zero), ceil);
-                    let v2 = _mm256_min_epi32(_mm256_max_epi32(
-                        _mm256_loadu_si256(src.as_ptr().add(16) as *const __m256i), zero), ceil);
-                    let v3 = _mm256_min_epi32(_mm256_max_epi32(
-                        _mm256_loadu_si256(src.as_ptr().add(24) as *const __m256i), zero), ceil);
+                    // Nạp, chia 64 (_mm256_srai_epi32) và kẹp 4 khối × 8 phần tử i32
+                    let s0 = _mm256_srai_epi32(_mm256_loadu_si256(src.as_ptr().add(0) as *const __m256i), 6);
+                    let s1 = _mm256_srai_epi32(_mm256_loadu_si256(src.as_ptr().add(8) as *const __m256i), 6);
+                    let s2 = _mm256_srai_epi32(_mm256_loadu_si256(src.as_ptr().add(16) as *const __m256i), 6);
+                    let s3 = _mm256_srai_epi32(_mm256_loadu_si256(src.as_ptr().add(24) as *const __m256i), 6);
+
+                    let v0 = _mm256_min_epi32(_mm256_max_epi32(s0, zero), ceil);
+                    let v1 = _mm256_min_epi32(_mm256_max_epi32(s1, zero), ceil);
+                    let v2 = _mm256_min_epi32(_mm256_max_epi32(s2, zero), ceil);
+                    let v3 = _mm256_min_epi32(_mm256_max_epi32(s3, zero), ceil);
 
                     // Thu hẹp i32 → i16 (pack saturated)
                     let p01 = _mm256_packs_epi32(v0, v1); // 16 phần tử i16
@@ -416,7 +415,7 @@ impl Nnue {
         // Vòng lặp dự phòng Scalar khi không có SIMD
         let mut i = 0usize;
         while i < 32 {
-            let val = src[i];
+            let val = src[i] >> 6;
             dst[i] = if val < 0 {
                 0i8
             } else if val > 127 {
@@ -481,7 +480,7 @@ impl Nnue {
             }
             matrix.push(row);
         }
-        self.weight.matrix = Some(Box::new(matrix));
+        self.weight.matrix = Some(std::sync::Arc::new(matrix));
 
         // Đọc Hidden Layer weights: 32 × 512 × i8
         let mut buf1 = [0u8; 1];

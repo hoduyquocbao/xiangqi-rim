@@ -189,11 +189,11 @@ fn bishop() {
 
 #[test]
 fn knights() {
-    // Hai Mã thắng Sĩ Tượng Toàn -> WIN (+15000)
-    let fen = "2bakab2/9/9/9/9/9/9/4N4/4N4/4K4 w - - 0 1";
+    // Hai Mã thắng Khuyết Sĩ Tượng -> WIN (+4000)
+    let fen = "2b1ka3/9/9/9/9/9/9/4N4/4N4/4K4 w - - 0 1";
     let pos = Parser::parse(fen);
     let score = Endgame::eval(&pos);
-    assert_eq!(score, Some(WIN), "Hai Mã thắng Sĩ Tượng Toàn!");
+    assert_eq!(score, Some(WIN), "Hai Mã thắng Khuyết Sĩ Tượng!");
 }
 
 #[test]

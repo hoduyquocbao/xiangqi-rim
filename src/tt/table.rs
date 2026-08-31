@@ -67,10 +67,26 @@ impl Table {
         }
     }
 
-    /// Định tuyến chỉ số phân đoạn Partition dựa trên Zobrist key và thread index.
+    /// Định tuyến chỉ số phân đoạn Partition dựa thuần túy trên Zobrist key (Zero Thread Isolation).
+    /// Đảm bảo tất cả các luồng trong Lazy SMP chia sẻ 100% tri thức và kết quả tìm kiếm cho nhau!
     #[inline(always)]
-    pub fn route(&self, key: u64, index: usize) -> usize {
-        ((key >> 48) as usize ^ (index & self.mask)) & self.mask
+    pub fn route(&self, key: u64, _index: usize) -> usize {
+        ((key >> 48) as usize) & self.mask
+    }
+
+    /// Nạp trước (Hardware Prefetch) ô băm vào L1 Data Cache để loại bỏ độ trễ RAM.
+    #[inline(always)]
+    pub fn prefetch_with(&self, key: u64, index: usize) {
+        let p_idx = self.route(key, index);
+        if let Some(partition) = self.partitions.get(p_idx) {
+            partition.prefetch(key);
+        }
+    }
+
+    /// Nạp trước ô băm mặc định (luồng 0).
+    #[inline(always)]
+    pub fn prefetch(&self, key: u64) {
+        self.prefetch_with(key, 0);
     }
 
     /// Tra cứu nguyên tử thế cờ `key: u64` với chỉ số luồng `index`.

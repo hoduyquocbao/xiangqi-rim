@@ -307,11 +307,51 @@ python3 scripts/test_quantization.py data/nnue_weights_gen5.bin
   - **QUY TRÌNH 3 BƯỚC BẮT BUỘC (MINE -> SYNC HF -> PURGE LOCAL)**:
     1. **Mine Chunk**: Động cơ sinh dữ liệu theo các tập tin chunk có kích thước giới hạn (ví dụ `chunk_0001.jsonl` ~25 MB).
     2. **Cloud Sync**: Ngay khi hoàn tất 1 chunk hoặc 1 epoch huấn luyện, kịch bản Python/Rust BẮT BUỘC tự động upload tệp chunk lên Hugging Face Hub Dataset Repository (`huggingface_hub` / `hf-cli`).
-    3. **Local Purge**: Ngay sau khi Hugging Face xác nhận upload thành công (Checksum SHA-256 OK), BẮT BUỘC phải xóa ngay tệp chunk cục bộ (`os.remove()`) trên đĩa MacBook.
-  - **Mục Đích**: Đảm bảo dung lượng SSD MacBook chiếm dụng luôn duy trì cực nhẹ **< 100 MB**, triệt tiêu 100% rủi ro tràn ổ đĩa hay treo sập máy laptop khi đào dữ liệu xuyên đêm!
+### 8.15 GIAO THỨC KÍCH HOẠT KÝ ỨC BẮT BUỘC (MANDATORY ACTIVE MEMORY RETRIEVAL GATE)
+- **RÀNG BUỘC SẮT KHỞI TẠO**: Trước khi thực hiện bất kỳ hành động phân tích kiến trúc, sửa đổi mã nguồn, hoặc huấn luyện mạng nơ-ron nào, Agent BẮT BUỘC phải trích dẫn ít nhất 2 tệp bài học xương máu (`pain_points_*.md`) từ `.agents/memory/` kèm bảng đối chiếu rủi ro:
+  | Mã Bài Học (ID) | Rủi Ro Lịch Sử Đã Từng Gặp | Cơ Chế Phòng Vệ Vật Lý / Toán Học Trong Phiên Này |
+- **NGHIÊM CẤM BỎ QUA**: Tuyệt đối KHÔNG ĐƯỢC PHÉP bắt đầu viết mã hoặc chạy lệnh mà không có bước đối chiếu ký ức xương máu này.
 
+### 8.16 QUY CHUẨN YIELD DỮ LIỆU 4 CHIỀU KÍCH SEMANTIC (MANDATORY 4D SEMANTIC YIELDING CONTRACT)
+- **RÀNG BUỘC SẮT BÁO CÁO THÔNG SỐ**: Mọi thông số định lượng kỹ thuật khi yield ra (Loss, Speed, NPS, Win Rate, Nodes) BẮT BUỘC phải được giải mã qua 4 tầng ngữ nghĩa:
+  1. 🧠 **Tầng 1 (Động học Toán học - Mathematical Dynamics)**: Đạo hàm, gradient flow, hàm kích hoạt, phổ phân phối trọng số, độ hội tụ thực tế.
+  2. ⚡ **Tầng 2 (Vật lý Bộ nhớ & CPU - Hardware Footprint)**: L1/L2/L3 cache line 64B, IPC, false sharing, RAM RSS footprint.
+  3. ♟️ **Tầng 3 (Chiến thuật Cờ Tướng - Game-Theoretic Impact)**: Độ phân giải thế trận $[-50\text{cp}, +50\text{cp}]$, triệt tiêu bẫy phế quân Hậu Thủ.
+  4. 🛡️ **Tầng 4 (Bảo toàn & An toàn - System Safety Integrity)**: Bảo toàn scale factor lượng tử hóa, triệt tiêu bẫy lặp nước AXF.
 
+### 8.17 QUY TẮC BẢO TOÀN CHECKPOINT & CẤM DÙNG LỆNH SHELL ĐỂ EDIT FILE (MANDATORY NATIVE EDITING & ZERO-SHELL-MUTATION PROTOCOL)
+- **RÀNG BUỘC SẮT TUYỆT ĐỐI**:
+  - **TUYỆT ĐỐI NGHIÊM CẤM** sử dụng các lệnh shell như `cat << 'EOF' > file`, `echo "..." > file`, `sed -i`, `awk` hoặc các thủ thuật bash script tương tự để tạo mới hoặc chỉnh sửa tệp mã nguồn / tài liệu trong workspace!
+  - **LÝ DO TỐI THƯỢNG**: Khi dùng lệnh shell `cat << EOF > ...`, IDE **KHÔNG THỂ** nhận diện và tự động sinh ra Checkpoint / History Snapshot, làm mất hoàn toàn khả năng so sánh Diff trực quan và **KHÔNG THỂ RESTORE / ROLLBACK PHIÊN BẢN** khi xảy ra sự cố!
+  - **BẮT BUỘC SỬ DỤNG CÔNG CỤ NATIVE**:
+    1. Khi tạo tệp mới: BẮT BUỘC dùng công cụ [`write_to_file`](file://).
+    2. Khi sửa đổi tệp hiện có: BẮT BUỘC dùng công cụ [`replace_file_content`](file://).
+- **XỬ LÝ VI PHẠM**: Mọi hành vi cố tình dùng lệnh shell để edit tệp bị coi là vi phạm nghiêm trọng kỷ luật an toàn hệ thống và phá hủy cơ chế bảo toàn thế hệ!
 
+### 8.18 QUY TẮC PHÂN TÁCH TUYỆT ĐỐI ĐỘNG CƠ TÍNH TOÁN VỚI DỊCH VỤ ĐỊNH DẠNG & CQRS-ES TELEMETRY DASHBOARD (MANDATORY DECOUPLED COMPUTE & TELEMETRY DISPLAY PROTOCOL)
+- **RÀNG BUỘC SẮT CHO MỌI MODULE BINARY / MINER / BENCHMARK / WORKER**:
+  - **NGUYÊN LÝ VẬT LÝ TRIỆT TIÊU NGHẼN KHÓA I/O (ZERO-STALL THREAD INTEGRITY)**:
+    1. **Luồng Tính Toán (Worker / Search Threads)**: Tuyệt đối NGHIÊM CẤM thực hiện format chuỗi UTF-8, escape JSON phức tạp hoặc tự ý gọi `println!` trực tiếp ra màn hình terminal. Mọi luồng tính toán chỉ được phép đẩy sự kiện thô dạng struct/enum căn lề 64-byte (`Signal::Game` / `Signal::Heartbeat`) vào hàng đợi vòng có giới hạn (`Bounded Lock-Free MPSC Channel` / `CQRS Bus`).
+    2. **Luồng Hiển Thị Chuyên Biệt (Dedicated Telemetry Display Actor)**: BẮT BUỘC khởi chạy một luồng tiêu thụ riêng biệt (Dedicated Consumer Thread) tiếp nhận tín hiệu từ kênh truyền, gom lô ghi đĩa bất đồng bộ (`BufWriter` 8MB) và định kỳ xuất bản Dashboard theo dõi thời gian thực.
+    3. **YIELD ĐẦY ĐỦ 14 CHIỀU KÍCH ĐẲNG CẤP ĐỂ ANALYZER TRẦM TRỒ**:
+       - ⏱️ `Thời gian lúc bắt đầu` (Timestamp YYYY-MM-DD HH:MM:SS.mmm ICT) & `Tổng thời gian đã chạy` (MM:SS.mmm) & `Độ trễ chặng` (+ΔT s).
+       - 🎯 `Chi tiết ván cờ vừa dứt điểm` (Luồng Worker, Plies, thời gian dứt điểm s/ván).
+       - ⚖️ `Tỷ số sát cục Đỏ-Đen` (Thắng Đỏ, Thắng Đen, Tỷ lệ %, Decisive 100%, Draws 0%).
+       - 🛡️ `Hòa cờ lặp nước AXF` (0.00% - Triệt tiêu tuyệt đối).
+       - ♟️ `Số nước đi trung bình` (Avg Plies / Game).
+       - 📈 `Tổng số mẫu FEN xuất bản` & `Dung lượng tệp đĩa vật lý SSD` (KB/MB).
+       - ⚡ `Thông lượng tức thời` (Instant FEN/s, Instant Games/s) & `Thông lượng trung bình` (Average FEN/s, Games/s).
+       - 📥 `Trạng thái kênh truyền` (Queue Depth, Bão hòa bộ đệm %).
 
-
+### 8.19 ĐIỀU KHOẢN TỐI THƯỢNG: BÁNH ĐÀ TRI THỨC TỰ TÍCH LŨY & TT VĨNH CỬU O(1) ĐỒNG BỘ 2 CHIỀU (MANDATORY PERPETUAL KNOWLEDGE FLYWHEEL & TWO-WAY TT DUMP/INGEST PROTOCOL)
+- **RÀNG BUỘC SẮT CHO MỌI ĐỘNG CƠ / TÌM KIẾM / MINER / SELF-PLAY**:
+  1. **Nguyên Lý Bánh Đà Tri Thức Tự Tích Lũy (Perpetual Knowledge Flywheel)**:
+     - Mọi hoạt động tìm kiếm, duyệt cây, tự đấu, giải cờ thế, hoặc khai thác vét cạn của Engine **BẮT BUỘC** phải tự động ghi nhận các thế cờ giải được vào kho TT Vĩnh Cửu nhị phân $O(1)$ trên đĩa cứng cục bộ:
+       - `data/shards_10b/`: 1,024 phân mảnh nhị phân NVMe ($16\text{ Bytes / Record}$ với Zobrist Hash 128-bit, thời gian tra cứu $O(1) < 0.003\text{ ms}$).
+       - `data/vault/`: Kho tri thức sát cục và Depth cao ($32\text{ Bytes / Entry}$, thời gian tra cứu $O(1) < 1.08\mu\text{s}$).
+     - **Mục Đích Tối Thượng**: Đảm bảo Engine **"Càng chạy càng thông minh, càng chơi càng nhanh"**, triệt tiêu 100% việc tính toán lặp lại các thế cờ đã từng giải trong lịch sử!
+  2. **Quy Chuẩn Đồng Bộ Hai Chiều Nhị Phân ⟷ JSONL (Two-Way Synchronization Standard)**:
+     - **Chiều Ingest (`scripts/ingest_jsonl_to_shards.py` / native Rust)**: Bất kỳ tệp JSONL FEN nào từ cộng đồng, HuggingFace hay kết quả tự đấu đều có thể nạp siêu tốc vào 1,024 Shards nhị phân $O(1)$ cục bộ.
+     - **Chiều Dump (`scripts/dump_shards_to_jsonl.py` / native Rust)**: Bất kỳ lúc nào, hệ thống cũng có thể trích xuất (dump) toàn bộ hoặc một phần kho Shards nhị phân $O(1)$ ra định dạng JSONL tiêu chuẩn để phục vụ huấn luyện mạng nơ-ron NNUE, GRPO, hoặc đồng bộ lên HuggingFace Hub.
+  3. **NGHIÊM CẤM TÁCH RỜI**: Tuyệt đối NGHIÊM CẤM tạo các kịch bản khai thác/đào dữ liệu chỉ sinh ra file text JSONL tạm thời rồi xóa đi mà không đồng thời nạp/cập nhật vào Kho Tri Thức Nhị Phân $O(1)$ cục bộ!
 

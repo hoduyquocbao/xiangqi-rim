@@ -10,7 +10,7 @@
 // 6. High-concurrency MPSC and MPMC variable-length packet queue stress.
 // ============================================================================
 
-use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::thread;
 use std::time::Instant;

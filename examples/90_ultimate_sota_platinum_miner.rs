@@ -95,8 +95,8 @@ impl AsyncIoService {
 use xiangrust::board::{Parser, Serializer};
 // Nhập Book từ module book quản lý Opening Book Zobrist
 use xiangrust::book::Book;
-// Nhập CQRS-ES Bus, Event, Command cho Hàng đợi sự kiện MPMC 64-byte aligned
-use xiangrust::cqrs::{Bus, Command as CqrsCommand, Event as CqrsEvent};
+// Nhập CQRS-ES Bus, Event cho Hàng đợi sự kiện MPMC 64-byte aligned
+use xiangrust::cqrs::{Bus, Event as CqrsEvent};
 // Nhập Device, Evaluator, RingBuffer, Sample từ module gpu
 use xiangrust::gpu::{Device, Evaluator, RingBuffer, Sample};
 // Nhập Replay và Sample từ module learn::replay

@@ -32,8 +32,8 @@ impl Feature {
 
     /// Tính toán chỉ số đặc trưng duy nhất (0..65535) cho bộ 3 (king, piece, square) theo phe `side` và góc nhìn `view`.
     #[inline(always)]
-    pub fn index(king: u8, piece: u8, square: u8, side: u8, view: u8) -> usize {
-        let (king, piece, square) = if side == view {
+    pub fn index(king: u8, piece: u8, square: u8, _side: u8, view: u8) -> usize {
+        let (king, piece, square) = if view == 0 {
             (king, piece, square)
         } else {
             // Đổi góc nhìn: Đổi mã loại quân (Red <-> Black) và lật dọc tọa độ

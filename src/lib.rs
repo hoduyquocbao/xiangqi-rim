@@ -60,6 +60,12 @@ pub mod learn;
 /// Module `p2p`: Mạng phân tán P2P topic broadcast SHA-256 giữ kênh live 24/7 và đồng bộ dataset
 pub mod p2p;
 
+/// Module `system`: Hệ sinh thái Data-Oriented ECS Systems & Data-Driven Profiles (King, Knight, Rook, Pawn, Time)
+pub mod system;
+
+/// Module `meta`: Quản trị siêu dữ liệu phiên bản động và cấu hình runtime (Zero Recompile)
+pub mod meta;
+
 
 
 
